@@ -3,12 +3,15 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import { aiWorker } from './modules/ai/worker.js';
+import { initRealtime, closeRealtime } from './modules/realtime/index.js';
+import { registerNotificationConsumers } from './modules/notifications/consumers.js';
 
 async function main() {
   await connectDb();
 
   // Subscribes to the domain events and picks up anything the last process
   // left unfinished. Started before listening so no event is missed.
+  registerNotificationConsumers();
   await aiWorker.start();
 
   const app = createApp();
@@ -16,9 +19,13 @@ async function main() {
     logger.info(`nexus server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
   });
 
+  // Shares the HTTP server, so there is one process and one port to deploy.
+  initRealtime(server);
+
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
+      await closeRealtime();
       await disconnectDb();
       logger.info('shutdown complete');
       process.exit(0);
