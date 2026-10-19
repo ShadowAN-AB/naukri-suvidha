@@ -19,9 +19,23 @@ export const loginLimiter = rateLimit({
   },
 });
 
+/**
+ * Registration is limited to slow down bulk fake accounts, not to punish
+ * someone fixing a form.
+ *
+ * skipFailedRequests matters here: without it, ten rejected submissions - a
+ * short password, a roll number already taken - burn the whole hourly budget
+ * and lock the person out of registering at all.
+ *
+ * The limit is deliberately generous because a campus sits behind one public
+ * IP, so every student registering on results day shares this budget. If a
+ * registration drive starts tripping it, raise it rather than leaving students
+ * stuck.
+ */
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60_000,
-  limit: 10,
+  limit: 40,
+  skipFailedRequests: true,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: {

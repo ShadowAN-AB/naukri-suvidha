@@ -142,6 +142,26 @@ that counts.
 
 Newest first. Every entry is one pushed commit.
 
+### 2026-10-20 — Verification pass over phases 1 and 2
+Re-checked everything from a clean clone of the published repository, following the
+README's own setup steps against a separate database. 24 endpoint and security checks
+pass. Two real bugs were found and fixed:
+
+- **The login timing defence did not work.** The placeholder hash compared against for an
+  unknown email was 52 characters where bcrypt needs 53, so it was rejected as malformed
+  and returned in microseconds instead of doing the work. An unknown email answered about
+  84,000x faster than a real one, which is precisely the user-enumeration oracle the code
+  claimed to close. It now compares against a genuine hash computed once at start-up;
+  measured, the two cases are 225ms and 218ms.
+- **Ten typos locked you out of registering.** The hourly registration limit counted
+  rejected submissions, so a few mistakes on the form — a short password, a roll number
+  already taken — burned the whole budget. It now counts only accounts actually created,
+  and the limit is raised because a campus shares one public IP.
+
+Also added the `docs/` and `server/test/fixtures/` directories to the repository. Git does
+not track empty directories, so the README was describing two folders a fresh clone did
+not have.
+
 ### 2026-10-19 — Phase 2 complete
 - **Readable dev logs.** `pino-http` logs every request and response header by default,
   which buried anything useful under a screen of noise per request. Requests are now one

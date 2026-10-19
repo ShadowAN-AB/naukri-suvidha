@@ -9,6 +9,17 @@ import { User } from './model.js';
 import { Student, Company } from '../profiles/model.js';
 import { AuditLog } from '../admin/model.js';
 
+/**
+ * A real bcrypt hash, computed once at start-up, compared against when the
+ * email is unknown so that login costs the same whether the account exists or
+ * not.
+ *
+ * This must be a genuine hash. A hand-written placeholder is rejected as
+ * malformed and returns in microseconds, which leaves exactly the user
+ * enumeration oracle it was meant to close.
+ */
+const DUMMY_HASH = bcrypt.hashSync('nexus placeholder, never a real password', env.BCRYPT_ROUNDS);
+
 /** Shape sent to the client. Never includes the hash. */
 function publicUser(user) {
   return {
@@ -94,10 +105,9 @@ export async function register(input, ip) {
 export async function login({ email, password }, ip) {
   const user = await User.findOne({ email }).select('+passwordHash');
 
-  // Always run a comparison, even when the account is unknown, so the
+  // Always run a full comparison, even when the account is unknown, so the
   // response time does not reveal which emails exist.
-  const hash = user?.passwordHash ?? '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
-  const ok = await bcrypt.compare(password, hash);
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
 
   if (!user || !ok) {
     await audit(user?._id, 'auth.login_failed', 'User', user?._id, ip, { email });
