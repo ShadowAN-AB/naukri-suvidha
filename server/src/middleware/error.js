@@ -43,10 +43,10 @@ export function errorHandler(err, req, res, _next) {
   const status = err.status ?? 500;
   const code = err.code ?? 'INTERNAL_ERROR';
 
+  // 4xx is already reported by the request logger; only a real fault needs a
+  // stack trace, and only once.
   if (status >= 500) {
     logger.error({ err, requestId: req.id }, 'unhandled error');
-  } else {
-    logger.warn({ code, msg: err.message, requestId: req.id }, 'request failed');
   }
 
   res.status(status).json({

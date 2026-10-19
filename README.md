@@ -143,6 +143,11 @@ that counts.
 Newest first. Every entry is one pushed commit.
 
 ### 2026-10-19 — Phase 2 complete
+- **Readable dev logs.** `pino-http` logs every request and response header by default,
+  which buried anything useful under a screen of noise per request. Requests are now one
+  line — `POST /api/auth/login 200` — with 4xx logged as a warning and only 5xx as an
+  error with a stack. The path comes from `originalUrl`, because Express rewrites
+  `req.url` to the router-relative path and the log would otherwise read `/login`.
 - **Shared validation.** A third workspace, `@nexus/shared`, holds the Zod schemas and the
   role constants. The register form and the register endpoint validate against the same
   object, so the two cannot drift apart.

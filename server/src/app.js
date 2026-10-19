@@ -37,6 +37,29 @@ export function createApp() {
       logger,
       genReqId: (req) => req.id,
       autoLogging: { ignore: (req) => req.url === '/api/health' },
+
+      // One readable line per request. Without these serializers pino-http
+      // dumps every request and response header on every call, which buries
+      // anything worth reading.
+      // originalUrl, not url: Express rewrites req.url to the router-relative
+      // path once a request enters a mounted router, and these run at response
+      // time, so req.url would log "/login" instead of "/api/auth/login".
+      serializers: {
+        req: (req) => ({ method: req.method, url: req.originalUrl ?? req.url }),
+        res: (res) => ({ status: res.statusCode }),
+      },
+      customSuccessMessage: (req, res) =>
+        `${req.method} ${req.originalUrl ?? req.url} ${res.statusCode}`,
+      customErrorMessage: (req, res) =>
+        `${req.method} ${req.originalUrl ?? req.url} ${res.statusCode}`,
+
+      // A rejected request is expected traffic, not a server fault: 4xx is a
+      // warning, only 5xx is an error.
+      customLogLevel: (_req, res, err) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'info';
+      },
     }),
   );
 
