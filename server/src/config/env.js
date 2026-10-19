@@ -40,6 +40,14 @@ const schema = z.object({
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
 
+  // Only read when STORAGE_PROVIDER=s3. Works with any S3-compatible service:
+  // set S3_ENDPOINT for Cloudflare R2, Backblaze B2 or MinIO.
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+
   LLM_PROVIDER: z.enum(['ollama', 'claude']).default('ollama'),
   OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
   OLLAMA_MODEL: z.string().default('llama3.1:8b'),

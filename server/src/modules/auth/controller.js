@@ -38,7 +38,7 @@ export async function logout(req, res, next) {
   try {
     // Clearing has to use the same attributes the cookie was set with, or the
     // browser keeps it.
-    const { maxAge, ...options } = refreshCookieOptions();
+    const { maxAge: _maxAge, ...options } = refreshCookieOptions();
     res.clearCookie(REFRESH_COOKIE, options);
     res.status(204).end();
   } catch (err) {

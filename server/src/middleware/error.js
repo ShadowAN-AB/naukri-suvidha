@@ -40,8 +40,34 @@ export function notFound(req, _res, next) {
   next(AppError.notFound(`No route for ${req.method} ${req.originalUrl}`));
 }
 
-// eslint-disable-next-line no-unused-vars -- Express identifies the handler by arity
-export function errorHandler(err, req, res, _next) {
+/**
+ * Mongoose throws for things that are really bad input, not server faults.
+ * Left alone they surface as 500s, which is the wrong answer, fills the error
+ * log with stack traces from people mistyping a URL, and hides genuine faults
+ * among the noise.
+ */
+function translateDriverError(err) {
+  // An id that is not an ObjectId cannot name anything, so it is a 404.
+  // Answering 400 would confirm that the route and the id format are real.
+  if (err.name === 'CastError' && err.kind === 'ObjectId') {
+    return AppError.notFound('Not found');
+  }
+  if (err.name === 'ValidationError') {
+    const details = Object.fromEntries(
+      Object.entries(err.errors ?? {}).map(([k, v]) => [k, v.message]),
+    );
+    return AppError.badRequest('Some fields need fixing', details);
+  }
+  // A unique index that a service did not anticipate.
+  if (err.code === 11000) {
+    return AppError.conflict('That already exists');
+  }
+  return err;
+}
+
+// Express identifies an error handler by its arity, so _next must stay.
+export function errorHandler(rawError, req, res, _next) {
+  const err = translateDriverError(rawError);
   const status = err.status ?? 500;
   const code = err.code ?? 'INTERNAL_ERROR';
 

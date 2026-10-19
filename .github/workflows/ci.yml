@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      # The suite runs against a real mongod, because the unique indexes and
+      # the aggregations are exactly what it needs to be sure about.
+      mongodb:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        # Everything the suite needs is in server/.env.test, which is committed
+        # precisely so this step needs no secrets.
+        run: npm test
+
+      - name: Build the client
+        run: npm run build --workspace=client
+
+      - name: Audit production dependencies
+        # Dev-only advisories should not fail a build; a vulnerable package
+        # that ships to users should.
+        run: npm audit --omit=dev --audit-level=high

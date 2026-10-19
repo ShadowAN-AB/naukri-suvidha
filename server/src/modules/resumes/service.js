@@ -16,7 +16,7 @@ async function studentFor(user) {
   return student;
 }
 
-export async function uploadResume(user, file, ip) {
+export async function uploadResume(user, file, _ip) {
   if (!file) throw AppError.badRequest('No file was uploaded', { file: 'Choose a PDF or DOCX' });
 
   // The extension and Content-Type came from the client. The bytes did not.
@@ -74,7 +74,7 @@ export async function uploadResume(user, file, ip) {
     logger.warn({ resumeId: String(resume._id), reason: extraction.error }, 'resume stored but unreadable');
   }
 
-  const { extractedText, ...safe } = resume.toObject();
+  const { extractedText: _text, ...safe } = resume.toObject();
   return {
     ...safe,
     textLength: extraction.text.length,

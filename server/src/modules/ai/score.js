@@ -1,4 +1,4 @@
-import { fitScoreSchema, FALLBACK_SCORE_CAP } from '@nexus/shared';
+import { fitScoreSchema } from '@nexus/shared';
 
 import { logger } from '../../config/logger.js';
 import { getLLM } from '../../infra/llm/index.js';
@@ -48,7 +48,7 @@ Projects: ${
  * Scores one student against one job.
  *
  * Same two-attempt contract as extraction. On failure it falls back to skill
- * overlap, which is capped at ${FALLBACK_SCORE_CAP} and flagged, so a guess can never
+ * overlap, which is capped and flagged, so a guess can never
  * outrank a judgement.
  *
  * @returns {Promise<{ score: number, breakdown: object, reasoning: string, model: string, fallback: boolean }>}

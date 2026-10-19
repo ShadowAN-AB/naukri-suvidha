@@ -87,6 +87,32 @@ naukri-suvidha/
   docs/             notes that are not the plan
 ```
 
+## Running the checks
+
+```bash
+npm run lint    # eslint across both workspaces
+npm test        # 72 tests, Vitest + Supertest, against a real mongod
+npm run build --workspace=client
+```
+
+The test suite needs a local MongoDB and **refuses to run unless the database
+name contains "test"** — it deletes every collection between tests, and it
+destroyed a development database once before that guard existed. Its
+configuration is `server/.env.test`, committed on purpose so CI needs no secrets.
+
+GitHub Actions runs all three on every push, plus
+`npm audit --omit=dev --audit-level=high`.
+
+## Deploying
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)**. Short version: Vercel for the client,
+Render for the API, Atlas for the database, and an S3-compatible bucket for
+résumés — Render's disk is ephemeral, so local storage would lose every upload
+on the next deploy.
+
+**[DEMO.md](DEMO.md)** is the eight-minute demo script, including the run with
+the model switched off.
+
 ## Getting started
 
 ```bash

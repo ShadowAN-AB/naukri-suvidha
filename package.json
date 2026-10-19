@@ -2,6 +2,7 @@
   "name": "naukri-suvidha",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Nexus - an AI-assisted campus placement portal",
   "workspaces": [
     "shared",
@@ -13,13 +14,20 @@
     "dev:server": "npm run dev --workspace=server",
     "dev:client": "npm run dev --workspace=client",
     "seed": "node server/scripts/seed.js",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "test": "npm run test --workspace=server",
     "seed:fresh": "node server/scripts/seed.js --fresh",
-    "resumes:check": "node server/scripts/check-resumes.js"
+    "resumes:check": "node server/scripts/check-resumes.js",
+    "lint:fix": "eslint . --fix",
+    "start": "npm start --workspace=server"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@eslint/js": "^9.39.5",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0"
   },
   "engines": {
     "node": ">=20.19.0"

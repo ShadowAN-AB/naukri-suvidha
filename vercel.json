@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build --workspace=client",
+  "outputDirectory": "client/dist",
+  "installCommand": "npm ci",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://REPLACE-ME.onrender.com/api/:path*" },
+    { "source": "/socket.io/:path*", "destination": "https://REPLACE-ME.onrender.com/socket.io/:path*" },
+    { "source": "/((?!api/|socket.io/).*)", "destination": "/index.html" }
+  ]
+}
