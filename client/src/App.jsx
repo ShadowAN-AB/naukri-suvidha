@@ -1,15 +1,65 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { ROLES, HOME_FOR_ROLE } from '@nexus/shared';
+
+import { useAuth } from './context/AuthContext.jsx';
+import ProtectedRoute from './components/ProtectedRoute.jsx';
+import AppLayout from './layouts/AppLayout.jsx';
+
+import Login from './pages/auth/Login.jsx';
+import Register from './pages/auth/Register.jsx';
+import StudentDashboard from './pages/student/Dashboard.jsx';
+import RecruiterDashboard from './pages/recruiter/Dashboard.jsx';
+import AdminDashboard from './pages/admin/Dashboard.jsx';
 import SystemStatus from './pages/SystemStatus.jsx';
 
-/**
- * Phase 1 serves one page: proof that the client, proxy, server and database
- * are connected. The real shell, with its role-based layouts and protected
- * routes, lands in Phase 2.
- */
+/** Sends a signed-in user to their own dashboard, and everyone else to login. */
+function Landing() {
+  const { user, ready } = useAuth();
+  if (!ready) return <div className="grid min-h-dvh place-items-center text-sm text-muted">Loading…</div>;
+  return <Navigate to={user ? (HOME_FOR_ROLE[user.role] ?? '/login') : '/login'} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<SystemStatus />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/status" element={<SystemStatus />} />
+
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route
+          path="/dashboard/student"
+          element={
+            <ProtectedRoute roles={[ROLES.STUDENT]}>
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/recruiter"
+          element={
+            <ProtectedRoute roles={[ROLES.RECRUITER]}>
+              <RecruiterDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/admin"
+          element={
+            <ProtectedRoute roles={[ROLES.ADMIN]}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

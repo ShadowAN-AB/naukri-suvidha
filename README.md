@@ -5,8 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 1 of 7 complete — the foundation runs end to end locally. Nothing is
-deployed yet.
+**Status:** Phase 2 of 7 complete — you can register, sign in, and land on your own
+dashboard. Nothing is deployed yet.
 
 ---
 
@@ -61,8 +61,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | ✅ done |
-| 2 | Auth, RBAC, React shell | 🟡 next |
-| 3 | Profiles, jobs, admin approval gate | ⬜ not started |
+| 2 | Auth, RBAC, React shell | ✅ done |
+| 3 | Profiles, jobs, admin approval gate | 🟡 next |
 | 4 | Résumés, extraction, applying | ⬜ not started |
 | 5 | The AI layer — provider, worker, fit scoring | ⬜ not started |
 | 6 | Realtime, interviews, analytics | ⬜ not started |
@@ -80,7 +80,10 @@ naukri-suvidha/
   client/src/
     pages/          auth, student, recruiter, admin
     api/            one TanStack Query hook file per module
+    context/        auth session
+    layouts/        the signed-in shell
     components/  hooks/  lib/
+  shared/src/       Zod schemas and constants used by BOTH sides
   docs/             notes that are not the plan
 ```
 
@@ -112,9 +115,48 @@ Three Phase 1 items need a person, not a commit:
       data.
 - [ ] Sketch the five main screens on paper before Phase 2 starts.
 
+## How authentication works
+
+Two tokens, with different jobs:
+
+- The **access token** is a 15-minute JWT the client keeps *in memory only*. It is never
+  written to `localStorage`, so a script injected into the page cannot steal a credential
+  that outlives the tab.
+- The **refresh token** is a 7-day JWT in an `httpOnly` cookie scoped to `/api/auth`.
+  JavaScript cannot read it, and the browser does not attach it to any other request.
+
+A reload loses the access token but keeps the cookie, so the app exchanges it for a new
+access token once on start-up. When any request comes back `401`, the same exchange runs
+and the original request is retried once; concurrent `401`s share a single refresh rather
+than each firing their own.
+
+Both tokens carry a `tokenVersion`. Bumping that column on a user invalidates every token
+already issued to them, which is how suspension and "sign out everywhere" work without
+storing a session table.
+
+Route guards in React are a convenience for the person using the app, **not** a security
+boundary. Every rule they express is enforced again on the server, which is the only place
+that counts.
+
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-19 — Phase 2 complete
+- **Shared validation.** A third workspace, `@nexus/shared`, holds the Zod schemas and the
+  role constants. The register form and the register endpoint validate against the same
+  object, so the two cannot drift apart.
+- **Auth module.** Register, login, refresh, logout and me, with bcrypt at cost 12. Login
+  runs a bcrypt comparison even when the email is unknown, so response time does not
+  reveal which accounts exist, and every attempt — success or failure — is written to
+  `auditLogs`.
+- **RBAC.** `requireRole` gates an admin-only endpoint, so the middleware is exercised by
+  a real route rather than sitting unused until Phase 6.
+- **Rate limiting.** Login allows five attempts a minute per IP, and successful sign-ins
+  do not count against the budget, so nobody is locked out by their own activity.
+- **React shell.** Auth context, protected routes, a role-aware layout, login and register
+  screens, and the three dashboards. A student who types `/dashboard/admin` is sent back
+  to their own dashboard; the same request to the API returns `403`.
 
 ### 2026-10-19 — Phase 1 complete
 - **Client scaffold.** Vite 6, React 19, Tailwind 4, React Router 7 and TanStack Query,
