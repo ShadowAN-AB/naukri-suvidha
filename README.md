@@ -88,6 +88,7 @@ naukri-suvidha/
 ```bash
 npm install
 cp server/.env.example server/.env   # then fill in MONGODB_URI and the secrets
+npm run seed -- --fresh              # 3 admins, 6 companies, 40 students, 12 jobs
 npm run dev                          # client on :5173, server on :5001
 ```
 
@@ -104,6 +105,10 @@ which ones.
 Newest first. Every entry is one pushed commit.
 
 ### 2026-10-19 — Phase 1 begins
+- **Seed data.** `npm run seed` builds a demo placement cycle: 3 admins, 6 companies,
+  40 students across 6 branches, and 12 jobs (8 approved, 3 awaiting approval, 1 closed).
+  The generator is deterministic, so a demo script written today still works next week. It
+  refuses to run against a non-empty database unless given `--fresh`.
 - **The four infrastructure seams.** `StorageProvider`, `LLMProvider`, `EventBus` and
   `Cache` now exist as interfaces with the development implementation behind each one.
   Storage keys are random UUIDs and never derived from the uploaded filename, and any key
