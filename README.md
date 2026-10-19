@@ -5,8 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 5 of 7 complete — résumés are parsed into structured profiles and every
-job is ranked by fit, with the reasoning attached. Nothing is deployed yet.
+**Status:** Phase 6 of 7 complete — the portal is feature-complete: live notifications,
+interview scheduling and placement analytics. Only hardening and deployment remain.
 
 ---
 
@@ -65,8 +65,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 | 3 | Profiles, jobs, admin approval gate | ✅ done |
 | 4 | Résumés, extraction, applying | ✅ done |
 | 5 | The AI layer — provider, worker, fit scoring | ✅ done |
-| 6 | Realtime, interviews, analytics | 🟡 next |
-| 7 | Harden, deploy, document | ⬜ not started |
+| 6 | Realtime, interviews, analytics | ✅ done |
+| 7 | Harden, deploy, document | 🟡 next |
 
 ## Repository layout
 
@@ -143,6 +143,24 @@ Changing `minCgpa`, `maxBacklogs` or `allowedBranches` on an already-approved jo
 back to the queue. Without that, a recruiter could be approved on easy terms and then
 tighten them, and the gate would be decorative. Editing a description or deadline does not
 re-queue.
+
+## How realtime works
+
+Socket.IO shares the HTTP server, so there is one process and one port to deploy. A socket
+authenticates exactly as a request does — the access token is verified and the user
+re-checked against the database — so a suspended account or an ended session cannot hold
+an open channel. Each connection joins exactly one room, its own, which is what stops one
+student subscribing to another's events.
+
+Screens know nothing about sockets. A push invalidates the relevant queries and TanStack
+Query refetches, so there is one source of truth for the data and every screen behaves the
+same whether the socket is up or not.
+
+Notifications are **written first and pushed second**. The row is what matters; the emit
+is a nicety. Someone with no tab open still finds it in their inbox, and a failed
+notification never fails the thing it was describing.
+
+Measured: a recruiter status change reaches an open student tab in **10ms**.
 
 ## How the AI layer works
 
@@ -224,6 +242,24 @@ that counts.
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-20 — Phase 6 complete
+- **Realtime.** Socket.IO on the same server, token-authenticated, per-user rooms, three
+  events. Status change to open tab measured at **10ms** against a one-second requirement.
+- **Notifications.** Consumers for every domain event in one file, an inbox with unread
+  counts, and a live/reconnecting indicator.
+- **Interviews.** Schedule, reschedule and cancel, gated on the pipeline so only a
+  shortlisted applicant can be booked. Validation refuses an online interview with no link
+  or an onsite one with no location.
+- **Analytics.** Placement rate, offers, median CTC, upcoming interviews, an eight-week
+  trend and a stage breakdown — plus the audit log and AI-layer health.
+- **Chart colours were computed, not chosen.** The two categorical hues separate by ΔE
+  29.6 under protanopia (target 8). One axis, legend for two series, direct labels for the
+  single-series chart, 2px surface rings so coinciding points stay legible.
+- **Fixed the Vite proxy**, which only covered `/api` — the `/socket.io` handshake never
+  reached the server, so realtime silently failed in development.
+- **Code-split the analytics page.** Recharts pushed the bundle past 500 kB for everyone;
+  only the placement office now downloads those 382 kB.
 
 ### 2026-10-20 — Phase 5 complete
 - **Both providers implemented.** Ollama via its JSON mode, Claude via the Anthropic SDK —
