@@ -104,6 +104,12 @@ which ones.
 Newest first. Every entry is one pushed commit.
 
 ### 2026-10-19 — Phase 1 begins
+- **The data model.** All eleven collections written as Mongoose schemas, each owned by the
+  module that uses it, with every index from the plan verified against a live database:
+  `users` `students` `companies` `jobs` `applications` `resumes` `fitScores` `aiTasks`
+  `interviews` `notifications` `auditLogs`. The unique `(jobId, studentId)` index is what
+  makes duplicate applications impossible — deduplication is the database's job, not the
+  service's. Domain enums and event names live in one shared constants file.
 - **Server foundation.** Express 5 app with helmet, CORS, a 300/min API rate-limit floor,
   pino request logging, and a `GET /api/health` that reports database state. Every request
   carries an `x-request-id` that appears in both the logs and any error body.
