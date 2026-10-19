@@ -3,12 +3,15 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
+import cookieParser from 'cookie-parser';
 
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { dbIsUp } from './config/db.js';
 import { requestId } from './middleware/requestId.js';
 import { notFound, errorHandler } from './middleware/error.js';
+import authRoutes from './modules/auth/routes.js';
+import adminRoutes from './modules/admin/routes.js';
 
 export function createApp() {
   const app = express();
@@ -25,6 +28,7 @@ export function createApp() {
       credentials: true,
     }),
   );
+  app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -59,8 +63,10 @@ export function createApp() {
     });
   });
 
+  app.use('/api/auth', authRoutes);
+  app.use('/api/admin', adminRoutes);
+
   // Module routers mount here as each phase lands:
-  //   Phase 2  /api/auth
   //   Phase 3  /api/profiles  /api/jobs
   //   Phase 4  /api/resumes   /api/applications
   //   Phase 5  /api/ai

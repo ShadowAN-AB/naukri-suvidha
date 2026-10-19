@@ -8,6 +8,12 @@ const userSchema = new mongoose.Schema(
     role: { type: String, required: true, enum: ROLE_VALUES, index: true },
     status: { type: String, enum: USER_STATUS_VALUES, default: USER_STATUS.ACTIVE },
     lastLoginAt: { type: Date },
+    /**
+     * Bumped to invalidate every access and refresh token already issued to
+     * this user at once: used when an account is suspended, a password
+     * changes, or a user asks to be signed out everywhere.
+     */
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

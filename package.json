@@ -4,6 +4,7 @@
   "private": true,
   "description": "Nexus - an AI-assisted campus placement portal",
   "workspaces": [
+    "shared",
     "server",
     "client"
   ],
