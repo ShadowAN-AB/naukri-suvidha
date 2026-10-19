@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAdminOverview } from '../../api/auth.js';
 import PhaseNotice from '../../components/PhaseNotice.jsx';
 
@@ -33,9 +34,17 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <PhaseNotice phase={3}>
-        The job approval queue, where a posting becomes visible to students only once it is
-        approved here.
+      <div className="mt-6">
+        <Link
+          to="/admin/approvals"
+          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Review the approval queue
+        </Link>
+      </div>
+
+      <PhaseNotice phase={6}>
+        Placement analytics, live notifications and the audit log.
       </PhaseNotice>
     </>
   );

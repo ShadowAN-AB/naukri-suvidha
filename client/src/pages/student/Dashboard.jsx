@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useMe } from '../../api/auth.js';
 import PhaseNotice from '../../components/PhaseNotice.jsx';
 
@@ -28,9 +29,18 @@ export default function StudentDashboard() {
         </dl>
       )}
 
-      <PhaseNotice phase={3}>
-        Eligible jobs, ranked by how well your profile fits them, with your résumé and
-        applications alongside.
+      <div className="mt-6">
+        <Link
+          to="/jobs"
+          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Browse open jobs
+        </Link>
+      </div>
+
+      <PhaseNotice phase={4}>
+        Uploading your résumé and applying, with every application tracked through its
+        stages.
       </PhaseNotice>
     </>
   );

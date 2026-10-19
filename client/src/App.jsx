@@ -10,6 +10,10 @@ import Register from './pages/auth/Register.jsx';
 import StudentDashboard from './pages/student/Dashboard.jsx';
 import RecruiterDashboard from './pages/recruiter/Dashboard.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
+import JobsRouter from './pages/JobsRouter.jsx';
+import NewJob from './pages/recruiter/NewJob.jsx';
+import Approvals from './pages/admin/Approvals.jsx';
+import Profile from './pages/Profile.jsx';
 import SystemStatus from './pages/SystemStatus.jsx';
 
 /** Sends a signed-in user to their own dashboard, and everyone else to login. */
@@ -58,6 +62,32 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/jobs"
+          element={
+            <ProtectedRoute roles={[ROLES.STUDENT, ROLES.RECRUITER]}>
+              <JobsRouter />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/jobs/new"
+          element={
+            <ProtectedRoute roles={[ROLES.RECRUITER]}>
+              <NewJob />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/approvals"
+          element={
+            <ProtectedRoute roles={[ROLES.ADMIN]}>
+              <Approvals />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/profile" element={<Profile />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

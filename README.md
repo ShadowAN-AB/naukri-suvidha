@@ -5,8 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 2 of 7 complete — you can register, sign in, and land on your own
-dashboard. Nothing is deployed yet.
+**Status:** Phase 3 of 7 complete — recruiters post jobs, the placement office approves
+them, and students see only what they are eligible for. Nothing is deployed yet.
 
 ---
 
@@ -62,8 +62,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 | --- | --- | --- |
 | 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | ✅ done |
 | 2 | Auth, RBAC, React shell | ✅ done |
-| 3 | Profiles, jobs, admin approval gate | 🟡 next |
-| 4 | Résumés, extraction, applying | ⬜ not started |
+| 3 | Profiles, jobs, admin approval gate | ✅ done |
+| 4 | Résumés, extraction, applying | 🟡 next |
 | 5 | The AI layer — provider, worker, fit scoring | ⬜ not started |
 | 6 | Realtime, interviews, analytics | ⬜ not started |
 | 7 | Harden, deploy, document | ⬜ not started |
@@ -115,6 +115,35 @@ Three Phase 1 items need a person, not a commit:
       data.
 - [ ] Sketch the five main screens on paper before Phase 2 starts.
 
+## How eligibility works
+
+Whether a student may apply to a job is decided by **one pure function** in
+`shared/src/eligibility.js`, with no database and no imports from either side. The server
+enforces it; the client calls the same function to explain a greyed-out job without a
+round trip. There is one copy of the rules, which is the point — a rule that exists twice
+eventually disagrees with itself.
+
+It checks four things: CGPA, active backlogs, branch (an empty `allowedBranches` means
+every branch), and the deadline.
+
+Because fetching every job and filtering in memory does not scale, the same rules are also
+expressed as a MongoDB filter. The two **must** agree, so a check runs both over the same
+data and compares the results.
+
+Students see jobs they are not eligible for, with the reason spelled out — "Open to CSE,
+IT; you are in CIVIL" — rather than a shorter list they cannot explain.
+
+## How the approval gate works
+
+A job is created `pending` and is invisible to students until an admin approves it. A
+student asking for an unapproved job by id gets `404`, not `403`, so the response does not
+confirm that it exists.
+
+Changing `minCgpa`, `maxBacklogs` or `allowedBranches` on an already-approved job sends it
+back to the queue. Without that, a recruiter could be approved on easy terms and then
+tighten them, and the gate would be decorative. Editing a description or deadline does not
+re-queue.
+
 ## How authentication works
 
 Two tokens, with different jobs:
@@ -141,6 +170,25 @@ that counts.
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-20 — Phase 3 complete
+- **Profiles.** Students and companies read and edit their own profile. A student's CGPA,
+  backlogs and branch drive eligibility, so saving the form re-checks which jobs they
+  qualify for.
+- **Jobs.** Create, list, read, update, approve, reject and close, each gated by role and
+  by ownership — a recruiter touching another company's posting gets `403`.
+- **The approval gate.** Nothing a recruiter posts reaches students until the placement
+  office approves it, and tightening eligibility after approval sends it back.
+- **Eligibility as one pure function**, with a matching database filter and a check that
+  the two agree.
+- **Screens.** The student job list with per-job eligibility reasons and an "eligible
+  only" toggle, the recruiter's postings with a post-a-job form, and the admin approval
+  queue with reject-and-explain.
+- `job.created` and `job.approved` are published on the event bus. Nothing consumes them
+  yet; Phase 6 will.
+- **Fixed `npm run seed -- --fresh`,** which the README documented but which silently
+  dropped its flag — npm does not forward arguments through a nested workspace script, so
+  the command always refused to run.
 
 ### 2026-10-20 — Verification pass over phases 1 and 2
 Re-checked everything from a clean clone of the published repository, following the

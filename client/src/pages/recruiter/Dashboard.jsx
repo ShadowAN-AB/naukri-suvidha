@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useMe } from '../../api/auth.js';
 import PhaseNotice from '../../components/PhaseNotice.jsx';
 
@@ -27,9 +28,23 @@ export default function RecruiterDashboard() {
         </dl>
       )}
 
-      <PhaseNotice phase={3}>
-        Posting jobs, watching them through the approval queue, and working a shortlist
-        ordered by fit score.
+      <div className="mt-6 flex gap-3">
+        <Link
+          to="/jobs/new"
+          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Post a job
+        </Link>
+        <Link
+          to="/jobs"
+          className="inline-flex rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50"
+        >
+          Your postings
+        </Link>
+      </div>
+
+      <PhaseNotice phase={4}>
+        Applicants on each posting, with their résumés, moved through a status pipeline.
       </PhaseNotice>
     </>
   );

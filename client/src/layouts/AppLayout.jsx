@@ -3,9 +3,20 @@ import { ROLES } from '@nexus/shared';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const NAV = {
-  [ROLES.STUDENT]: [['/dashboard/student', 'Dashboard']],
-  [ROLES.RECRUITER]: [['/dashboard/recruiter', 'Dashboard']],
-  [ROLES.ADMIN]: [['/dashboard/admin', 'Dashboard']],
+  [ROLES.STUDENT]: [
+    ['/dashboard/student', 'Dashboard'],
+    ['/jobs', 'Jobs'],
+    ['/profile', 'Profile'],
+  ],
+  [ROLES.RECRUITER]: [
+    ['/dashboard/recruiter', 'Dashboard'],
+    ['/jobs', 'Postings'],
+    ['/profile', 'Profile'],
+  ],
+  [ROLES.ADMIN]: [
+    ['/dashboard/admin', 'Dashboard'],
+    ['/admin/approvals', 'Approvals'],
+  ],
 };
 
 const ROLE_LABEL = {
