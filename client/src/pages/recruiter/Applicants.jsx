@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApplications, useChangeStatus } from '../../api/applications.js';
 import { useJobs } from '../../api/jobs.js';
 import { StatusPill } from '../../components/ApplicationStatus.jsx';
+import FitScore, { FitBadge } from '../../components/FitScore.jsx';
 import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import { formatDate } from '../../lib/format.js';
@@ -35,7 +36,7 @@ export default function Applicants() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Applicants</h1>
           <p className="mt-1 text-muted">
-            {isPending ? 'Loading…' : `${items.length} across your postings`}
+            {isPending ? 'Loading…' : `${items.length} across your postings · best fit first`}
           </p>
         </div>
         <label className="text-sm">
@@ -75,6 +76,7 @@ export default function Applicants() {
             <article key={a._id} className="rounded-xl border border-line bg-white p-5">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
                 <h2 className="text-base font-semibold tracking-tight">{s.name ?? 'Unknown student'}</h2>
+                <FitBadge fit={a.fit} />
                 <StatusPill status={a.status} />
                 <span className="ml-auto text-sm text-muted">applied {formatDate(a.appliedAt)}</span>
               </div>
@@ -84,6 +86,8 @@ export default function Applicants() {
                 {s.backlogs ? `${s.backlogs} backlogs` : 'no backlogs'}
               </p>
               <p className="mt-1 text-sm text-muted">for {a.jobId?.title}</p>
+
+              <FitScore fit={a.fit} />
 
               {s.skills?.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-1.5">

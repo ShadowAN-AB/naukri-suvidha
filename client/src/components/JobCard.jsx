@@ -1,11 +1,12 @@
 import StatusBadge from './StatusBadge.jsx';
+import FitScore, { FitBadge } from './FitScore.jsx';
 import { inr, formatDate, daysLeft } from '../lib/format.js';
 
 /**
  * One job, shown to whoever is looking at it. A student sees why they are or
  * are not eligible; a recruiter and an admin see its approval status.
  */
-export default function JobCard({ job, showStatus = false, actions = null }) {
+export default function JobCard({ job, showStatus = false, actions = null, showFit = false }) {
   const company = job.companyId ?? {};
   const eligibility = job.eligibility;
 
@@ -14,6 +15,7 @@ export default function JobCard({ job, showStatus = false, actions = null }) {
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <h3 className="text-base font-semibold tracking-tight">{job.title}</h3>
         {showStatus && <StatusBadge status={job.status} />}
+        {showFit && <FitBadge fit={job.fit} />}
         {eligibility && !eligibility.eligible && (
           <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">
             Not eligible
@@ -46,6 +48,8 @@ export default function JobCard({ job, showStatus = false, actions = null }) {
           ))}
         </ul>
       )}
+
+      {showFit && <FitScore fit={job.fit} />}
 
       {eligibility && !eligibility.eligible && (
         <ul className="mt-3 space-y-0.5 border-l-2 border-slate-200 pl-3 text-sm text-muted">

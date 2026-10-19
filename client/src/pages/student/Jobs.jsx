@@ -43,7 +43,7 @@ export default function StudentJobs() {
               ? 'Loading…'
               : eligibleOnly
                 ? `${data.total} you can apply to`
-                : `${data.total} open · you are eligible for ${eligibleCount}`}
+                : `${data.total} open · eligible for ${eligibleCount} · best fit first`}
           </p>
         </div>
 
@@ -100,6 +100,7 @@ export default function StudentJobs() {
             <JobCard
               key={job._id}
               job={job}
+              showFit
               actions={
                 applied ? (
                   <Link to="/applications" className="text-sm font-medium text-accent hover:underline">

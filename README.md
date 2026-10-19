@@ -5,8 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 4 of 7 complete — students upload a résumé and apply, and recruiters
-work the applicant pipeline. Nothing is deployed yet.
+**Status:** Phase 5 of 7 complete — résumés are parsed into structured profiles and every
+job is ranked by fit, with the reasoning attached. Nothing is deployed yet.
 
 ---
 
@@ -64,8 +64,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 | 2 | Auth, RBAC, React shell | ✅ done |
 | 3 | Profiles, jobs, admin approval gate | ✅ done |
 | 4 | Résumés, extraction, applying | ✅ done |
-| 5 | The AI layer — provider, worker, fit scoring | 🟡 next |
-| 6 | Realtime, interviews, analytics | ⬜ not started |
+| 5 | The AI layer — provider, worker, fit scoring | ✅ done |
+| 6 | Realtime, interviews, analytics | 🟡 next |
 | 7 | Harden, deploy, document | ⬜ not started |
 
 ## Repository layout
@@ -144,6 +144,28 @@ back to the queue. Without that, a recruiter could be approved on easy terms and
 tighten them, and the gate would be decorative. Editing a description or deadline does not
 re-queue.
 
+## How the AI layer works
+
+**The model never runs inside a request.** Work is written to `aiTasks` first, then handed
+to an in-process queue at concurrency 2. The database row is the durable part — the queue
+is lost on restart, so anything stranded mid-run is reclaimed on boot. Claiming a task is
+an atomic `findOneAndUpdate`, so a recovered task cannot run twice. A task that exhausts
+its attempts lands in `dead` instead of cycling forever.
+
+**Every answer is validated.** Extraction and scoring both parse the model's JSON against
+a Zod schema. On a violation the model gets **one repair attempt**, shown its own output
+and what was wrong with it. A second failure falls back rather than failing the upload.
+
+**The fallbacks are deliberately dumb** — regexes and set arithmetic, no inference. They
+exist so an examiner can stop Ollama mid-demo and the portal keeps ranking. Everything
+they produce is **capped at 70 and flagged in the UI**, so a guess can never outrank
+something the model actually reasoned about.
+
+Swapping Ollama for Claude is one environment variable. `GET /api/ai/health` reports the
+provider, the queue depth, task counts and what degraded behaviour is in effect.
+
+Measured locally on `qwen2.5-coder:7b`: extraction ~10s, scoring ~4s each.
+
 ## How uploads are checked
 
 A filename extension and a `Content-Type` are both supplied by whoever is uploading, so
@@ -202,6 +224,21 @@ that counts.
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-20 — Phase 5 complete
+- **Both providers implemented.** Ollama via its JSON mode, Claude via the Anthropic SDK —
+  which checks `stop_reason` for a refusal or token cutoff before reading content, because
+  neither raises.
+- **The queue.** `aiTasks` + `p-queue` at concurrency 2, with backoff retries, a dead
+  state, and recovery of stranded tasks on boot.
+- **Extraction and scoring**, each with Zod validation, one repair retry, and a
+  deterministic fallback.
+- **Ranked lists.** Students see jobs best-fit-first; recruiters see applicants the same
+  way. Both show the breakdown and the model's reasoning.
+- **Verified by killing the model mid-run:** health went `degraded`, scoring continued,
+  and every score came back ≤70, flagged, and still correctly ordered.
+- **Corrected `ANTHROPIC_MODEL` to `claude-opus-5`.** The earlier value was a cheaper
+  model picked without being asked for.
 
 ### 2026-10-20 — Phase 4 complete
 - **Résumés.** Upload with drag-and-drop, magic-byte validation, a 5 MB cap, versioning,
