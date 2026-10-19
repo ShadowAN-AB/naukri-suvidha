@@ -158,6 +158,11 @@ pass. Two real bugs were found and fixed:
   already taken — burned the whole budget. It now counts only accounts actually created,
   and the limit is raised because a campus shares one public IP.
 
+- **A gateway error page crashed the error handler.** The client assumed every response
+  was JSON. Render and Vercel return an HTML page for a 502 or a cold-start timeout, so
+  the user would have seen `Unexpected token '<'` instead of a usable message. Unparseable
+  bodies now become a plain "the server is not responding properly".
+
 Also added the `docs/` and `server/test/fixtures/` directories to the repository. Git does
 not track empty directories, so the README was describing two folders a fresh clone did
 not have.

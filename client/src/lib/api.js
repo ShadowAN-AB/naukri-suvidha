@@ -74,8 +74,30 @@ async function rawRequest(path, { method, body, signal, isFormData }) {
   });
 
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : null;
-  return { res, payload };
+  return { res, payload: parseBody(text, res.status) };
+}
+
+/**
+ * The API always answers with JSON, but the things in front of it do not: a
+ * gateway timeout or a cold start returns an HTML error page. Parsing that
+ * blindly throws a SyntaxError that escapes as "Unexpected token '<'", which
+ * tells the user nothing.
+ */
+function parseBody(text, status) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: {
+        code: 'BAD_GATEWAY',
+        message:
+          status >= 500
+            ? 'The server is not responding properly. Try again in a moment.'
+            : 'The server sent a response the app could not read.',
+      },
+    };
+  }
 }
 
 export async function api(path, { method = 'GET', body, signal, isFormData = false } = {}) {
