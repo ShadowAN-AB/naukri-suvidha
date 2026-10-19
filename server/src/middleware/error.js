@@ -17,20 +17,22 @@ export class AppError extends Error {
   static badRequest(message, details) {
     return new AppError(400, 'BAD_REQUEST', message, details);
   }
-  static unauthorized(message = 'Authentication required') {
-    return new AppError(401, 'UNAUTHORIZED', message);
+  static unauthorized(message = 'Authentication required', details) {
+    return new AppError(401, 'UNAUTHORIZED', message, details);
   }
-  static forbidden(message = 'You do not have access to this resource') {
-    return new AppError(403, 'FORBIDDEN', message);
+  // Takes details like the others: a 403 often needs to say *why*, such as
+  // which eligibility rule a student failed.
+  static forbidden(message = 'You do not have access to this resource', details) {
+    return new AppError(403, 'FORBIDDEN', message, details);
   }
-  static notFound(message = 'Not found') {
-    return new AppError(404, 'NOT_FOUND', message);
+  static notFound(message = 'Not found', details) {
+    return new AppError(404, 'NOT_FOUND', message, details);
   }
   static conflict(message, details) {
     return new AppError(409, 'CONFLICT', message, details);
   }
-  static tooLarge(message = 'Payload too large') {
-    return new AppError(413, 'PAYLOAD_TOO_LARGE', message);
+  static tooLarge(message = 'Payload too large', details) {
+    return new AppError(413, 'PAYLOAD_TOO_LARGE', message, details);
   }
 }
 

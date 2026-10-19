@@ -15,7 +15,8 @@
     "seed": "node server/scripts/seed.js",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "seed:fresh": "node server/scripts/seed.js --fresh"
+    "seed:fresh": "node server/scripts/seed.js --fresh",
+    "resumes:check": "node server/scripts/check-resumes.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
