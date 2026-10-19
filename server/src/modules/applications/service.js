@@ -13,6 +13,7 @@ import {
 import { Application } from './model.js';
 import { Job } from '../jobs/model.js';
 import { Student, Company } from '../profiles/model.js';
+import { FitScore } from '../ai/model.js';
 import { AuditLog } from '../admin/model.js';
 
 async function audit(actorId, action, entityId, ip, meta) {
@@ -123,7 +124,25 @@ export async function listApplications(user, query) {
     Application.countDocuments(filter),
   ]);
 
-  return { items, total, page, limit, pages: Math.ceil(total / limit) || 1 };
+  // Attach the reasoning behind each score so a recruiter sees why an
+  // applicant ranks where they do, not just a number.
+  const fits = await FitScore.find({
+    $or: items.map((a) => ({ studentId: a.studentId?._id ?? a.studentId, jobId: a.jobId?._id ?? a.jobId })),
+  }).lean();
+  const key = (s, j) => `${s}:${j}`;
+  const byPair = new Map(fits.map((f) => [key(f.studentId, f.jobId), f]));
+
+  const decorated = items.map((a) => {
+    const f = byPair.get(key(a.studentId?._id ?? a.studentId, a.jobId?._id ?? a.jobId));
+    return {
+      ...a,
+      fit: f
+        ? { score: f.score, breakdown: f.breakdown, reasoning: f.reasoning, model: f.model, fallback: f.fallback }
+        : null,
+    };
+  });
+
+  return { items: decorated, total, page, limit, pages: Math.ceil(total / limit) || 1 };
 }
 
 async function loadForActor(user, id) {

@@ -2,9 +2,14 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDb, disconnectDb } from './config/db.js';
+import { aiWorker } from './modules/ai/worker.js';
 
 async function main() {
   await connectDb();
+
+  // Subscribes to the domain events and picks up anything the last process
+  // left unfinished. Started before listening so no event is missed.
+  await aiWorker.start();
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {

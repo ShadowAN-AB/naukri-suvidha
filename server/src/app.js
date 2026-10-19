@@ -16,6 +16,7 @@ import profileRoutes from './modules/profiles/routes.js';
 import jobRoutes from './modules/jobs/routes.js';
 import resumeRoutes from './modules/resumes/routes.js';
 import applicationRoutes from './modules/applications/routes.js';
+import aiRoutes from './modules/ai/routes.js';
 
 export function createApp() {
   const app = express();
@@ -96,9 +97,9 @@ export function createApp() {
   app.use('/api/jobs', jobRoutes);
   app.use('/api/resumes', resumeRoutes);
   app.use('/api/applications', applicationRoutes);
+  app.use('/api/ai', aiRoutes);
 
   // Module routers mount here as each phase lands:
-  //   Phase 5  /api/ai
   //   Phase 6  /api/notifications  /api/interviews  /api/admin
 
   app.use(notFound);

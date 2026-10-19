@@ -6,6 +6,7 @@ import { eventBus } from '../../infra/events/eventBus.js';
 import { EVENTS, JOB_STATUS, ROLES } from '../../lib/constants.js';
 import { Job } from './model.js';
 import { Student, Company } from '../profiles/model.js';
+import { FitScore } from '../ai/model.js';
 import { AuditLog } from '../admin/model.js';
 
 /** Changing any of these after approval re-opens the approval question. */
@@ -67,22 +68,69 @@ export async function listJobs(user, query) {
 
   if (search) filter.$text = { $search: search };
 
-  const [items, total] = await Promise.all([
-    Job.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('companyId', 'name industry website verified')
-      .lean(),
-    Job.countDocuments(filter),
-  ]);
+  // A recruiter or admin list is plain and paginates in the database.
+  if (!student) {
+    const [items, total] = await Promise.all([
+      Job.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('companyId', 'name industry website verified')
+        .lean(),
+      Job.countDocuments(filter),
+    ]);
+    return { items, total, page, limit, pages: Math.ceil(total / limit) || 1 };
+  }
 
-  // Students see why a job is closed to them, not just that it is.
-  const withEligibility = student
-    ? items.map((job) => ({ ...job, eligibility: checkEligibility(student, job) }))
-    : items;
+  // A student's list is ordered by fit, which lives in another collection, so
+  // it is assembled and sorted here. A campus has tens of open jobs, not
+  // thousands, so reading them all is cheaper than a lookup pipeline.
+  const all = await Job.find(filter)
+    .limit(500)
+    .populate('companyId', 'name industry website verified')
+    .lean();
 
-  return { items: withEligibility, total, page, limit, pages: Math.ceil(total / limit) || 1 };
+  const scores = await FitScore.find({
+    studentId: student._id,
+    jobId: { $in: all.map((j) => j._id) },
+  }).lean();
+  const byJob = new Map(scores.map((s) => [String(s.jobId), s]));
+
+  const decorated = all.map((job) => {
+    const fit = byJob.get(String(job._id));
+    return {
+      ...job,
+      eligibility: checkEligibility(student, job),
+      fit: fit
+        ? {
+            score: fit.score,
+            breakdown: fit.breakdown,
+            reasoning: fit.reasoning,
+            model: fit.model,
+            fallback: fit.fallback,
+          }
+        : null,
+    };
+  });
+
+  // Best fit first; anything not scored yet sits below what has been, rather
+  // than being hidden, so a student is never shown an empty list while the
+  // queue is still working.
+  decorated.sort((a, b) => {
+    const sa = a.fit?.score ?? -1;
+    const sb = b.fit?.score ?? -1;
+    if (sb !== sa) return sb - sa;
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  return {
+    items: decorated.slice(skip, skip + limit),
+    total: decorated.length,
+    page,
+    limit,
+    pages: Math.ceil(decorated.length / limit) || 1,
+    scored: decorated.filter((j) => j.fit).length,
+  };
 }
 
 export async function getJob(user, id) {
