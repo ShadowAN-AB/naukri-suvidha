@@ -40,3 +40,6 @@ coverage/
 
 # local tooling config
 .claude/
+
+# test env is committed on purpose - no real secrets, and CI needs it
+!server/.env.test

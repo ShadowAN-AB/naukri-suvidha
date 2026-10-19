@@ -8,7 +8,9 @@
     "dev": "node --watch --watch-preserve-output src/server.js",
     "start": "node src/server.js",
     "seed": "node scripts/seed.js",
-    "resumes:check": "node scripts/check-resumes.js"
+    "resumes:check": "node scripts/check-resumes.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -32,6 +34,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "pino-pretty": "^13.0.0"
+    "pino-pretty": "^13.0.0",
+    "supertest": "^7.3.1",
+    "vitest": "^4.1.12"
   }
 }

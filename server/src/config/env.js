@@ -8,12 +8,17 @@ import { z } from 'zod';
 // server/, or by a process manager.
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// override: a local .env wins over whatever is already in the environment.
+// Which file to read. Tests get their own, and never fall back to .env:
+// the suite wipes every collection between tests, so pointing it at a
+// developer's real database destroys their data. It did exactly that once.
+const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
+
+// override: a local env file wins over whatever is already in the environment.
 // Without this, a PORT exported by a parent process - a dev runner starting
 // the client and the server together, or a shell that happens to have PORT
-// set - silently steals the port from .env. In production there is no .env
-// file, so the platform's own PORT is still the one that applies.
-dotenv.config({ path: path.join(packageRoot, '.env'), override: true });
+// set - silently steals the port. In production there is no env file, so the
+// platform's own PORT is still the one that applies.
+dotenv.config({ path: path.join(packageRoot, envFile), override: true });
 
 export const paths = { packageRoot };
 
