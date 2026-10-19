@@ -3,12 +3,14 @@ import { IronFilings } from '../components/ui/IronFilings.jsx';
 /**
  * The shell behind the signed-out forms.
  *
- * The field runs as a fixed background layer with interactive={false}, which
- * matters on a form. Interactive mode sets cursor-crosshair over the inputs,
- * makes the wrapper a tab stop before the first field, blocks touch scrolling
- * with touch-none, and drops a magnet on every click - including a click into
- * a text box. Turning it off leaves the idle drift, which is the part worth
- * having here, and costs nothing in usability.
+ * The magnet still follows the cursor - that is the whole appeal - but
+ * interactive is off, because that flag also brings cursor-crosshair over the
+ * inputs, a tab stop ahead of the first field, a magnet dropped on every click
+ * including a click into a text box, and touch-none, which would leave the
+ * register form too tall for a phone with no way to scroll it.
+ *
+ * Tracking is on the window rather than the component's own box: the field is
+ * behind the card, so pointer events over the form never reach it.
  *
  * Because the field is fixed behind the page rather than wrapping it, the form
  * scrolls normally however long it gets. The card above it is translucent so
@@ -20,6 +22,8 @@ export default function AuthLayout({ children, maxWidth = 'max-w-md' }) {
       <div aria-hidden className="fixed inset-0 -z-10">
         <IronFilings
           interactive={false}
+          followPointer
+          pointerSource="window"
           spacing={18}
           length={9}
           className="h-full w-full bg-surface text-muted"

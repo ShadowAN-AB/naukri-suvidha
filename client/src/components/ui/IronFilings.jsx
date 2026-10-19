@@ -21,10 +21,24 @@ export function IronFilings({
   strength = 1,
   color,
   interactive = true,
+  /**
+   * Whether the magnet follows the pointer. Defaults to `interactive`, but can
+   * be turned on independently: behind a form you want the field to follow the
+   * cursor without the crosshair, the tab stop, the click-to-drop or the
+   * touch-none that `interactive` also brings.
+   */
+  followPointer,
+  /**
+   * 'element' listens on the component's own box. 'window' listens globally,
+   * which is what you need when the field is a background layer and something
+   * else - a card, a form - sits on top of it swallowing pointer events.
+   */
+  pointerSource = 'element',
   maxMagnets = 4,
   className = '',
   children,
 }) {
+  const follows = followPointer ?? interactive;
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
 
@@ -216,6 +230,9 @@ export function IronFilings({
     };
 
     layout();
+    // When the field is a background layer, pointer events land on whatever is
+    // stacked above it, so the only way to see the cursor is to listen globally.
+    const tracker = pointerSource === 'window' ? window : wrap;
     const ro = new ResizeObserver(() => layout());
     ro.observe(wrap);
     const io = new IntersectionObserver(([entry]) => {
@@ -225,9 +242,13 @@ export function IronFilings({
     io.observe(wrap);
     const onVisibility = () => start();
     document.addEventListener('visibilitychange', onVisibility);
+    if (follows) {
+      tracker.addEventListener('pointermove', onMove);
+      // window has no meaningful pointerleave, so fall back to the document's,
+      // which fires when the cursor leaves the page entirely.
+      (pointerSource === 'window' ? document : wrap).addEventListener('pointerleave', onLeave);
+    }
     if (interactive) {
-      wrap.addEventListener('pointermove', onMove);
-      wrap.addEventListener('pointerleave', onLeave);
       wrap.addEventListener('pointerdown', onDown);
       wrap.addEventListener('keydown', onKey);
     }
@@ -238,12 +259,12 @@ export function IronFilings({
       ro.disconnect();
       io.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
-      wrap.removeEventListener('pointermove', onMove);
-      wrap.removeEventListener('pointerleave', onLeave);
+      tracker.removeEventListener('pointermove', onMove);
+      (pointerSource === 'window' ? document : wrap).removeEventListener('pointerleave', onLeave);
       wrap.removeEventListener('pointerdown', onDown);
       wrap.removeEventListener('keydown', onKey);
     };
-  }, [spacing, length, strength, color, interactive, maxMagnets]);
+  }, [spacing, length, strength, color, interactive, follows, pointerSource, maxMagnets]);
 
   return (
     <div

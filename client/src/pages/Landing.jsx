@@ -16,6 +16,9 @@ export default function Landing() {
     <IronFilings
       spacing={16}
       length={10}
+      /* Track globally so the magnet keeps following over the buttons, which
+         sit above the field and would otherwise swallow the pointer. */
+      pointerSource="window"
       className="flex min-h-dvh w-full items-center justify-center bg-surface text-muted"
     >
       <div className="pointer-events-none relative select-none px-6 text-center text-ink">

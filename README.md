@@ -173,17 +173,18 @@ Newest first. Every entry is one pushed commit.
 
 ### 2026-10-20 — Iron filings behind the auth screens
 Login and register now sit on a translucent card over the same field, via a shared
-`AuthLayout`.
+`AuthLayout`. The magnet follows the cursor everywhere.
 
-The field runs there with `interactive={false}`, which is the whole difference. In
-interactive mode the component sets `cursor-crosshair` over your inputs, makes its wrapper
-a **tab stop before the first field**, drops a magnet on every click — including a click
-into a text box — and sets `touch-none`, which on the register form would have left a
-page too tall for a phone with no way to scroll it. Turning interaction off keeps the idle
-drift, which is the part worth having behind a form.
+The component originally bundled five behaviours into one `interactive` flag: following
+the pointer, a crosshair cursor, a tab stop on the wrapper, click-to-drop-a-magnet, and
+`touch-none`. Behind a form you want the first and none of the rest — a crosshair over a
+text box is wrong, a tab stop ahead of the email field is worse, and `touch-none` would
+have left the register form taller than a phone screen with no way to scroll it.
 
-It is also a fixed layer behind the page rather than a wrapper around it, so the form
-scrolls normally however long it grows.
+So `followPointer` and `pointerSource` are now separate props. Pointer tracking on the
+auth screens listens on the **window**, because the field sits behind the card and pointer
+events over the form never reach it. The landing page tracks globally too, so the magnet
+keeps following over the buttons.
 
 ### 2026-10-20 — Landing page (experimental)
 A signed-out front door at `/`, built around the `IronFilings` canvas component from
