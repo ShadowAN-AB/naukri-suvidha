@@ -15,18 +15,20 @@ import NewJob from './pages/recruiter/NewJob.jsx';
 import Approvals from './pages/admin/Approvals.jsx';
 import Profile from './pages/Profile.jsx';
 import SystemStatus from './pages/SystemStatus.jsx';
+import Landing from './pages/Landing.jsx';
 
-/** Sends a signed-in user to their own dashboard, and everyone else to login. */
-function Landing() {
+/** Signed-in users go straight to their dashboard; everyone else gets the front door. */
+function Home() {
   const { user, ready } = useAuth();
   if (!ready) return <div className="grid min-h-dvh place-items-center text-sm text-muted">Loading…</div>;
-  return <Navigate to={user ? (HOME_FOR_ROLE[user.role] ?? '/login') : '/login'} replace />;
+  if (user) return <Navigate to={HOME_FOR_ROLE[user.role] ?? '/login'} replace />;
+  return <Landing />;
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/status" element={<SystemStatus />} />

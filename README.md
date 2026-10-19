@@ -171,6 +171,23 @@ that counts.
 
 Newest first. Every entry is one pushed commit.
 
+### 2026-10-20 — Landing page (experimental)
+A signed-out front door at `/`, built around the `IronFilings` canvas component from
+21st.dev. Signed-in users still redirect straight to their dashboard, so nothing about the
+app itself changed.
+
+The component needed converting: it ships as TypeScript against shadcn conventions, and
+this project is plain JSX with its own tokens. It was rewritten as `.jsx` and the demo's
+`bg-background` / `text-muted-foreground` were mapped onto `bg-surface` / `text-muted`. It
+has no dependencies beyond React and draws to a canvas, so nothing was installed.
+
+It lives in `client/src/components/ui/`, which is the folder every 21st.dev component
+imports against — keeping that path means the next one needs less rewiring.
+
+**This is a self-contained experiment.** Reverting it is one commit: delete
+`client/src/pages/Landing.jsx` and `client/src/components/ui/`, and point `/` back at a
+redirect in `App.jsx`.
+
 ### 2026-10-20 — Phase 3 complete
 - **Profiles.** Students and companies read and edit their own profile. A student's CGPA,
   backlogs and branch drive eligibility, so saving the form re-checks which jobs they
