@@ -88,14 +88,32 @@ naukri-suvidha/
 ```bash
 npm install
 cp server/.env.example server/.env   # then fill in MONGODB_URI and the secrets
-npm run dev                          # client on :5173, server on :5000
+npm run dev                          # client on :5173, server on :5001
 ```
+
+The server listens on **5001**, not 5000: on macOS, port 5000 is held by the AirPlay
+Receiver in Control Center, which answers requests with a bare `403`. Change `PORT` in
+`server/.env` if you need a different one.
+
+`.env` is read from `server/.env` regardless of which directory you start the process
+from. If a required variable is missing the server refuses to start and prints exactly
+which ones.
 
 ## Build log
 
 Newest first. Every entry is one pushed commit.
 
 ### 2026-10-19 — Phase 1 begins
+- **Server foundation.** Express 5 app with helmet, CORS, a 300/min API rate-limit floor,
+  pino request logging, and a `GET /api/health` that reports database state. Every request
+  carries an `x-request-id` that appears in both the logs and any error body.
+- **Config that fails loudly.** `server/src/config/env.js` validates the whole environment
+  with Zod at boot and exits with the list of what is missing. Paths resolve against the
+  server package, not the shell's cwd.
+- **Error handling.** One `AppError` type plus a handler that hides 500 details in
+  production and always returns `{ error: { code, message, requestId } }`.
+- Dropped `nodemon` in favour of Node 22's native `--watch`; the dependency tree is now at
+  zero known vulnerabilities.
 - Repository initialised, workspace layout created, README started.
 
 ---
