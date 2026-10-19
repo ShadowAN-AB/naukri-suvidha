@@ -104,6 +104,12 @@ which ones.
 Newest first. Every entry is one pushed commit.
 
 ### 2026-10-19 — Phase 1 begins
+- **The four infrastructure seams.** `StorageProvider`, `LLMProvider`, `EventBus` and
+  `Cache` now exist as interfaces with the development implementation behind each one.
+  Storage keys are random UUIDs and never derived from the uploaded filename, and any key
+  that resolves outside the upload root is refused. The event bus isolates subscribers, so
+  a handler that throws is logged without taking down the publisher or its siblings. The
+  Ollama and Claude providers are stubs that fail with the phase they land in.
 - **The data model.** All eleven collections written as Mongoose schemas, each owned by the
   module that uses it, with every index from the plan verified against a live database:
   `users` `students` `companies` `jobs` `applications` `resumes` `fitScores` `aiTasks`
