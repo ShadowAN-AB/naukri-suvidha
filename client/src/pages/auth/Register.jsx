@@ -4,6 +4,7 @@ import { registerSchema, fieldErrors, BRANCHES, CURRENT_BATCH_YEARS, ROLES, HOME
 
 import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
+import AuthLayout from '../../layouts/AuthLayout.jsx';
 
 export default function Register() {
   const { user, ready, register } = useAuth();
@@ -40,9 +41,8 @@ export default function Register() {
   };
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-surface px-6 py-12 text-ink">
-      <div className="w-full max-w-md">
-        <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
+    <AuthLayout>
+      <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
         <p className="mt-1 text-sm text-muted">
           Placement office accounts are created by the office, not here.
         </p>
@@ -94,7 +94,7 @@ export default function Register() {
           {role === ROLES.STUDENT ? (
             <>
               <Field label="Full name" name="name" autoComplete="name" error={errors.name} required />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <Field label="Roll number" name="rollNo" error={errors.rollNo} required />
                 <Field label="Branch" name="branch" as="select" error={errors.branch} defaultValue="" required>
                   <option value="" disabled>
@@ -107,7 +107,7 @@ export default function Register() {
                   ))}
                 </Field>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
                 <Field label="Batch" name="batchYear" as="select" error={errors.batchYear} defaultValue={CURRENT_BATCH_YEARS[0]} required>
                   {CURRENT_BATCH_YEARS.map((y) => (
                     <option key={y} value={y}>
@@ -136,13 +136,12 @@ export default function Register() {
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-muted">
-          Already registered?{' '}
-          <Link to="/login" className="font-medium text-accent hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-6 text-sm text-muted">
+        Already registered?{' '}
+        <Link to="/login" className="font-medium text-accent hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
