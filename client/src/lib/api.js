@@ -117,6 +117,38 @@ export async function api(path, { method = 'GET', body, signal, isFormData = fal
   return payload;
 }
 
+/**
+ * Fetches a protected file and hands back an object URL.
+ *
+ * A plain <a href="/api/..."> cannot carry the Authorization header, and the
+ * access token deliberately lives in memory rather than a cookie, so a direct
+ * link to a protected file would just 401. This fetches it properly and wraps
+ * the bytes in a blob URL the browser can open.
+ *
+ * The caller owns the URL and must revokeObjectURL it when finished.
+ */
+export async function fetchBlobUrl(path) {
+  const run = async () => {
+    const headers = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return fetch(`/api${path}`, { headers, credentials: 'include' });
+  };
+
+  let res = await run();
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      accessToken = null;
+      onSessionLost?.();
+      throw new ApiError(401, null);
+    }
+    res = await run();
+  }
+  if (!res.ok) throw new ApiError(res.status, parseBody(await res.text(), res.status));
+
+  return URL.createObjectURL(await res.blob());
+}
+
 /** Used once on start-up to turn a refresh cookie back into a session. */
 export async function bootstrapSession() {
   return refreshAccessToken();

@@ -5,8 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 3 of 7 complete — recruiters post jobs, the placement office approves
-them, and students see only what they are eligible for. Nothing is deployed yet.
+**Status:** Phase 4 of 7 complete — students upload a résumé and apply, and recruiters
+work the applicant pipeline. Nothing is deployed yet.
 
 ---
 
@@ -63,8 +63,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 | 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | ✅ done |
 | 2 | Auth, RBAC, React shell | ✅ done |
 | 3 | Profiles, jobs, admin approval gate | ✅ done |
-| 4 | Résumés, extraction, applying | 🟡 next |
-| 5 | The AI layer — provider, worker, fit scoring | ⬜ not started |
+| 4 | Résumés, extraction, applying | ✅ done |
+| 5 | The AI layer — provider, worker, fit scoring | 🟡 next |
 | 6 | Realtime, interviews, analytics | ⬜ not started |
 | 7 | Harden, deploy, document | ⬜ not started |
 
@@ -144,6 +144,38 @@ back to the queue. Without that, a recruiter could be approved on easy terms and
 tighten them, and the gate would be decorative. Editing a description or deadline does not
 re-queue.
 
+## How uploads are checked
+
+A filename extension and a `Content-Type` are both supplied by whoever is uploading, so
+neither is evidence. Every upload is identified by its **leading bytes** — `%PDF` for a
+PDF, and for a DOCX the zip header plus an actual `word/` entry, because every `.jar` and
+`.xlsx` starts with the same four bytes.
+
+Files are held in memory until they pass, then stored under a random UUID key that is
+never derived from the filename, so a crafted name cannot traverse out of the upload
+directory. If the database row fails to write, the stored file is deleted again rather
+than left orphaned.
+
+Extraction never throws. A résumé that cannot be read is flagged on the record and the
+upload still succeeds — and a file that yields under 50 characters is reported as a
+probable scan instead of silently storing an empty string.
+
+Run `npm run resumes:check` to push everything in `server/test/fixtures/` through the real
+extraction path and see what fails.
+
+## How applying works
+
+Eligibility is re-checked at the moment of writing, not just when the list was drawn, so a
+stale page or a direct API call cannot skip it.
+
+Deduplication is the unique `(jobId, studentId)` index rather than a read-then-write, so
+two simultaneous clicks cannot both succeed.
+
+Every status change appends to `timeline[]` with the actor and the time. Transitions are
+validated from a single map in `shared/`, which the recruiter UI also reads to decide
+which buttons to show — so a stage cannot be skipped, and a rejection or an offer cannot
+be quietly reversed.
+
 ## How authentication works
 
 Two tokens, with different jobs:
@@ -170,6 +202,23 @@ that counts.
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-20 — Phase 4 complete
+- **Résumés.** Upload with drag-and-drop, magic-byte validation, a 5 MB cap, versioning,
+  and text extraction via `pdf-parse` and `mammoth`. Files are readable by the student who
+  owns one, an admin, or a recruiter at a company that student actually applied to.
+- **Applying.** Eligibility enforced again at write time, deduplication by unique index,
+  and a résumé required before applying.
+- **The pipeline.** Applied → shortlisted → interview → offered, with rejection available
+  throughout and withdrawal available to the student until an offer exists. An offer marks
+  the student placed.
+- **Screens.** The student résumé page and application tracker with its timeline, and the
+  recruiter applicant list with the résumé attached and only the valid next actions shown.
+- **Fixed `AppError.forbidden` and friends**, which accepted only a message and silently
+  dropped their `details` argument — so a student refused for eligibility was told "you
+  are not eligible" with no indication of why.
+- **Fixed `seed --fresh`,** which cleared only four of the eleven collections and left
+  résumés and applications pointing at students who no longer existed.
 
 ### 2026-10-20 — Iron filings behind the auth screens
 Login and register now sit on a translucent card over the same field, via a shared

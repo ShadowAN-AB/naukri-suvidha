@@ -6,11 +6,14 @@ const NAV = {
   [ROLES.STUDENT]: [
     ['/dashboard/student', 'Dashboard'],
     ['/jobs', 'Jobs'],
+    ['/applications', 'Applications'],
+    ['/resume', 'Résumé'],
     ['/profile', 'Profile'],
   ],
   [ROLES.RECRUITER]: [
     ['/dashboard/recruiter', 'Dashboard'],
     ['/jobs', 'Postings'],
+    ['/applicants', 'Applicants'],
     ['/profile', 'Profile'],
   ],
   [ROLES.ADMIN]: [

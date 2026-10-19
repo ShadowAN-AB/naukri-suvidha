@@ -13,7 +13,8 @@ import mongoose from 'mongoose';
 
 import { env } from '../src/config/env.js';
 import { connectDb, disconnectDb } from '../src/config/db.js';
-import { User, Student, Company, Job } from '../src/models.js';
+import * as models from '../src/models.js';
+const { User, Student, Company, Job } = models;
 import { JOB_STATUS, PLACEMENT_STATUS, ROLES } from '../src/lib/constants.js';
 
 /** Every seeded account shares this password. Development data only. */
@@ -69,7 +70,16 @@ const JOB_TEMPLATES = [
   { title: 'Mechanical Design Engineer',  skills: ['Git'],                                    ctc: 6.5,branches: ['MECH','CIVIL'] },
 ];
 
+/** Only these are generated. */
 const SEEDED_MODELS = [User, Student, Company, Job];
+
+/**
+ * --fresh clears everything, not just what it generates. Wiping users but
+ * leaving applications and resumes behind would leave rows pointing at
+ * students who no longer exist, which looks like corruption the first time
+ * you hit it.
+ */
+const ALL_MODELS = Object.values(models);
 
 async function makeUser(email, role, passwordHash) {
   return User.create({ email, role, passwordHash });
@@ -92,8 +102,8 @@ async function main() {
     process.exit(1);
   }
   if (fresh) {
-    await Promise.all(SEEDED_MODELS.map((M) => M.deleteMany({})));
-    console.log('wiped users, students, companies, jobs');
+    await Promise.all(ALL_MODELS.map((M) => M.deleteMany({})));
+    console.log(`wiped all ${ALL_MODELS.length} collections`);
   }
 
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, env.BCRYPT_ROUNDS);

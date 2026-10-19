@@ -43,8 +43,8 @@ export default function RecruiterDashboard() {
         </Link>
       </div>
 
-      <PhaseNotice phase={4}>
-        Applicants on each posting, with their résumés, moved through a status pipeline.
+      <PhaseNotice phase={5}>
+        Applicants ranked by fit score, with the model’s reasoning attached to each one.
       </PhaseNotice>
     </>
   );

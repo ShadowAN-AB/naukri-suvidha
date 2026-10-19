@@ -14,6 +14,9 @@ import JobsRouter from './pages/JobsRouter.jsx';
 import NewJob from './pages/recruiter/NewJob.jsx';
 import Approvals from './pages/admin/Approvals.jsx';
 import Profile from './pages/Profile.jsx';
+import StudentResume from './pages/student/Resume.jsx';
+import StudentApplications from './pages/student/Applications.jsx';
+import Applicants from './pages/recruiter/Applicants.jsx';
 import SystemStatus from './pages/SystemStatus.jsx';
 import Landing from './pages/Landing.jsx';
 
@@ -86,6 +89,30 @@ export default function App() {
           element={
             <ProtectedRoute roles={[ROLES.ADMIN]}>
               <Approvals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/resume"
+          element={
+            <ProtectedRoute roles={[ROLES.STUDENT]}>
+              <StudentResume />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications"
+          element={
+            <ProtectedRoute roles={[ROLES.STUDENT]}>
+              <StudentApplications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applicants"
+          element={
+            <ProtectedRoute roles={[ROLES.RECRUITER]}>
+              <Applicants />
             </ProtectedRoute>
           }
         />

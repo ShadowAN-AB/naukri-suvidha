@@ -38,9 +38,9 @@ export default function StudentDashboard() {
         </Link>
       </div>
 
-      <PhaseNotice phase={4}>
-        Uploading your résumé and applying, with every application tracked through its
-        stages.
+      <PhaseNotice phase={5}>
+        Your résumé parsed into a profile automatically, and every job ranked by how well
+        you fit it.
       </PhaseNotice>
     </>
   );

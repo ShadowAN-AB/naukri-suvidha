@@ -1,15 +1,37 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+
 import { useJobs } from '../../api/jobs.js';
+import { useApplications, useApply } from '../../api/applications.js';
+import { useMyResumes } from '../../api/resumes.js';
 import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 
 export default function StudentJobs() {
   const [eligibleOnly, setEligibleOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const { data, isPending, isError, error } = useJobs({ eligibleOnly, search, limit: 50 });
+  const [error, setError] = useState(null);
+
+  const { data, isPending, isError, error: listError } = useJobs({ eligibleOnly, search, limit: 50 });
+  const { data: applicationsData } = useApplications({ limit: 100 });
+  const { data: resumesData } = useMyResumes();
+  const apply = useApply();
 
   const jobs = data?.items ?? [];
   const eligibleCount = jobs.filter((j) => j.eligibility?.eligible).length;
+  const hasResume = Boolean(resumesData?.currentResumeId);
+
+  // Which jobs this student has already applied to, so the button can say so.
+  const appliedTo = new Map(
+    (applicationsData?.items ?? []).map((a) => [String(a.jobId?._id ?? a.jobId), a.status]),
+  );
+
+  const onApply = (jobId) => {
+    setError(null);
+    apply.mutate(jobId, {
+      onError: (err) => setError(err.details?.eligibility ?? err.details?.resume ?? err.message),
+    });
+  };
 
   return (
     <>
@@ -45,9 +67,19 @@ export default function StudentJobs() {
         </div>
       </div>
 
-      {isError && (
+      {!hasResume && (
+        <p className="mt-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          You need a résumé on file before you can apply.{' '}
+          <Link to="/resume" className="font-medium underline">
+            Upload one
+          </Link>
+          .
+        </p>
+      )}
+
+      {(isError || error) && (
         <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error.message}
+          {error ?? listError.message}
         </p>
       )}
 
@@ -59,9 +91,40 @@ export default function StudentJobs() {
               : 'Once the placement office approves a posting it will appear here.'}
           </EmptyState>
         )}
-        {jobs.map((job) => (
-          <JobCard key={job._id} job={job} />
-        ))}
+
+        {jobs.map((job) => {
+          const applied = appliedTo.get(String(job._id));
+          const canApply = job.eligibility?.eligible && hasResume && !applied;
+
+          return (
+            <JobCard
+              key={job._id}
+              job={job}
+              actions={
+                applied ? (
+                  <Link to="/applications" className="text-sm font-medium text-accent hover:underline">
+                    Applied · {applied}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => onApply(job._id)}
+                    disabled={!canApply || apply.isPending}
+                    title={
+                      !job.eligibility?.eligible
+                        ? 'You do not meet this job’s requirements'
+                        : !hasResume
+                          ? 'Upload a résumé first'
+                          : undefined
+                    }
+                    className="rounded-lg bg-accent px-3 py-1.5 font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {apply.isPending ? 'Applying…' : 'Apply'}
+                  </button>
+                )
+              }
+            />
+          );
+        })}
       </div>
     </>
   );
