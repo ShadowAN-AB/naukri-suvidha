@@ -5,7 +5,8 @@ into a structured profile, and every job they see is ranked by how well they act
 it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
 same score. Admins run the whole placement cycle and watch it on a live dashboard.
 
-**Status:** Phase 1 of 7 — foundation. Nothing is deployed yet.
+**Status:** Phase 1 of 7 complete — the foundation runs end to end locally. Nothing is
+deployed yet.
 
 ---
 
@@ -59,8 +60,8 @@ Full design, data model, API surface and phase plan: **[project plan][plan]**.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | 🟡 in progress |
-| 2 | Auth, RBAC, React shell | ⬜ not started |
+| 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | ✅ done |
+| 2 | Auth, RBAC, React shell | 🟡 next |
 | 3 | Profiles, jobs, admin approval gate | ⬜ not started |
 | 4 | Résumés, extraction, applying | ⬜ not started |
 | 5 | The AI layer — provider, worker, fit scoring | ⬜ not started |
@@ -100,9 +101,33 @@ Receiver in Control Center, which answers requests with a bare `403`. Change `PO
 from. If a required variable is missing the server refuses to start and prints exactly
 which ones.
 
+## Still to do by hand
+
+Three Phase 1 items need a person, not a commit:
+
+- [ ] Install Ollama and pull `llama3.1:8b`, then confirm it returns valid JSON. Phase 5
+      needs it; nothing before then does.
+- [ ] Collect 20 real résumés as PDFs into `server/test/fixtures/`. They are the only
+      honest test of extraction, and the directory is gitignored because they are personal
+      data.
+- [ ] Sketch the five main screens on paper before Phase 2 starts.
+
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-19 — Phase 1 complete
+- **Client scaffold.** Vite 6, React 19, Tailwind 4, React Router 7 and TanStack Query,
+  with `/api` proxied to the server so the client never learns the API's origin. One
+  `api()` helper does every fetch and turns a failure into an `ApiError` carrying the
+  server's code and request id, so a message on screen can be matched to a line in the
+  logs. The one page, `SystemStatus`, reports API and database health — it exists to prove
+  the stack is wired, and Phase 2 replaces it with the real shell.
+- **Fixed a port collision.** A `PORT` exported by a parent process silently overrode
+  `.env` and made the API bind to Vite's port. `.env` now takes precedence locally, while
+  the hosting platform's own `PORT` still applies in production, where no `.env` exists.
+- `npm run dev` starts both halves; verified in a browser with the API reporting `ok` and
+  the database `up`.
 
 ### 2026-10-19 — Phase 1 begins
 - **Seed data.** `npm run seed` builds a demo placement cycle: 3 admins, 6 companies,

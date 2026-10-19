@@ -7,7 +7,13 @@ import { z } from 'zod';
 // process behaves the same whether it is started from the repo root, from
 // server/, or by a process manager.
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-dotenv.config({ path: path.join(packageRoot, '.env') });
+
+// override: a local .env wins over whatever is already in the environment.
+// Without this, a PORT exported by a parent process - a dev runner starting
+// the client and the server together, or a shell that happens to have PORT
+// set - silently steals the port from .env. In production there is no .env
+// file, so the platform's own PORT is still the one that applies.
+dotenv.config({ path: path.join(packageRoot, '.env'), override: true });
 
 export const paths = { packageRoot };
 

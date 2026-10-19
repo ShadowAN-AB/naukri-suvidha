@@ -37,3 +37,6 @@ server/test/fixtures/*.docx
 # coverage
 coverage/
 .nyc_output/
+
+# local tooling config
+.claude/
