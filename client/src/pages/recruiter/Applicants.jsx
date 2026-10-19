@@ -5,6 +5,7 @@ import { StatusPill } from '../../components/ApplicationStatus.jsx';
 import FitScore, { FitBadge } from '../../components/FitScore.jsx';
 import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import ScheduleInterview from '../../components/ScheduleInterview.jsx';
 import { formatDate } from '../../lib/format.js';
 import { APPLICATION_TRANSITIONS } from '@nexus/shared';
 
@@ -21,6 +22,7 @@ export default function Applicants() {
   const { data, isPending } = useApplications({ jobId: jobId || undefined, limit: 100 });
   const changeStatus = useChangeStatus();
   const [error, setError] = useState(null);
+  const [scheduling, setScheduling] = useState(null);
 
   const jobs = jobsData?.items ?? [];
   const items = data?.items ?? [];
@@ -106,6 +108,14 @@ export default function Applicants() {
                   </ProtectedFileLink>
                 )}
                 <span className="ml-auto flex flex-wrap gap-2">
+                  {['shortlisted', 'interview'].includes(a.status) && (
+                    <button
+                      onClick={() => setScheduling(scheduling === a._id ? null : a._id)}
+                      className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-slate-50"
+                    >
+                      Schedule
+                    </button>
+                  )}
                   {next.length === 0 && <span className="text-sm text-muted">No further action</span>}
                   {next.map((status) => (
                     <button
@@ -123,6 +133,9 @@ export default function Applicants() {
                   ))}
                 </span>
               </div>
+              {scheduling === a._id && (
+                <ScheduleInterview applicationId={a._id} onDone={() => setScheduling(null)} />
+              )}
             </article>
           );
         })}

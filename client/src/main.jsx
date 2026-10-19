@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { RealtimeProvider } from './context/RealtimeContext.jsx';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -26,7 +27,9 @@ createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <RealtimeProvider>
+            <App />
+          </RealtimeProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

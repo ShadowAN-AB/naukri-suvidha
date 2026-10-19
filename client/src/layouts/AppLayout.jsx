@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ROLES } from '@nexus/shared';
 import { useAuth } from '../context/AuthContext.jsx';
+import NotificationBell from '../components/NotificationBell.jsx';
 
 const NAV = {
   [ROLES.STUDENT]: [
@@ -19,6 +20,8 @@ const NAV = {
   [ROLES.ADMIN]: [
     ['/dashboard/admin', 'Dashboard'],
     ['/admin/approvals', 'Approvals'],
+    ['/admin/analytics', 'Analytics'],
+    ['/admin/audit', 'Audit'],
   ],
 };
 
@@ -60,7 +63,8 @@ export default function AppLayout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden text-muted sm:inline">
+            <NotificationBell />
+            <span className="hidden text-muted lg:inline">
               {user.email} · {ROLE_LABEL[user.role]}
             </span>
             <button

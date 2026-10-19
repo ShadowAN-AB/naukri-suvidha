@@ -12,6 +12,13 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:5001',
         changeOrigin: true,
+      },
+      // Socket.IO does not live under /api, so it needs its own entry with
+      // websocket upgrades enabled. Without this the client silently falls
+      // back to polling against the Vite dev server and never connects.
+      '/socket.io': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
         ws: true,
       },
     },

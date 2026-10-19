@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ROLES, HOME_FOR_ROLE } from '@nexus/shared';
 
@@ -17,6 +18,12 @@ import Profile from './pages/Profile.jsx';
 import StudentResume from './pages/student/Resume.jsx';
 import StudentApplications from './pages/student/Applications.jsx';
 import Applicants from './pages/recruiter/Applicants.jsx';
+// Recharts is large and only the placement office ever loads it, so the
+// analytics page is split out of the bundle every student downloads.
+const Analytics = lazy(() => import('./pages/admin/Analytics.jsx'));
+const AuditLog = lazy(() => import('./pages/admin/AuditLog.jsx'));
+
+const Loading = () => <p className="text-sm text-muted">Loading…</p>;
 import SystemStatus from './pages/SystemStatus.jsx';
 import Landing from './pages/Landing.jsx';
 
@@ -113,6 +120,26 @@ export default function App() {
           element={
             <ProtectedRoute roles={[ROLES.RECRUITER]}>
               <Applicants />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute roles={[ROLES.ADMIN]}>
+              <Suspense fallback={<Loading />}>
+                <Analytics />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/audit"
+          element={
+            <ProtectedRoute roles={[ROLES.ADMIN]}>
+              <Suspense fallback={<Loading />}>
+                <AuditLog />
+              </Suspense>
             </ProtectedRoute>
           }
         />

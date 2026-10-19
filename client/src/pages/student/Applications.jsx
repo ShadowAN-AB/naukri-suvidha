@@ -1,6 +1,7 @@
 import { useApplications, useWithdraw } from '../../api/applications.js';
 import { StatusPill, StageTrack } from '../../components/ApplicationStatus.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import InterviewList from '../../components/InterviewList.jsx';
 import { formatDate, inr } from '../../lib/format.js';
 
 const CAN_WITHDRAW = ['applied', 'shortlisted', 'interview'];
@@ -16,6 +17,8 @@ export default function Applications() {
       <p className="mt-1 text-muted">
         {isPending ? 'Loading…' : `${items.length} application${items.length === 1 ? '' : 's'}`}
       </p>
+
+      <InterviewList heading="Your upcoming interviews" />
 
       <div className="mt-6 space-y-4">
         {!isPending && items.length === 0 && (
