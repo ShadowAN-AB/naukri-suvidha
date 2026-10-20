@@ -41,8 +41,10 @@ React 19 SPA  ──HTTPS/wss──▶  Express 5 (10 modules + aiWorker)  ─�
 ```
 
 Full design, data model, API surface and phase plan: **[project plan][plan]**.
+The written report: **[project report][report]**.
 
 [plan]: https://claude.ai/code/artifact/9e031f77-7e4b-442b-9edb-d85c7c00c803
+[report]: https://claude.ai/code/artifact/9ee5f933-efa2-40ac-9d36-a7f69079a76d
 
 ## Tech stack
 
@@ -268,6 +270,12 @@ that counts.
 ## Build log
 
 Newest first. Every entry is one pushed commit.
+
+### 2026-10-20 — Phase 7
+Hardening and release preparation. 72 tests, a security pass, S3-compatible storage, CI,
+deployment configuration and the written report. Deployment itself, the production seed
+and the demo rehearsal need accounts and a person — `DEPLOYMENT.md` and `DEMO.md` cover
+both.
 
 ### 2026-10-20 — Phase 6 complete
 - **Realtime.** Socket.IO on the same server, token-authenticated, per-user rooms, three
