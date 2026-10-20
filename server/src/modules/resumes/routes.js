@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 
 import * as service from './service.js';
+import { searchResumes } from './search.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { AppError } from '../../middleware/error.js';
@@ -49,6 +50,24 @@ router.use(requireAuth);
 router.post('/', requireRole(ROLES.STUDENT), handleUpload, async (req, res, next) => {
   try {
     res.status(201).json(await service.uploadResume(req.user, req.file, req.ip));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Semantic search. Declared before /:id routes so "search" is never read as
+ * an id. Recruiters and the placement office only; the corpus each one sees
+ * is narrowed in the service.
+ */
+router.get('/search', requireRole(ROLES.RECRUITER, ROLES.ADMIN), async (req, res, next) => {
+  try {
+    res.json(
+      await searchResumes(req.user, {
+        q: req.query.q,
+        limit: Math.min(Number(req.query.limit) || 10, 50),
+      }),
+    );
   } catch (err) {
     next(err);
   }

@@ -54,6 +54,14 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
   AI_CONCURRENCY: z.coerce.number().int().positive().default(2),
+
+  // Semantic search. The embedding model is separate from the generation
+  // model: vectors from different models are not comparable, so changing this
+  // invalidates every stored vector.
+  EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
+  // memory = linear scan in process (works on a standalone mongod)
+  // atlas  = $vectorSearch (needs a search index defined on Atlas)
+  VECTOR_INDEX: z.enum(['memory', 'atlas']).default('memory'),
   AI_TASK_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 });

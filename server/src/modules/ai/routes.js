@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { ROLES, AI_TASK_STATUS } from '../../lib/constants.js';
+import { ROLES, AI_TASK_STATUS, AI_TASK_TYPE } from '../../lib/constants.js';
 import { env } from '../../config/env.js';
 import { getLLM } from '../../infra/llm/index.js';
 import { aiWorker } from './worker.js';
@@ -57,6 +57,29 @@ router.post('/rescore', requireAuth, requireRole(ROLES.ADMIN), async (req, res, 
     const students = await Student.find({ currentResumeId: { $ne: null } }).select('_id').lean();
     for (const s of students) await aiWorker.scoreStudentAgainstJobs(s._id);
     res.json({ queuedFor: students.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Backfills vectors for resumes that have none.
+ *
+ * Adding an embedding field to a live collection leaves every existing row
+ * invisible to search until this runs. It also handles a changed
+ * EMBEDDING_MODEL, since vectors from different models are not comparable -
+ * pass ?all=true to re-embed everything rather than only the gaps.
+ */
+router.post('/reembed', requireAuth, requireRole(ROLES.ADMIN), async (req, res, next) => {
+  try {
+    const { Resume } = await import('../resumes/model.js');
+    const all = req.query.all === 'true';
+    const filter = all ? {} : { $or: [{ embedding: null }, { embedding: { $exists: false } }] };
+
+    const ids = await Resume.find(filter).distinct('_id');
+    for (const id of ids) await aiWorker.enqueue(AI_TASK_TYPE.EMBED_RESUME, id);
+
+    res.json({ queued: ids.length, mode: all ? 'all' : 'missing only' });
   } catch (err) {
     next(err);
   }

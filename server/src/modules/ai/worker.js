@@ -15,6 +15,7 @@ import { Resume } from '../resumes/model.js';
 import { Student } from '../profiles/model.js';
 import { Job } from '../jobs/model.js';
 import { Application } from '../applications/model.js';
+import { getEmbeddings } from '../../infra/embeddings/index.js';
 import { extractProfile } from './extract.js';
 import { scoreFit } from './score.js';
 
@@ -52,9 +53,10 @@ class AiWorker {
     eventBus.subscribe(EVENTS.JOB_APPROVED, ({ jobId }) => this.scoreJobAgainstStudents(jobId));
 
     // A changed profile invalidates every score that student already has.
-    eventBus.subscribe(EVENTS.RESUME_PROCESSED, ({ studentId }) =>
-      this.scoreStudentAgainstJobs(studentId),
-    );
+    eventBus.subscribe(EVENTS.RESUME_PROCESSED, ({ studentId, resumeId }) => {
+      this.enqueue(AI_TASK_TYPE.EMBED_RESUME, resumeId);
+      this.scoreStudentAgainstJobs(studentId);
+    });
 
     await this.recover();
     logger.info({ concurrency: env.AI_CONCURRENCY }, 'aiWorker started');
@@ -107,6 +109,7 @@ class AiWorker {
     try {
       if (task.type === AI_TASK_TYPE.EXTRACT_RESUME) await this.#extract(task);
       else if (task.type === AI_TASK_TYPE.SCORE_FIT) await this.#score(task);
+      else if (task.type === AI_TASK_TYPE.EMBED_RESUME) await this.#embed(task);
       else throw new Error(`Unknown task type ${task.type}`);
 
       task.status = AI_TASK_STATUS.DONE;
@@ -196,6 +199,43 @@ class AiWorker {
       },
       { upsert: true },
     );
+  }
+
+  /**
+   * Builds the vector a recruiter's semantic search ranks against.
+   *
+   * The text embedded is the parsed profile rather than the raw extraction:
+   * a resume's headers, page numbers and contact block are noise that pulls
+   * every vector toward every other one.
+   */
+  async #embed(task) {
+    const resume = await Resume.findById(task.refId).select('+extractedText');
+    if (!resume) throw new Error('Resume no longer exists');
+
+    const profile = resume.parsedProfile ?? {};
+    const parts = [
+      (profile.skills ?? []).join(', '),
+      ...(profile.experience ?? []).map(
+        (e) => `${e.role ?? ''} at ${e.company ?? ''}. ${e.summary ?? ''}`,
+      ),
+      ...(profile.projects ?? []).map((p) => `${p.name ?? ''}. ${p.summary ?? ''} ${(p.tech ?? []).join(' ')}`),
+      (profile.certifications ?? []).join(', '),
+    ].filter((s) => s && s.trim());
+
+    // Nothing structured came back, so fall back to the raw text rather than
+    // embedding an empty string and storing a meaningless vector.
+    const text = parts.length ? parts.join('\n') : (resume.extractedText ?? '').slice(0, 6000);
+    if (!text.trim()) throw new Error('Resume has no text to embed');
+
+    const embeddings = getEmbeddings();
+    const [vector] = await embeddings.embed([text]);
+
+    resume.embedding = vector;
+    resume.embeddingModel = embeddings.model;
+    resume.embeddedAt = new Date();
+    await resume.save();
+
+    logger.debug({ resumeId: String(resume._id), dims: vector.length }, 'resume embedded');
   }
 
   /** Every student with a resume, scored against one newly approved job. */

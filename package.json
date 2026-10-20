@@ -19,7 +19,8 @@
     "seed:fresh": "node server/scripts/seed.js --fresh",
     "resumes:check": "node server/scripts/check-resumes.js",
     "lint:fix": "eslint . --fix",
-    "start": "npm start --workspace=server"
+    "start": "npm start --workspace=server",
+    "seed:resumes": "node server/scripts/seed-resumes.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

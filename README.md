@@ -190,6 +190,38 @@ notification never fails the thing it was describing.
 
 Measured: a recruiter status change reaches an open student tab in **10ms**.
 
+## Semantic resume search (prototype)
+
+Retrieval is used where it earns its place and nowhere else. Extraction reads one
+document and scoring compares one pair — both fit in context, so neither needs it.
+Searching several hundred résumés does, because exact skill matching misses a candidate
+whose résumé says "event streaming" when the recruiter asks for message queues.
+
+```bash
+ollama pull nomic-embed-text   # 768-dimension vectors, ~274 MB
+npm run seed:resumes           # ten varied résumés, embedded
+```
+
+`GET /api/resumes/search?q=…` — four queries with **no literal keyword overlap**, each
+returning the right student first:
+
+| Query | Top result |
+| --- | --- |
+| "built event-driven backends with message queues" | Kafka, Spring Boot |
+| "make the interface accessible and fast" | React, Tailwind, Accessibility |
+| "experience shipping to app stores" | Flutter, Dart, Kotlin |
+| "wrote firmware for microcontrollers" | C, FreeRTOS, STM32 |
+
+**It does not widen who may read a résumé.** The corpus is narrowed in the database filter
+*before* ranking: an admin searches every student, a recruiter only students who applied
+to one of their own jobs, a student not at all. The same query returns 11 results for the
+placement office and 1 for a recruiter.
+
+`VECTOR_INDEX=memory` is a linear scan in process — a few hundred vectors of 768 floats is
+well under a millisecond, and the database round trip dominates (measured 2–6ms end to
+end). `VECTOR_INDEX=atlas` switches to `$vectorSearch`, which needs a search index defined
+on Atlas and is the untested path here.
+
 ## How the AI layer works
 
 **The model never runs inside a request.** Work is written to `aiTasks` first, then handed

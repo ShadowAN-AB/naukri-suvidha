@@ -37,6 +37,15 @@ const resumeSchema = new mongoose.Schema(
     parseError: { type: String },
     parsedByModel: { type: String },
     parsedAt: { type: Date },
+
+    /**
+     * Semantic vector of the resume text. select: false because it is 768
+     * floats that no ordinary query wants, and shipping it in a list response
+     * would dwarf the rest of the document.
+     */
+    embedding: { type: [Number], select: false, default: undefined },
+    embeddingModel: { type: String },
+    embeddedAt: { type: Date },
   },
   { timestamps: true },
 );

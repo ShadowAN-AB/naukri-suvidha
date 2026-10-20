@@ -52,6 +52,7 @@ export const PARSE_STATUS_VALUES = Object.values(PARSE_STATUS);
 export const AI_TASK_TYPE = Object.freeze({
   EXTRACT_RESUME: 'extract_resume',
   SCORE_FIT: 'score_fit',
+  EMBED_RESUME: 'embed_resume',
 });
 export const AI_TASK_TYPE_VALUES = Object.values(AI_TASK_TYPE);
 

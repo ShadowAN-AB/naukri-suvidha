@@ -10,7 +10,8 @@
     "seed": "node scripts/seed.js",
     "resumes:check": "node scripts/check-resumes.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:resumes": "node scripts/seed-resumes.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
