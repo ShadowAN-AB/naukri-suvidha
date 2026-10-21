@@ -41,6 +41,7 @@
   --highlight-soft: oklch(0.887 0.068 354);
   --highlight-line: oklch(0.838 0.1 356);
   --highlight-strong: oklch(0.46 0.17 355);
+  --highlight-solid: oklch(0.54 0.18 355); /* white on this: 5.60 */
 
   /* Lavender — #CDB4DB. */
   --info: oklch(0.52 0.17 313.5);
@@ -103,6 +104,7 @@
   --highlight-soft: oklch(0.3 0.08 355);
   --highlight-line: oklch(0.42 0.1 355);
   --highlight-strong: oklch(0.89 0.07 353);
+  --highlight-solid: oklch(0.54 0.18 355);
 
   --info: oklch(0.804 0.06 313.5);
   --info-soft: oklch(0.3 0.06 313.5);
@@ -161,6 +163,7 @@
   --color-highlight-soft: var(--highlight-soft);
   --color-highlight-line: var(--highlight-line);
   --color-highlight-strong: var(--highlight-strong);
+  --color-highlight-solid: var(--highlight-solid);
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
@@ -203,8 +206,8 @@
   }
 
   ::selection {
-    background-color: var(--accent-soft);
-    color: var(--accent-strong);
+    background-color: var(--highlight-soft);
+    color: var(--highlight-strong);
   }
 
   /* Someone tabbing through gets the same ring everywhere, including on the
