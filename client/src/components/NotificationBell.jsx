@@ -47,7 +47,7 @@ export default function NotificationBell() {
         aria-expanded={open}>
         Alerts
         {unread > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-accent-solid text-[11px] font-semibold text-on-solid">
+          <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-highlight-solid text-[11px] font-semibold text-on-solid">
             {unread > 9 ? '9+' : unread}
           </span>
         )}

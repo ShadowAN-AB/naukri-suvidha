@@ -36,11 +36,7 @@ export function StageTrack({ status }) {
           key={stage}
           title={LABELS[stage]}
           className={`h-1.5 w-8 rounded-full ${
-            ended
-              ? 'bg-track'
-              : i <= reached
-                ? 'bg-accent-solid'
-                : 'bg-track'
+            ended ? 'bg-track' : i <= reached ? 'bg-highlight' : 'bg-track'
           }`}
         />
       ))}
