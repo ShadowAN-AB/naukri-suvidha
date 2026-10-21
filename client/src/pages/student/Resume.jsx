@@ -3,6 +3,7 @@ import { useMyResumes, useUploadResume } from '../../api/resumes.js';
 import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import { formatDate } from '../../lib/format.js';
+import PageHeader from '../../components/PageHeader.jsx';
 
 const MAX_MB = 5;
 
@@ -38,10 +39,10 @@ export default function Resume() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your résumé</h1>
-      <p className="mt-1 text-muted">
-        Upload once. The newest version is the one sent with every application you make.
-      </p>
+      <PageHeader
+        title="Your résumé"
+        description="Upload once. The newest version is the one sent with every application you make."
+      />
 
       <div
         onDragOver={(e) => {

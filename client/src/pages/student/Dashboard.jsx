@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useMe } from '../../api/auth.js';
-import PhaseNotice from '../../components/PhaseNotice.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 export default function StudentDashboard() {
   const { data, isPending } = useMe();
@@ -8,10 +8,15 @@ export default function StudentDashboard() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {isPending ? 'Welcome' : `Welcome, ${profile?.name ?? 'student'}`}
-      </h1>
-      <p className="mt-1 text-muted">Your placement dashboard.</p>
+      <PageHeader
+        title={isPending ? 'Welcome' : `Welcome, ${profile?.name ?? 'student'}`}
+        description="Your placement dashboard."
+        actions={
+          <Link to="/jobs" className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90">
+            Browse open jobs
+          </Link>
+        }
+      />
 
       {profile && (
         <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 rounded-xl border border-line bg-card p-5 text-sm sm:grid-cols-4">
@@ -28,20 +33,6 @@ export default function StudentDashboard() {
           ))}
         </dl>
       )}
-
-      <div className="mt-6">
-        <Link
-          to="/jobs"
-          className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90"
-        >
-          Browse open jobs
-        </Link>
-      </div>
-
-      <PhaseNotice phase={5}>
-        Your résumé parsed into a profile automatically, and every job ranked by how well
-        you fit it.
-      </PhaseNotice>
     </>
   );
 }

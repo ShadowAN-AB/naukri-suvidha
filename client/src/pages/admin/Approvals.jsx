@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useJobs, useApproveJob, useRejectJob } from '../../api/jobs.js';
 import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 function RejectDialog({ job, onCancel, onConfirm, busy }) {
   const [reason, setReason] = useState('');
@@ -46,11 +47,12 @@ export default function Approvals() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Approval queue</h1>
-      <p className="mt-1 text-muted">
-        {isPending ? 'Loading…' : `${jobs.length} posting${jobs.length === 1 ? '' : 's'} waiting`}
-        . Nothing here is visible to students yet.
-      </p>
+      <PageHeader
+        title="Approval queue"
+        description={`${
+          isPending ? 'Loading…' : `${jobs.length} posting${jobs.length === 1 ? '' : 's'} waiting`
+        }. Nothing here is visible to students yet.`}
+      />
 
       <div className="mt-6 space-y-4">
         {!isPending && jobs.length === 0 && (

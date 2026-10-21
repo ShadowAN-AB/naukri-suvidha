@@ -6,6 +6,7 @@ import { useApplications, useApply } from '../../api/applications.js';
 import { useMyResumes } from '../../api/resumes.js';
 import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 export default function StudentJobs() {
   const [eligibleOnly, setEligibleOnly] = useState(false);
@@ -36,16 +37,16 @@ export default function StudentJobs() {
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Open jobs</h1>
-          <p className="mt-1 text-muted">
-            {isPending
+        <PageHeader
+          title="Open jobs"
+          description={
+            isPending
               ? 'Loading…'
               : eligibleOnly
                 ? `${data.total} you can apply to`
-                : `${data.total} open · eligible for ${eligibleCount} · best fit first`}
-          </p>
-        </div>
+                : `${data.total} open · eligible for ${eligibleCount} · best fit first`
+          }
+        />
 
         <div className="flex items-center gap-3">
           <input

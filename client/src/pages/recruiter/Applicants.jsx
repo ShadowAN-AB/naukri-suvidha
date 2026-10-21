@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ScheduleInterview from '../../components/ScheduleInterview.jsx';
 import { formatDate } from '../../lib/format.js';
 import { APPLICATION_TRANSITIONS } from '@nexus/shared';
+import PageHeader from '../../components/PageHeader.jsx';
 
 const NEXT_LABEL = {
   shortlisted: 'Shortlist',
@@ -35,12 +36,10 @@ export default function Applicants() {
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Applicants</h1>
-          <p className="mt-1 text-muted">
-            {isPending ? 'Loading…' : `${items.length} across your postings · best fit first`}
-          </p>
-        </div>
+        <PageHeader
+          title="Applicants"
+          description={isPending ? 'Loading…' : `${items.length} across your postings · best fit first`}
+        />
         <label className="text-sm">
           <span className="sr-only">Filter by job</span>
           <select

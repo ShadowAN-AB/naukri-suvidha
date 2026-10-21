@@ -3,6 +3,7 @@ import { StatusPill, StageTrack } from '../../components/ApplicationStatus.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import InterviewList from '../../components/InterviewList.jsx';
 import { formatDate, inr } from '../../lib/format.js';
+import PageHeader from '../../components/PageHeader.jsx';
 
 const CAN_WITHDRAW = ['applied', 'shortlisted', 'interview'];
 
@@ -13,10 +14,10 @@ export default function Applications() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your applications</h1>
-      <p className="mt-1 text-muted">
-        {isPending ? 'Loading…' : `${items.length} application${items.length === 1 ? '' : 's'}`}
-      </p>
+      <PageHeader
+        title="Your applications"
+        description={isPending ? 'Loading…' : `${items.length} application${items.length === 1 ? '' : 's'}`}
+      />
 
       <InterviewList heading="Your upcoming interviews" />
 

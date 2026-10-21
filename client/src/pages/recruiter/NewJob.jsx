@@ -4,6 +4,7 @@ import { jobCreateSchema, fieldErrors, BRANCHES } from '@nexus/shared';
 
 import { useCreateJob } from '../../api/jobs.js';
 import Field from '../../components/Field.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 export default function NewJob() {
   const navigate = useNavigate();
@@ -48,10 +49,10 @@ export default function NewJob() {
       <Link to="/jobs" className="text-sm text-muted hover:text-ink">
         ← Your postings
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Post a job</h1>
-      <p className="mt-1 text-muted">
-        The placement office reviews every posting. Students see it only after approval.
-      </p>
+      <PageHeader
+        title="Post a job"
+        description="The placement office reviews every posting. Students see it only after approval."
+      />
 
       <form onSubmit={onSubmit} noValidate className="mt-8 max-w-2xl space-y-5">
         {formError && (

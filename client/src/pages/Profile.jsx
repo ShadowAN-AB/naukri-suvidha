@@ -3,6 +3,7 @@ import { studentProfileUpdateSchema, companyProfileUpdateSchema, fieldErrors, BR
 
 import { useMyProfile, useUpdateProfile } from '../api/profiles.js';
 import Field from '../components/Field.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 
 export default function Profile() {
   const { data, isPending } = useMyProfile();
@@ -17,8 +18,10 @@ export default function Profile() {
   if (kind === 'admin') {
     return (
       <>
-        <h1 className="text-2xl font-semibold tracking-tight">Your account</h1>
-        <p className="mt-1 text-muted">Placement office accounts have no profile to edit.</p>
+        <PageHeader
+          title="Your account"
+          description="Placement office accounts have no profile to edit."
+        />
       </>
     );
   }
@@ -58,12 +61,14 @@ export default function Profile() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
-      <p className="mt-1 text-muted">
-        {isStudent
-          ? 'Your CGPA, backlogs and branch decide which jobs you are eligible for.'
-          : 'This is what students see next to your postings.'}
-      </p>
+      <PageHeader
+        title="Your profile"
+        description={
+          isStudent
+            ? 'Your CGPA, backlogs and branch decide which jobs you are eligible for.'
+            : 'This is what students see next to your postings.'
+        }
+      />
 
       <form onSubmit={onSubmit} noValidate className="mt-8 max-w-xl space-y-5">
         {formError && (

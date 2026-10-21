@@ -1,5 +1,6 @@
 import { useAuditLog, useAiHealth } from '../../api/admin.js';
 import EmptyState from '../../components/EmptyState.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 const ACTION_LABEL = {
   'auth.login': 'signed in',
@@ -25,10 +26,10 @@ export default function AuditLog() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
-      <p className="mt-1 text-muted">
-        Every privileged action, append-only. Nothing here is edited or deleted.
-      </p>
+      <PageHeader
+        title="Audit log"
+        description="Every privileged action, append-only. Nothing here is edited or deleted."
+      />
 
       {ai && (
         <div className="mt-6 rounded-xl border border-line bg-card p-5">

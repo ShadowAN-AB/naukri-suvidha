@@ -13,6 +13,7 @@ import {
 import { useAnalytics } from '../../api/admin.js';
 import { useTheme } from '../../context/ThemeContext.jsx';
 import StatTile from '../../components/StatTile.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
 
 /**
  * Recharts takes colours as props, not classes, so the theme tokens have to be
@@ -87,8 +88,7 @@ export default function Analytics() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Placement analytics</h1>
-      <p className="mt-1 text-muted">The current cycle, as it stands.</p>
+      <PageHeader title="Placement analytics" description="The current cycle, as it stands." />
 
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile

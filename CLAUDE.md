@@ -62,6 +62,11 @@ chosen; the ratio is in the CSS next to the value. The two line-chart series
 keep blue/amber rather than blue/pink, because blue against pink loses about
 four fifths of its separation under protanopia.
 
+**Navigation is a sidebar above `lg` and a bottom tab bar below it**, never a
+hamburger. A hamburger hides every destination behind a tap on exactly the
+screen size where people browse most. Both read one `NAV` table in
+`AppLayout.jsx`, so a route is added in one place.
+
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
 
