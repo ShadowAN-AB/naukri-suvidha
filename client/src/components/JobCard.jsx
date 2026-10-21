@@ -42,7 +42,7 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
       {job.skillsRequired?.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5">
           {job.skillsRequired.map((s) => (
-            <li key={s} className="rounded bg-accent-soft/60 px-2 py-0.5 text-xs font-medium text-accent-strong">
+            <li key={s} className="rounded bg-highlight-soft/60 px-2 py-0.5 text-xs font-medium text-highlight-strong">
               {s}
             </li>
           ))}

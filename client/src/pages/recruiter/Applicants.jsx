@@ -98,7 +98,7 @@ export default function Applicants() {
               {s.skills?.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-1.5">
                   {s.skills.slice(0, 10).map((skill) => (
-                    <li key={skill} className="rounded bg-accent-soft/60 px-2 py-0.5 text-xs font-medium text-accent-strong">
+                    <li key={skill} className="rounded bg-highlight-soft/60 px-2 py-0.5 text-xs font-medium text-highlight-strong">
                       {skill}
                     </li>
                   ))}
