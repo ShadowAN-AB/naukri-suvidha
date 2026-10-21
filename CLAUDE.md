@@ -99,6 +99,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **Vite proxy** | `/socket.io` needs its own entry with `ws: true`; `/api` alone silently breaks realtime. |
 | **`pkill -f "src/server.js"`** | Also kills the dev server started by the preview. Prefer stopping the preview properly. |
 | **Tailwind 50 vs 500** | Any rename sweeping `bg-x-50` before `bg-x-500` turns the latter into `bg-x-<new>0`, an invalid class that silently renders nothing. It ate every status dot and fit bar once. Order the longer key first. |
+| **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---

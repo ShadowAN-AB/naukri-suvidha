@@ -1,4 +1,9 @@
+import { ScrollText } from 'lucide-react';
+
 import { useAuditLog, useAiHealth } from '../../api/admin.js';
+import Badge from '../../components/ui/Badge.jsx';
+import Card from '../../components/ui/Card.jsx';
+import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 
@@ -32,60 +37,74 @@ export default function AuditLog() {
       />
 
       {ai && (
-        <div className="mt-6 rounded-xl border border-line bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">AI layer</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-            <span className="flex items-center gap-2">
-              <span
-                className={`size-2 rounded-full ${ai.provider.ok ? 'bg-success' : 'bg-warning'}`}
-                aria-hidden
-              />
-              <span className="font-medium">{ai.status}</span>
-            </span>
-            <span className="text-muted">
+        <Card className="mt-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">AI layer</h2>
+            <Badge tone={ai.provider.ok ? 'success' : 'warning'}>{ai.status}</Badge>
+            <span className="text-sm text-muted">
               {ai.provider.name} · {ai.provider.model}
             </span>
-            <span className="text-muted">queue {ai.queue.queued + ai.queue.pending}</span>
-            <span className="text-muted">{ai.scores} scores</span>
+            <span className="text-sm text-muted">queue {ai.queue.queued + ai.queue.pending}</span>
+            <span className="text-sm text-muted">{ai.scores} scores</span>
             {ai.tasks?.dead > 0 && (
-              <span className="font-medium text-danger">{ai.tasks.dead} dead tasks</span>
+              <Badge tone="danger">{ai.tasks.dead} dead tasks</Badge>
             )}
           </div>
+
           {ai.degradedBehaviour && (
-            <p className="mt-2 text-sm text-warning">{ai.degradedBehaviour}</p>
+            <p className="mt-3 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+              {ai.degradedBehaviour}
+            </p>
           )}
-        </div>
+          {/* The actionable half: which model is missing, not just that one is. */}
+          {!ai.provider.ok && ai.provider.detail && (
+            <p className="mt-2 text-xs text-muted">{ai.provider.detail}</p>
+          )}
+        </Card>
       )}
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-line bg-card">
+      <Card padding="" className="mt-6 overflow-hidden">
+        {isPending && (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-4 w-full" />
+            ))}
+          </div>
+        )}
+
         {!isPending && items.length === 0 && (
-          <EmptyState title="Nothing logged yet">
+          <EmptyState title="Nothing logged yet" icon={ScrollText}>
             Actions appear here as people use the portal.
           </EmptyState>
         )}
 
-        <table className="w-full text-sm">
-          <tbody className="divide-y divide-line">
-            {items.map((a) => (
-              <tr key={a._id}>
-                <td className="whitespace-nowrap px-4 py-2.5 text-muted tabular-nums">
-                  {new Date(a.at).toLocaleString(undefined, {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className="font-medium">{a.actorId?.email ?? 'system'}</span>{' '}
-                  <span className="text-muted">{ACTION_LABEL[a.action] ?? a.action}</span>
-                </td>
-                <td className="px-4 py-2.5 text-right text-xs text-muted">{a.entity}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {/*
+          A list rather than a table: three columns of wildly different widths
+          do not survive 375px, and this has no column a reader sorts or
+          compares down. The timestamp drops below the sentence on a phone and
+          sits beside it from `sm` up.
+        */}
+        <ul className="divide-y divide-line">
+          {items.map((a) => (
+            <li key={a._id} className="flex flex-wrap items-baseline gap-x-3 px-4 py-3 text-sm">
+              <span className="order-2 w-full text-xs text-muted tabular-nums sm:order-none sm:w-36 sm:shrink-0">
+                {new Date(a.at).toLocaleString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+              <span className="order-1 min-w-0 flex-1 sm:order-none">
+                <span className="font-medium">{a.actorId?.email ?? 'system'}</span>{' '}
+                <span className="text-muted">{ACTION_LABEL[a.action] ?? a.action}</span>
+              </span>
+              <span className="order-3 shrink-0 text-xs text-muted sm:order-none">{a.entity}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
     </>
   );
 }

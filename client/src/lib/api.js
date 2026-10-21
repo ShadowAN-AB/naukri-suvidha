@@ -15,6 +15,10 @@ export class ApiError extends Error {
     this.code = body?.error?.code ?? 'UNKNOWN';
     this.requestId = body?.error?.requestId;
     this.details = body?.error?.details;
+    // Some endpoints answer non-2xx with a payload that is the point of the
+    // call rather than an error envelope - /ai/health returns 503 when the
+    // provider is down, and its body is exactly what you want to show.
+    this.body = body;
   }
 }
 

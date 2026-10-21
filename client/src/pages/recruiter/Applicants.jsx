@@ -22,7 +22,8 @@ const NEXT_LABEL = {
 
 export default function Applicants() {
   const [jobId, setJobId] = useState('');
-  const { data: jobsData } = useJobs({ limit: 100 });
+  // 50 is the schema's ceiling; 100 came back 400 and left the filter empty.
+  const { data: jobsData } = useJobs({ limit: 50 });
   const { data, isPending } = useApplications({ jobId: jobId || undefined, limit: 100 });
   const changeStatus = useChangeStatus();
   const toast = useToast();
