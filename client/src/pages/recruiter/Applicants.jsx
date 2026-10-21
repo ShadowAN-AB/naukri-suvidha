@@ -10,6 +10,8 @@ import { formatDate } from '../../lib/format.js';
 import { APPLICATION_TRANSITIONS } from '@nexus/shared';
 import PageHeader from '../../components/PageHeader.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 const NEXT_LABEL = {
   shortlisted: 'Shortlist',
@@ -23,15 +25,20 @@ export default function Applicants() {
   const { data: jobsData } = useJobs({ limit: 100 });
   const { data, isPending } = useApplications({ jobId: jobId || undefined, limit: 100 });
   const changeStatus = useChangeStatus();
-  const [error, setError] = useState(null);
+  const toast = useToast();
   const [scheduling, setScheduling] = useState(null);
 
   const jobs = jobsData?.items ?? [];
   const items = data?.items ?? [];
 
   const move = (id, status) => {
-    setError(null);
-    changeStatus.mutate({ id, status }, { onError: (err) => setError(err.message) });
+    changeStatus.mutate(
+      { id, status },
+      {
+        onSuccess: () => toast.success(`Moved to ${NEXT_LABEL[status] ?? status}.`),
+        onError: (err) => toast.error(err.message),
+      },
+    );
   };
 
   return (
@@ -58,13 +65,9 @@ export default function Applicants() {
         </label>
       </div>
 
-      {error && (
-        <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-          {error}
-        </p>
-      )}
-
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={3} />}
+
         {!isPending && items.length === 0 && (
           <EmptyState title="No applicants yet">
             Students see a posting only after the placement office approves it.

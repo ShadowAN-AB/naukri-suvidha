@@ -8,11 +8,13 @@ import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 export default function StudentJobs() {
   const [eligibleOnly, setEligibleOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const [error, setError] = useState(null);
+  const toast = useToast();
 
   const { data, isPending, isError, error: listError } = useJobs({ eligibleOnly, search, limit: 50 });
   const { data: applicationsData } = useApplications({ limit: 100 });
@@ -28,10 +30,11 @@ export default function StudentJobs() {
     (applicationsData?.items ?? []).map((a) => [String(a.jobId?._id ?? a.jobId), a.status]),
   );
 
-  const onApply = (jobId) => {
-    setError(null);
-    apply.mutate(jobId, {
-      onError: (err) => setError(err.details?.eligibility ?? err.details?.resume ?? err.message),
+  const onApply = (job) => {
+    apply.mutate(job._id, {
+      onSuccess: () => toast.success(`Applied to ${job.title}.`),
+      onError: (err) =>
+        toast.error(err.details?.eligibility ?? err.details?.resume ?? err.message),
     });
   };
 
@@ -79,13 +82,15 @@ export default function StudentJobs() {
         </p>
       )}
 
-      {(isError || error) && (
+      {isError && (
         <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-          {error ?? listError.message}
+          {listError.message}
         </p>
       )}
 
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={3} lines={2} />}
+
         {!isPending && jobs.length === 0 && (
           <EmptyState title="Nothing open right now">
             {eligibleOnly
@@ -110,7 +115,7 @@ export default function StudentJobs() {
                   </Link>
                 ) : (
                   <Button variant="primary" size="sm" className="disabled:cursor-not-allowed"
-                    onClick={() => onApply(job._id)}
+                    onClick={() => onApply(job)}
                     disabled={!canApply || apply.isPending}
                     title={
                       !job.eligibility?.eligible

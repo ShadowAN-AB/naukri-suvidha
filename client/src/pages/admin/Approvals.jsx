@@ -4,6 +4,8 @@ import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 function RejectDialog({ job, onCancel, onConfirm, busy }) {
   const [reason, setReason] = useState('');
@@ -41,6 +43,7 @@ export default function Approvals() {
   const approve = useApproveJob();
   const reject = useRejectJob();
   const [rejecting, setRejecting] = useState(null);
+  const toast = useToast();
 
   const jobs = data?.items ?? [];
 
@@ -54,6 +57,8 @@ export default function Approvals() {
       />
 
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={2} />}
+
         {!isPending && jobs.length === 0 && (
           <EmptyState title="Queue is empty">
             Every posting has been reviewed. New ones arrive here the moment a recruiter
@@ -69,7 +74,12 @@ export default function Approvals() {
               actions={
                 <>
                   <Button variant="primary" size="sm"
-                    onClick={() => approve.mutate(job._id)}
+                    onClick={() =>
+                      approve.mutate(job._id, {
+                        onSuccess: () => toast.success(`${job.title} is live.`),
+                        onError: (err) => toast.error(err.message),
+                      })
+                    }
                     disabled={approve.isPending}>
                     Approve
                   </Button>
@@ -86,7 +96,16 @@ export default function Approvals() {
                 busy={reject.isPending}
                 onCancel={() => setRejecting(null)}
                 onConfirm={(reason) =>
-                  reject.mutate({ id: job._id, reason }, { onSuccess: () => setRejecting(null) })
+                  reject.mutate(
+                      { id: job._id, reason },
+                      {
+                        onSuccess: () => {
+                          setRejecting(null);
+                          toast.success(`${job.title} was rejected.`);
+                        },
+                        onError: (err) => toast.error(err.message),
+                      },
+                    )
                 }
               />
             )}

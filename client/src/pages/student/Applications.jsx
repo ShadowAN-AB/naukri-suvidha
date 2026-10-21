@@ -5,12 +5,15 @@ import InterviewList from '../../components/InterviewList.jsx';
 import { formatDate, inr } from '../../lib/format.js';
 import PageHeader from '../../components/PageHeader.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 const CAN_WITHDRAW = ['applied', 'shortlisted', 'interview'];
 
 export default function Applications() {
   const { data, isPending } = useApplications({ limit: 100 });
   const withdraw = useWithdraw();
+  const toast = useToast();
   const items = data?.items ?? [];
 
   return (
@@ -23,6 +26,8 @@ export default function Applications() {
       <InterviewList heading="Your upcoming interviews" />
 
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={2} />}
+
         {!isPending && items.length === 0 && (
           <EmptyState title="You have not applied to anything yet">
             Open jobs you are eligible for appear under Jobs.
@@ -60,7 +65,12 @@ export default function Applications() {
             {CAN_WITHDRAW.includes(a.status) && (
               <div className="mt-4 border-t border-line pt-3">
                 <Button variant="secondary" size="sm"
-                  onClick={() => withdraw.mutate(a._id)}
+                  onClick={() =>
+                    withdraw.mutate(a._id, {
+                      onSuccess: () => toast.success('Application withdrawn.'),
+                      onError: (err) => toast.error(err.message),
+                    })
+                  }
                   disabled={withdraw.isPending}>
                   Withdraw
                 </Button>
