@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { IronFilings } from '../components/ui/IronFilings.jsx';
 import Button from '../components/ui/Button.jsx';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 
 /**
  * The signed-out front door.
@@ -13,6 +14,8 @@ import Button from '../components/ui/Button.jsx';
  * colour for the filings; the content sets text-ink back for the copy.
  */
 export default function Landing() {
+  useDocumentTitle();
+
   return (
     <IronFilings
       spacing={16}

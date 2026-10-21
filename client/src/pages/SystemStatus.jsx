@@ -1,4 +1,5 @@
 import { useHealth } from '../api/health.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 
 const PHASES = [
   ['1', 'Foundation', 'scaffold, 11 schemas, seed data, infra interfaces', 'current'],
@@ -20,6 +21,8 @@ function Dot({ ok }) {
 }
 
 export default function SystemStatus() {
+  useDocumentTitle('System status');
+
   const { data, isPending, isError, error } = useHealth();
 
   return (

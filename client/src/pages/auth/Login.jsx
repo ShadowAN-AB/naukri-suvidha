@@ -6,8 +6,11 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
 import AuthLayout from '../../layouts/AuthLayout.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useDocumentTitle } from '../../lib/useDocumentTitle.js';
 
 export default function Login() {
+  useDocumentTitle('Sign in');
+
   const { user, ready, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

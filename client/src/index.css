@@ -184,26 +184,35 @@
   --color-filings: var(--filings);
 }
 
-html {
-  -webkit-font-smoothing: antialiased;
-}
+/*
+ * These live in `base` rather than at the top level on purpose. Unlayered CSS
+ * beats everything in @layer utilities no matter the specificity, so an
+ * unlayered :focus-visible rule cannot be turned off by a
+ * `focus-visible:outline-none` utility - which is exactly what inputs need,
+ * since they draw their own ring and would otherwise show two indicators.
+ */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
 
-body {
-  background-color: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-sans);
-}
+  body {
+    background-color: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+  }
 
-::selection {
-  background-color: var(--accent-soft);
-  color: var(--accent-strong);
-}
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--accent-strong);
+  }
 
-/* Someone tabbing through gets the same ring everywhere, including on the
-   bare <button>s that carried no focus style at all. */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  /* Someone tabbing through gets the same ring everywhere, including on the
+     bare <button>s that carried no focus style at all. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

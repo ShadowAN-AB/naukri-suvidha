@@ -1,8 +1,12 @@
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
+
 /**
  * Every screen opened with its own hand-rolled h1 and paragraph, which drifted
  * in size and spacing. One component so a page title is a page title.
  */
 export default function PageHeader({ title, description, actions }) {
+  useDocumentTitle(title);
+
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">

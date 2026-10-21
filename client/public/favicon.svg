@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    Filings lining up along a field: the same idea the landing page runs as a
+    canvas, reduced to something that still reads at 16px. The blue is
+    --accent-solid; the strokes are the field it is bending.
+  -->
+  <rect width="32" height="32" rx="7" fill="#116daf"/>
+  <g stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".95">
+    <path d="M9 11.5 L15 9"/>
+    <path d="M9 16 L15.5 16"/>
+    <path d="M9 20.5 L15 23"/>
+    <path d="M20 10.5 L23.5 14"/>
+    <path d="M20 21.5 L23.5 18"/>
+  </g>
+  <circle cx="24.5" cy="16" r="2.2" fill="#fff"/>
+</svg>
