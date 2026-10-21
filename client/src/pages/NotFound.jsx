@@ -20,7 +20,7 @@ export default function NotFound() {
         The address may have been mistyped, or the posting it pointed at has since closed.
       </p>
       <Button as={Link} to="/" variant="primary" size="md" className="mt-6">
-        Back to Nexus
+        Back to Naukri Suvidha
       </Button>
     </AuthLayout>
   );

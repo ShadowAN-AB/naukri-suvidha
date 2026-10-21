@@ -28,7 +28,7 @@ export default function SystemStatus() {
   return (
     <main className="min-h-dvh bg-surface text-ink">
       <div className="mx-auto max-w-2xl px-6 py-16">
-        <p className="text-sm font-medium tracking-wide text-muted uppercase">Nexus</p>
+        <p className="text-sm font-medium tracking-wide text-muted uppercase">Naukri Suvidha</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Campus placement portal</h1>
         <p className="mt-3 text-muted">
           Phase 1 of 7 — foundation. This page exists to prove the stack is wired end to end.

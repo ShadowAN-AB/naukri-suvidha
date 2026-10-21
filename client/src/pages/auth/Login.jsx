@@ -47,7 +47,7 @@ export default function Login() {
 
   return (
     <AuthLayout maxWidth="max-w-sm">
-      <h1 className="text-2xl font-semibold tracking-tight">Sign in to Nexus</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Sign in to Naukri Suvidha</h1>
       <p className="mt-1 text-sm text-muted">Campus placement portal.</p>
 
       <form onSubmit={onSubmit} noValidate className="mt-8 space-y-4">

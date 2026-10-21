@@ -32,7 +32,7 @@ export default function Landing() {
         />
 
         <p className="mb-4 text-xs font-medium uppercase tracking-[0.3em] text-muted">
-          Nexus · campus placement
+          Naukri Suvidha · campus placement
         </p>
 
         <h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">

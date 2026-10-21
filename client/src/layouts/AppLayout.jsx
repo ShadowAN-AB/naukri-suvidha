@@ -48,7 +48,7 @@ const ROLE_LABEL = {
 const Brand = () => (
   <span className="flex items-center gap-2 font-semibold tracking-tight">
     <span aria-hidden className="size-2.5 rounded-full bg-highlight-solid" />
-    Nexus
+    Naukri Suvidha
   </span>
 );
 

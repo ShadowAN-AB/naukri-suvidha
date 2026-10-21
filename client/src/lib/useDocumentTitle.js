@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const SUFFIX = 'Nexus';
+const SUFFIX = 'Naukri Suvidha';
 
 /**
  * Every route shared one title, so a browser's history and a row of pinned
