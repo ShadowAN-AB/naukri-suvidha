@@ -18,14 +18,14 @@ export default function AdminDashboard() {
       <p className="mt-1 text-muted">An overview of the current cycle.</p>
 
       {isError && (
-        <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           {error.message}
         </p>
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {CARDS.map(([key, label]) => (
-          <div key={key} className="rounded-xl border border-line bg-white p-5">
+          <div key={key} className="rounded-xl border border-line bg-card p-5">
             <p className="text-sm text-muted">{label}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">
               {isPending ? '—' : (data?.[key] ?? 0)}
@@ -37,7 +37,7 @@ export default function AdminDashboard() {
       <div className="mt-6">
         <Link
           to="/admin/approvals"
-          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+          className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90"
         >
           Review the approval queue
         </Link>

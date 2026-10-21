@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ROLES } from '@nexus/shared';
 import { useAuth } from '../context/AuthContext.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 const NAV = {
   [ROLES.STUDENT]: [
@@ -42,7 +43,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-dvh bg-surface text-ink">
-      <header className="border-b border-line bg-white">
+      <header className="border-b border-line bg-card">
         <div className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-3">
           <span className="font-semibold tracking-tight">Nexus</span>
 
@@ -53,7 +54,7 @@ export default function AppLayout() {
                 to={to}
                 className={({ isActive }) =>
                   `rounded-lg px-3 py-1.5 text-sm transition ${
-                    isActive ? 'bg-accent/10 font-medium text-accent' : 'text-muted hover:text-ink'
+                    isActive ? 'bg-accent-soft font-medium text-accent-strong' : 'text-muted hover:text-ink'
                   }`
                 }
               >
@@ -64,12 +65,13 @@ export default function AppLayout() {
 
           <div className="ml-auto flex items-center gap-3 text-sm">
             <NotificationBell />
+            <ThemeToggle />
             <span className="hidden text-muted lg:inline">
               {user.email} · {ROLE_LABEL[user.role]}
             </span>
             <button
               onClick={onSignOut}
-              className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-slate-50"
+              className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-subtle"
             >
               Sign out
             </button>

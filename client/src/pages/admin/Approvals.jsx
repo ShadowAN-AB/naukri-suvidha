@@ -8,7 +8,7 @@ function RejectDialog({ job, onCancel, onConfirm, busy }) {
   const tooShort = reason.trim().length < 5;
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-slate-50 p-3">
+    <div className="mt-3 rounded-lg border border-line bg-subtle p-3">
       <label htmlFor={`reason-${job._id}`} className="block text-sm font-medium">
         Why is this being rejected?
       </label>
@@ -18,17 +18,17 @@ function RejectDialog({ job, onCancel, onConfirm, busy }) {
         rows={2}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+        className="mt-2 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
       />
       <div className="mt-2 flex gap-2">
         <button
           onClick={() => onConfirm(reason.trim())}
           disabled={tooShort || busy}
-          className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+          className="rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-40"
         >
           Confirm rejection
         </button>
-        <button onClick={onCancel} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-white">
+        <button onClick={onCancel} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-card">
           Cancel
         </button>
       </div>
@@ -70,13 +70,13 @@ export default function Approvals() {
                   <button
                     onClick={() => approve.mutate(job._id)}
                     disabled={approve.isPending}
-                    className="rounded-lg bg-accent px-3 py-1.5 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                    className="rounded-lg bg-accent-solid px-3 py-1.5 font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
                   >
                     Approve
                   </button>
                   <button
                     onClick={() => setRejecting(rejecting === job._id ? null : job._id)}
-                    className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-slate-50"
+                    className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-subtle"
                   >
                     Reject
                   </button>

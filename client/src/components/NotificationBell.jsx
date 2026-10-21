@@ -44,24 +44,24 @@ export default function NotificationBell() {
         onClick={() => setOpen((v) => !v)}
         aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
         aria-expanded={open}
-        className="relative rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-slate-50"
+        className="relative rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle"
       >
         Alerts
         {unread > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-accent text-[11px] font-semibold text-white">
+          <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-accent-solid text-[11px] font-semibold text-on-solid">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-white shadow-lg">
+        <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-card shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <span className="text-sm font-medium">Notifications</span>
             <span className="flex items-center gap-2">
               <span
                 title={connected ? 'Live updates connected' : 'Reconnecting'}
-                className={`size-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                className={`size-1.5 rounded-full ${connected ? 'bg-success-soft0' : 'bg-muted'}`}
               />
               {unread > 0 && (
                 <button
@@ -86,8 +86,8 @@ export default function NotificationBell() {
                     setOpen(false);
                     if (n.link) navigate(n.link);
                   }}
-                  className={`block w-full px-4 py-3 text-left transition hover:bg-slate-50 ${
-                    n.readAt ? '' : 'bg-accent/5'
+                  className={`block w-full px-4 py-3 text-left transition hover:bg-subtle ${
+                    n.readAt ? '' : 'bg-accent-soft/50'
                   }`}
                 >
                   <span className="flex items-baseline justify-between gap-3">

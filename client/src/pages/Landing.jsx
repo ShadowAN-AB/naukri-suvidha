@@ -45,13 +45,13 @@ export default function Landing() {
         <div className="pointer-events-auto mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
             to="/login"
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
+            className="rounded-lg bg-accent-solid px-5 py-2.5 text-sm font-medium text-on-solid transition hover:opacity-90"
           >
             Sign in
           </Link>
           <Link
             to="/register"
-            className="rounded-lg border border-line bg-white/80 px-5 py-2.5 text-sm font-medium text-ink backdrop-blur transition hover:bg-white"
+            className="rounded-lg border border-line bg-card/80 px-5 py-2.5 text-sm font-medium text-ink backdrop-blur transition hover:bg-card"
           >
             Create an account
           </Link>

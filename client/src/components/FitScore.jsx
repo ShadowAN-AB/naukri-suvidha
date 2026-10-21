@@ -8,10 +8,10 @@
  */
 
 function band(score) {
-  if (score >= 80) return { ring: 'ring-emerald-200', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500' };
-  if (score >= 60) return { ring: 'ring-blue-200', bg: 'bg-blue-50', text: 'text-blue-700', bar: 'bg-blue-500' };
-  if (score >= 40) return { ring: 'ring-amber-200', bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500' };
-  return { ring: 'ring-slate-200', bg: 'bg-slate-100', text: 'text-slate-600', bar: 'bg-slate-400' };
+  if (score >= 80) return { ring: 'ring-success-line', bg: 'bg-success-soft', text: 'text-success', bar: 'bg-success-soft0' };
+  if (score >= 60) return { ring: 'ring-info-line', bg: 'bg-info-soft', text: 'text-info', bar: 'bg-info-soft0' };
+  if (score >= 40) return { ring: 'ring-warning-line', bg: 'bg-warning-soft', text: 'text-warning', bar: 'bg-warning-soft0' };
+  return { ring: 'ring-line', bg: 'bg-subtle', text: 'text-chip-ink', bar: 'bg-muted' };
 }
 
 const PARTS = [
@@ -24,7 +24,7 @@ const PARTS = [
 export function FitBadge({ fit }) {
   if (!fit) {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200">
+      <span className="inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-inset ring-line">
         Scoring…
       </span>
     );
@@ -55,7 +55,7 @@ export default function FitScore({ fit }) {
   const c = band(fit.score);
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-slate-50/60 p-3">
+    <div className="mt-3 rounded-lg border border-line bg-subtle/60 p-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className={`text-lg font-semibold tabular-nums ${c.text}`}>{fit.score}</span>
 
@@ -66,7 +66,7 @@ export default function FitScore({ fit }) {
                 <dt>{label}</dt>
                 <dd className="tabular-nums">{fit.breakdown?.[key] ?? '—'}</dd>
               </div>
-              <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-200">
+              <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-track">
                 <div
                   className={`h-full rounded-full ${c.bar}`}
                   style={{ width: `${Math.max(0, Math.min(100, fit.breakdown?.[key] ?? 0))}%` }}

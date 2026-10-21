@@ -67,12 +67,12 @@ export default function Profile() {
 
       <form onSubmit={onSubmit} noValidate className="mt-8 max-w-xl space-y-5">
         {formError && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
             {formError}
           </p>
         )}
         {saved && (
-          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved.</p>
+          <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">Saved.</p>
         )}
 
         {isStudent ? (
@@ -112,7 +112,7 @@ export default function Profile() {
                 name="description"
                 rows={4}
                 defaultValue={profile.description ?? ''}
-                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+                className="mt-1 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
               />
             </div>
           </>
@@ -121,7 +121,7 @@ export default function Profile() {
         <button
           type="submit"
           disabled={update.isPending}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
         >
           {update.isPending ? 'Saving…' : 'Save changes'}
         </button>

@@ -34,12 +34,12 @@ export default function ProtectedFileLink({ path, children, className = '' }) {
         disabled={busy}
         className={
           className ||
-          'rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-50'
+          'rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle disabled:opacity-50'
         }
       >
         {busy ? 'Opening…' : children}
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </>
   );
 }

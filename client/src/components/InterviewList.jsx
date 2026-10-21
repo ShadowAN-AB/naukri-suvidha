@@ -30,10 +30,10 @@ export default function InterviewList({ heading = 'Interviews', emptyText }) {
           const app = i.applicationId ?? {};
           const job = app.jobId ?? {};
           return (
-            <li key={i._id} className="rounded-xl border border-line bg-white p-4">
+            <li key={i._id} className="rounded-xl border border-line bg-card p-4">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-medium">{job.title ?? 'An interview'}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning ring-1 ring-inset ring-warning-line">
                   {MODE_LABEL[i.mode] ?? i.mode}
                 </span>
                 <span className="ml-auto text-sm font-medium tabular-nums">{when(i.scheduledAt)}</span>

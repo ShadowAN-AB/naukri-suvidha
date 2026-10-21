@@ -32,7 +32,7 @@ export default function AuthLayout({ children, maxWidth = 'max-w-md' }) {
 
       <div className="flex min-h-dvh items-center justify-center px-6 py-12 text-ink">
         <div className={`w-full ${maxWidth}`}>
-          <div className="rounded-2xl border border-line bg-white/80 p-6 shadow-sm backdrop-blur-md sm:p-8">
+          <div className="rounded-2xl border border-line bg-card/80 p-6 shadow-sm backdrop-blur-md sm:p-8">
             {children}
           </div>
         </div>

@@ -14,7 +14,7 @@ export default function StudentDashboard() {
       <p className="mt-1 text-muted">Your placement dashboard.</p>
 
       {profile && (
-        <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 rounded-xl border border-line bg-white p-5 text-sm sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 rounded-xl border border-line bg-card p-5 text-sm sm:grid-cols-4">
           {[
             ['Roll number', profile.rollNo],
             ['Branch', profile.branch],
@@ -32,7 +32,7 @@ export default function StudentDashboard() {
       <div className="mt-6">
         <Link
           to="/jobs"
-          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+          className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90"
         >
           Browse open jobs
         </Link>

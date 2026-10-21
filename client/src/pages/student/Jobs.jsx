@@ -53,7 +53,7 @@ export default function StudentJobs() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search titles…"
             aria-label="Search jobs"
-            className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+            className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           />
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -68,7 +68,7 @@ export default function StudentJobs() {
       </div>
 
       {!hasResume && (
-        <p className="mt-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mt-6 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
           You need a résumé on file before you can apply.{' '}
           <Link to="/resume" className="font-medium underline">
             Upload one
@@ -78,7 +78,7 @@ export default function StudentJobs() {
       )}
 
       {(isError || error) && (
-        <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           {error ?? listError.message}
         </p>
       )}
@@ -117,7 +117,7 @@ export default function StudentJobs() {
                           ? 'Upload a résumé first'
                           : undefined
                     }
-                    className="rounded-lg bg-accent px-3 py-1.5 font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-accent-solid px-3 py-1.5 font-medium text-on-solid transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {apply.isPending ? 'Applying…' : 'Apply'}
                   </button>

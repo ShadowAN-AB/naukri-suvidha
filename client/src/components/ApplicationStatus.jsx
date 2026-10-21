@@ -1,12 +1,12 @@
 const STAGES = ['applied', 'shortlisted', 'interview', 'offered'];
 
 const STYLES = {
-  applied: 'bg-slate-100 text-slate-700 ring-slate-200',
-  shortlisted: 'bg-blue-50 text-blue-700 ring-blue-200',
-  interview: 'bg-amber-50 text-amber-700 ring-amber-200',
-  offered: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  rejected: 'bg-red-50 text-red-700 ring-red-200',
-  withdrawn: 'bg-slate-100 text-slate-500 ring-slate-200',
+  applied: 'bg-subtle text-chip-ink ring-line',
+  shortlisted: 'bg-info-soft text-info ring-info-line',
+  interview: 'bg-warning-soft text-warning ring-warning-line',
+  offered: 'bg-success-soft text-success ring-success-line',
+  rejected: 'bg-danger-soft text-danger ring-danger-line',
+  withdrawn: 'bg-subtle text-muted ring-line',
 };
 
 const LABELS = {
@@ -39,10 +39,10 @@ export function StageTrack({ status }) {
           title={LABELS[stage]}
           className={`h-1.5 w-8 rounded-full ${
             ended
-              ? 'bg-slate-200'
+              ? 'bg-track'
               : i <= reached
-                ? 'bg-accent'
-                : 'bg-slate-200'
+                ? 'bg-accent-solid'
+                : 'bg-track'
           }`}
         />
       ))}

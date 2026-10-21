@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   CartesianGrid,
   Legend,
@@ -10,20 +11,33 @@ import {
 } from 'recharts';
 
 import { useAnalytics } from '../../api/admin.js';
+import { useTheme } from '../../context/ThemeContext.jsx';
 import StatTile from '../../components/StatTile.jsx';
 
 /**
- * Two categorical hues, in fixed order, validated for colour-vision deficiency
- * before use (worst adjacent pair ΔE 29.6 under protanopia, against a target
- * of 8). They are assigned to the series, never to rank, so filtering never
- * repaints a survivor.
+ * Recharts takes colours as props, not classes, so the theme tokens have to be
+ * read out of the document rather than applied to it. Keyed on the resolved
+ * theme so a toggle repaints the chart; the hues themselves live in index.css
+ * next to every other colour.
  */
-const SERIES = {
-  applications: '#3b6fe0',
-  offers: '#d97706',
-};
-
-const INK = { primary: '#2b2f3a', muted: '#6b7280', line: '#e5e7eb' };
+function useChartColors() {
+  const { resolved } = useTheme();
+  return useMemo(() => {
+    const style = getComputedStyle(document.documentElement);
+    const read = (name) => style.getPropertyValue(name).trim();
+    return {
+      series1: read('--chart-1'),
+      series2: read('--chart-2'),
+      muted: read('--muted'),
+      line: read('--line'),
+      card: read('--card'),
+    };
+    // `resolved` is the point of the dependency even though the body never
+    // names it: it is what tells us the custom properties underneath these
+    // values have just been repainted. eslint cannot see through the DOM read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved]);
+}
 
 const STATUS_ORDER = ['applied', 'shortlisted', 'interview', 'offered', 'rejected', 'withdrawn'];
 const STATUS_LABEL = {
@@ -41,7 +55,7 @@ const weekLabel = (iso) =>
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-line bg-white px-3 py-2 text-sm shadow-sm">
+    <div className="rounded-lg border border-line bg-card px-3 py-2 text-sm shadow-sm">
       <p className="font-medium text-ink">Week of {weekLabel(label)}</p>
       {payload.map((p) => (
         <p key={p.dataKey} className="mt-0.5 flex items-center gap-2 text-muted">
@@ -55,10 +69,11 @@ function ChartTooltip({ active, payload, label }) {
 
 export default function Analytics() {
   const { data, isPending, isError, error } = useAnalytics();
+  const c = useChartColors();
 
   if (isError) {
     return (
-      <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+      <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
         {error.message}
       </p>
     );
@@ -93,27 +108,27 @@ export default function Analytics() {
       </div>
 
       {/* Placed against unplaced is one proportion, so it is one bar, not a pie. */}
-      <section className="mt-8 rounded-xl border border-line bg-white p-5">
+      <section className="mt-8 rounded-xl border border-line bg-card p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
           Placed against unplaced
         </h2>
         {!isPending && (
           <>
-            <div className="mt-3 flex h-6 w-full overflow-hidden rounded-lg bg-slate-100">
+            <div className="mt-3 flex h-6 w-full overflow-hidden rounded-lg bg-track">
               <div
                 className="h-full"
-                style={{ width: `${placement.rate}%`, background: SERIES.applications }}
+                style={{ width: `${placement.rate}%`, background: c.series1 }}
                 role="img"
                 aria-label={`${placement.placed} of ${placement.total} students placed`}
               />
             </div>
             <div className="mt-2 flex justify-between text-sm">
               <span className="flex items-center gap-2 text-muted">
-                <span className="size-2 rounded-full" style={{ background: SERIES.applications }} aria-hidden />
+                <span className="size-2 rounded-full" style={{ background: c.series1 }} aria-hidden />
                 Placed <span className="font-medium tabular-nums text-ink">{placement.placed}</span>
               </span>
               <span className="flex items-center gap-2 text-muted">
-                <span className="size-2 rounded-full bg-slate-300" aria-hidden />
+                <span className="size-2 rounded-full bg-muted" aria-hidden />
                 Unplaced <span className="font-medium tabular-nums text-ink">{placement.unplaced}</span>
               </span>
             </div>
@@ -121,7 +136,7 @@ export default function Analytics() {
         )}
       </section>
 
-      <section className="mt-6 rounded-xl border border-line bg-white p-5">
+      <section className="mt-6 rounded-xl border border-line bg-card p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
           Applications and offers, by week
         </h2>
@@ -131,43 +146,43 @@ export default function Analytics() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data?.weekly ?? []} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
               {/* Recessive grid: horizontal only, so it reads as a reference not a cage. */}
-              <CartesianGrid stroke={INK.line} strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid stroke={c.line} strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="week"
                 tickFormatter={weekLabel}
-                tick={{ fill: INK.muted, fontSize: 12 }}
-                axisLine={{ stroke: INK.line }}
+                tick={{ fill: c.muted, fontSize: 12 }}
+                axisLine={{ stroke: c.line }}
                 tickLine={false}
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fill: INK.muted, fontSize: 12 }}
+                tick={{ fill: c.muted, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip content={<ChartTooltip />} cursor={{ stroke: INK.line, strokeWidth: 1 }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ stroke: c.line, strokeWidth: 1 }} />
               <Legend
                 iconType="circle"
-                wrapperStyle={{ fontSize: 13, color: INK.muted, paddingTop: 8 }}
+                wrapperStyle={{ fontSize: 13, color: c.muted, paddingTop: 8 }}
               />
               {/* Both series are counts, so they share one axis. Never two scales. */}
               <Line
                 type="monotone"
                 dataKey="applications"
                 name="Applications"
-                stroke={SERIES.applications}
+                stroke={c.series1}
                 strokeWidth={2}
-                dot={{ r: 4, fill: SERIES.applications, stroke: '#fff', strokeWidth: 2 }}
-                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                dot={{ r: 4, fill: c.series1, stroke: c.card, strokeWidth: 2 }}
+                activeDot={{ r: 6, stroke: c.card, strokeWidth: 2 }}
               />
               <Line
                 type="monotone"
                 dataKey="offers"
                 name="Offers"
-                stroke={SERIES.offers}
+                stroke={c.series2}
                 strokeWidth={2}
-                dot={{ r: 4, fill: SERIES.offers, stroke: '#fff', strokeWidth: 2 }}
-                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                dot={{ r: 4, fill: c.series2, stroke: c.card, strokeWidth: 2 }}
+                activeDot={{ r: 6, stroke: c.card, strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -175,7 +190,7 @@ export default function Analytics() {
       </section>
 
       {/* One series, so no legend: the heading names it and each bar is labelled. */}
-      <section className="mt-6 rounded-xl border border-line bg-white p-5">
+      <section className="mt-6 rounded-xl border border-line bg-card p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
           Applications by stage
         </h2>
@@ -185,10 +200,10 @@ export default function Analytics() {
             return (
               <div key={status} className="flex items-center gap-3">
                 <dt className="w-28 shrink-0 text-sm text-muted">{STATUS_LABEL[status]}</dt>
-                <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-3 flex-1 overflow-hidden rounded-full bg-track">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${(n / maxStatus) * 100}%`, background: SERIES.applications }}
+                    style={{ width: `${(n / maxStatus) * 100}%`, background: c.series1 }}
                   />
                 </div>
                 <dd className="w-8 shrink-0 text-right text-sm font-medium tabular-nums">{n}</dd>

@@ -64,8 +64,8 @@ export default function Register() {
               }}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 role === value
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-line bg-white text-muted hover:text-ink'
+                  ? 'border-accent bg-accent-soft text-accent-strong'
+                  : 'border-line bg-card text-muted hover:text-ink'
               }`}
             >
               {label}
@@ -75,7 +75,7 @@ export default function Register() {
 
         <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
           {formError && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
               {formError}
             </p>
           )}
@@ -130,7 +130,7 @@ export default function Register() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
           >
             {busy ? 'Creating…' : 'Create account'}
           </button>

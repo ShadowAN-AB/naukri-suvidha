@@ -5,12 +5,12 @@
 export default function StatTile({ label, value, suffix, hint, tone = 'default' }) {
   const toneText = {
     default: 'text-ink',
-    good: 'text-emerald-700',
-    warning: 'text-amber-700',
+    good: 'text-success',
+    warning: 'text-warning',
   }[tone];
 
   return (
-    <div className="rounded-xl border border-line bg-white p-5">
+    <div className="rounded-xl border border-line bg-card p-5">
       <p className="text-sm text-muted">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${toneText}`}>
         {value}

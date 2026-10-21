@@ -31,12 +31,12 @@ export default function AuditLog() {
       </p>
 
       {ai && (
-        <div className="mt-6 rounded-xl border border-line bg-white p-5">
+        <div className="mt-6 rounded-xl border border-line bg-card p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">AI layer</h2>
           <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
             <span className="flex items-center gap-2">
               <span
-                className={`size-2 rounded-full ${ai.provider.ok ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                className={`size-2 rounded-full ${ai.provider.ok ? 'bg-success-soft0' : 'bg-warning-soft0'}`}
                 aria-hidden
               />
               <span className="font-medium">{ai.status}</span>
@@ -47,16 +47,16 @@ export default function AuditLog() {
             <span className="text-muted">queue {ai.queue.queued + ai.queue.pending}</span>
             <span className="text-muted">{ai.scores} scores</span>
             {ai.tasks?.dead > 0 && (
-              <span className="font-medium text-red-600">{ai.tasks.dead} dead tasks</span>
+              <span className="font-medium text-danger">{ai.tasks.dead} dead tasks</span>
             )}
           </div>
           {ai.degradedBehaviour && (
-            <p className="mt-2 text-sm text-amber-700">{ai.degradedBehaviour}</p>
+            <p className="mt-2 text-sm text-warning">{ai.degradedBehaviour}</p>
           )}
         </div>
       )}
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-line bg-white">
+      <div className="mt-6 overflow-hidden rounded-xl border border-line bg-card">
         {!isPending && items.length === 0 && (
           <EmptyState title="Nothing logged yet">
             Actions appear here as people use the portal.

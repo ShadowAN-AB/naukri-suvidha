@@ -28,7 +28,7 @@ export default function Applications() {
         )}
 
         {items.map((a) => (
-          <article key={a._id} className="rounded-xl border border-line bg-white p-5">
+          <article key={a._id} className="rounded-xl border border-line bg-card p-5">
             <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
               <h2 className="text-base font-semibold tracking-tight">
                 {a.jobId?.title ?? 'A job that no longer exists'}
@@ -60,7 +60,7 @@ export default function Applications() {
                 <button
                   onClick={() => withdraw.mutate(a._id)}
                   disabled={withdraw.isPending}
-                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle disabled:opacity-50"
                 >
                   Withdraw
                 </button>

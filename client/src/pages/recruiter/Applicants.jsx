@@ -46,7 +46,7 @@ export default function Applicants() {
           <select
             value={jobId}
             onChange={(e) => setJobId(e.target.value)}
-            className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+            className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           >
             <option value="">All postings</option>
             {jobs.map((j) => (
@@ -59,7 +59,7 @@ export default function Applicants() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-6 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -75,7 +75,7 @@ export default function Applicants() {
           const s = a.studentId ?? {};
           const next = APPLICATION_TRANSITIONS[a.status] ?? [];
           return (
-            <article key={a._id} className="rounded-xl border border-line bg-white p-5">
+            <article key={a._id} className="rounded-xl border border-line bg-card p-5">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
                 <h2 className="text-base font-semibold tracking-tight">{s.name ?? 'Unknown student'}</h2>
                 <FitBadge fit={a.fit} />
@@ -94,7 +94,7 @@ export default function Applicants() {
               {s.skills?.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-1.5">
                   {s.skills.slice(0, 10).map((skill) => (
-                    <li key={skill} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                    <li key={skill} className="rounded bg-subtle px-2 py-0.5 text-xs text-chip-ink">
                       {skill}
                     </li>
                   ))}
@@ -111,7 +111,7 @@ export default function Applicants() {
                   {['shortlisted', 'interview'].includes(a.status) && (
                     <button
                       onClick={() => setScheduling(scheduling === a._id ? null : a._id)}
-                      className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-slate-50"
+                      className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-subtle"
                     >
                       Schedule
                     </button>
@@ -124,8 +124,8 @@ export default function Applicants() {
                       disabled={changeStatus.isPending}
                       className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
                         status === 'rejected'
-                          ? 'border border-line hover:bg-slate-50'
-                          : 'bg-accent text-white hover:opacity-90'
+                          ? 'border border-line hover:bg-subtle'
+                          : 'bg-accent-solid text-on-solid hover:opacity-90'
                       }`}
                     >
                       {NEXT_LABEL[status] ?? status}

@@ -1,13 +1,178 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 
-@theme {
-  --color-ink: oklch(0.21 0.02 260);
-  --color-muted: oklch(0.55 0.02 260);
-  --color-line: oklch(0.91 0.01 260);
-  --color-accent: oklch(0.55 0.19 258);
-  --color-surface: oklch(0.99 0.002 260);
+/*
+ * Dark mode is a class on <html>, not a media query: the toggle in the header
+ * has to be able to override the system preference, and a media query cannot
+ * be overridden from JS. index.html sets the class before first paint.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Every colour lives here twice and nowhere else. Components name a role -
+ * card, muted, danger - so a screen is written once and both themes follow.
+ * Pairs that carry text were checked against WCAG AA (4.5:1) before being
+ * chosen; the ratio is noted where it is close enough to matter.
+ */
+:root {
+  color-scheme: light;
+
+  --surface: oklch(0.99 0.002 260);
+  --card: oklch(1 0 0);
+  --subtle: oklch(0.96 0.005 260);
+  --track: oklch(0.93 0.008 260);
+  --line: oklch(0.91 0.01 260);
+
+  --ink: oklch(0.21 0.02 260);
+  --muted: oklch(0.55 0.02 260);
+  /* Chip text. `muted` on `subtle` is only 4.32:1, so chips get their own. */
+  --chip-ink: oklch(0.4 0.02 260);
+
+  /* Links and active states. */
+  --accent: oklch(0.55 0.19 258);
+  /* Button fill. Held apart from --accent so each theme can keep white
+     legible on it: white on the dark theme's brighter accent is only 3.7:1. */
+  --accent-solid: oklch(0.55 0.19 258); /* white on this: 4.98 */
+  --on-solid: oklch(1 0 0);
+  --accent-soft: oklch(0.95 0.03 258);
+  --accent-strong: oklch(0.46 0.2 258); /* on accent-soft: 6.29 */
+
+  --success: oklch(0.52 0.13 155);
+  --success-soft: oklch(0.96 0.03 155);
+  --success-line: oklch(0.88 0.06 155);
+
+  --warning: oklch(0.52 0.12 75);
+  --warning-soft: oklch(0.97 0.04 85);
+  --warning-line: oklch(0.88 0.07 80);
+
+  --danger: oklch(0.51 0.19 25);
+  --danger-soft: oklch(0.96 0.03 25);
+  --danger-line: oklch(0.88 0.07 25);
+  --danger-solid: oklch(0.51 0.19 25);
+
+  --info: oklch(0.5 0.17 258);
+  --info-soft: oklch(0.96 0.03 258);
+  --info-line: oklch(0.88 0.07 258);
+
+  /* Chart series. Two categorical hues in fixed order, assigned to the series
+     and never to rank, so filtering never repaints a survivor. Left exactly as
+     they were: this pair carries a colour-vision check that predates the
+     themes. The dark pair below separates about as well on the same metric. */
+  --chart-1: #3b6fe0;
+  --chart-2: #d97706;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface: oklch(0.17 0.012 260);
+  --card: oklch(0.21 0.014 260);
+  --subtle: oklch(0.26 0.014 260);
+  --track: oklch(0.3 0.014 260);
+  --line: oklch(0.3 0.014 260);
+
+  --ink: oklch(0.96 0.005 260);
+  --muted: oklch(0.7 0.02 260);
+  --chip-ink: oklch(0.78 0.015 260);
+
+  --accent: oklch(0.62 0.18 258); /* on card: 4.78 */
+  --accent-solid: oklch(0.52 0.19 258); /* white on this: 5.67 */
+  --on-solid: oklch(1 0 0);
+  --accent-soft: oklch(0.26 0.05 258);
+  --accent-strong: oklch(0.8 0.13 258); /* on accent-soft: 8.13 */
+
+  --success: oklch(0.8 0.14 155);
+  --success-soft: oklch(0.27 0.05 155);
+  --success-line: oklch(0.38 0.07 155);
+
+  --warning: oklch(0.82 0.13 85);
+  --warning-soft: oklch(0.28 0.05 75);
+  --warning-line: oklch(0.4 0.07 78);
+
+  --danger: oklch(0.75 0.16 25);
+  --danger-soft: oklch(0.28 0.07 25);
+  --danger-line: oklch(0.4 0.09 25);
+  /* Stays dark in both themes: a solid fill has to keep white legible. */
+  --danger-solid: oklch(0.51 0.19 25);
+
+  --info: oklch(0.78 0.13 258);
+  --info-soft: oklch(0.28 0.06 258);
+  --info-line: oklch(0.4 0.08 258);
+
+  --chart-1: #6b9bf5;
+  --chart-2: #e8a93c;
+}
+
+/*
+ * `inline` matters: it makes the generated utility emit var(--card) rather
+ * than baking the value in, which is what lets the class on <html> repaint
+ * the whole app without a rebuild.
+ */
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-subtle: var(--subtle);
+  --color-track: var(--track);
+  --color-line: var(--line);
+
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-chip-ink: var(--chip-ink);
+
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-on-solid: var(--on-solid);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-danger-solid: var(--danger-solid);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
 }
 
 html {
   -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background-color: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* Someone tabbing through gets the same ring everywhere, including on the
+   bare <button>s that carried no focus style at all. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

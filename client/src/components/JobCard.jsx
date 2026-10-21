@@ -11,13 +11,13 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
   const eligibility = job.eligibility;
 
   return (
-    <article className="rounded-xl border border-line bg-white p-5">
+    <article className="rounded-xl border border-line bg-card p-5">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <h3 className="text-base font-semibold tracking-tight">{job.title}</h3>
         {showStatus && <StatusBadge status={job.status} />}
         {showFit && <FitBadge fit={job.fit} />}
         {eligibility && !eligibility.eligible && (
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">
+          <span className="inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-chip-ink ring-1 ring-inset ring-line">
             Not eligible
           </span>
         )}
@@ -42,7 +42,7 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
       {job.skillsRequired?.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5">
           {job.skillsRequired.map((s) => (
-            <li key={s} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+            <li key={s} className="rounded bg-subtle px-2 py-0.5 text-xs text-chip-ink">
               {s}
             </li>
           ))}
@@ -52,7 +52,7 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
       {showFit && <FitScore fit={job.fit} />}
 
       {eligibility && !eligibility.eligible && (
-        <ul className="mt-3 space-y-0.5 border-l-2 border-slate-200 pl-3 text-sm text-muted">
+        <ul className="mt-3 space-y-0.5 border-l-2 border-line pl-3 text-sm text-muted">
           {eligibility.failures.map((f) => (
             <li key={f.rule}>{f.message}</li>
           ))}
@@ -60,7 +60,7 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
       )}
 
       {job.status === 'rejected' && job.rejectionReason && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           Rejected: {job.rejectionReason}
         </p>
       )}

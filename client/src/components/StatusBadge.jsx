@@ -1,8 +1,8 @@
 const STYLES = {
-  pending: 'bg-amber-50 text-amber-700 ring-amber-200',
-  approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  rejected: 'bg-red-50 text-red-700 ring-red-200',
-  closed: 'bg-slate-100 text-slate-600 ring-slate-200',
+  pending: 'bg-warning-soft text-warning ring-warning-line',
+  approved: 'bg-success-soft text-success ring-success-line',
+  rejected: 'bg-danger-soft text-danger ring-danger-line',
+  closed: 'bg-subtle text-chip-ink ring-line',
 };
 
 const LABELS = {
