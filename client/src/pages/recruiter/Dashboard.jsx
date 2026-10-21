@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMe } from '../../api/auth.js';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function RecruiterDashboard() {
   const { data, isPending } = useMe();
@@ -13,12 +14,12 @@ export default function RecruiterDashboard() {
         description="Recruiter dashboard."
         actions={
           <>
-            <Link to="/jobs/new" className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90">
+            <Button as={Link} variant="primary" size="md" to="/jobs/new">
               Post a job
-            </Link>
-            <Link to="/jobs" className="inline-flex rounded-lg border border-line bg-card px-4 py-2 text-sm font-medium transition hover:bg-subtle">
+            </Button>
+            <Button as={Link} variant="secondary" size="md" to="/jobs">
               Your postings
-            </Link>
+            </Button>
           </>
         }
       />

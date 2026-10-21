@@ -4,6 +4,7 @@ import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import { formatDate } from '../../lib/format.js';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 const MAX_MB = 5;
 
@@ -60,14 +61,12 @@ export default function Resume() {
         }`}
       >
         <p className="text-sm font-medium">Drag a file here, or</p>
-        <button
+        <Button variant="primary" size="md" className="mt-3"
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={upload.isPending}
-          className="mt-3 rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={upload.isPending}>
           {upload.isPending ? 'Uploading…' : 'Choose a file'}
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"

@@ -1,3 +1,5 @@
+import Badge from './ui/Badge.jsx';
+import Card from './ui/Card.jsx';
 import StatusBadge from './StatusBadge.jsx';
 import FitScore, { FitBadge } from './FitScore.jsx';
 import { inr, formatDate, daysLeft } from '../lib/format.js';
@@ -11,15 +13,13 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
   const eligibility = job.eligibility;
 
   return (
-    <article className="rounded-xl border border-line bg-card p-5">
+    <Card as="article">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <h3 className="text-base font-semibold tracking-tight">{job.title}</h3>
         {showStatus && <StatusBadge status={job.status} />}
         {showFit && <FitBadge fit={job.fit} />}
         {eligibility && !eligibility.eligible && (
-          <span className="inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-chip-ink ring-1 ring-inset ring-line">
-            Not eligible
-          </span>
+          <Badge>Not eligible</Badge>
         )}
       </div>
 
@@ -71,6 +71,6 @@ export default function JobCard({ job, showStatus = false, actions = null, showF
         </span>
         {actions && <span className="ml-auto flex gap-2">{actions}</span>}
       </div>
-    </article>
+    </Card>
   );
 }

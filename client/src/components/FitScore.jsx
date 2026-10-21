@@ -1,3 +1,5 @@
+import Badge from './ui/Badge.jsx';
+
 /**
  * A fit score with the reasoning behind it.
  *
@@ -8,10 +10,10 @@
  */
 
 function band(score) {
-  if (score >= 80) return { ring: 'ring-success-line', bg: 'bg-success-soft', text: 'text-success', bar: 'bg-success' };
-  if (score >= 60) return { ring: 'ring-accent-line', bg: 'bg-accent-soft', text: 'text-accent-strong', bar: 'bg-accent' };
-  if (score >= 40) return { ring: 'ring-info-line', bg: 'bg-info-soft', text: 'text-info-strong', bar: 'bg-info' };
-  return { ring: 'ring-line', bg: 'bg-subtle', text: 'text-chip-ink', bar: 'bg-muted' };
+  if (score >= 80) return { tone: 'success', text: 'text-success', bar: 'bg-success' };
+  if (score >= 60) return { tone: 'accent', text: 'text-accent-strong', bar: 'bg-accent' };
+  if (score >= 40) return { tone: 'info', text: 'text-info-strong', bar: 'bg-info' };
+  return { tone: 'neutral', text: 'text-chip-ink', bar: 'bg-muted' };
 }
 
 const PARTS = [
@@ -23,22 +25,19 @@ const PARTS = [
 /** The compact number, for a card header. */
 export function FitBadge({ fit }) {
   if (!fit) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-inset ring-line">
-        Scoring…
-      </span>
-    );
+    return <Badge tone="muted">Scoring…</Badge>;
   }
   const c = band(fit.score);
   return (
-    <span
+    <Badge
+      tone={c.tone}
+      className="font-semibold"
       title={fit.fallback ? 'Estimated without the model' : `Scored by ${fit.model}`}
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${c.bg} ${c.text} ${c.ring}`}
     >
       {fit.score}
       <span className="font-normal opacity-70">fit</span>
       {fit.fallback && <span className="font-normal opacity-70">· est.</span>}
-    </span>
+    </Badge>
   );
 }
 

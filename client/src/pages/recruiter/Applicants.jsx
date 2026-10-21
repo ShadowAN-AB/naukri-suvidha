@@ -9,6 +9,7 @@ import ScheduleInterview from '../../components/ScheduleInterview.jsx';
 import { formatDate } from '../../lib/format.js';
 import { APPLICATION_TRANSITIONS } from '@nexus/shared';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 const NEXT_LABEL = {
   shortlisted: 'Shortlist',
@@ -108,12 +109,10 @@ export default function Applicants() {
                 )}
                 <span className="ml-auto flex flex-wrap gap-2">
                   {['shortlisted', 'interview'].includes(a.status) && (
-                    <button
-                      onClick={() => setScheduling(scheduling === a._id ? null : a._id)}
-                      className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-subtle"
-                    >
+                    <Button variant="secondary" size="sm"
+                      onClick={() => setScheduling(scheduling === a._id ? null : a._id)}>
                       Schedule
-                    </button>
+                    </Button>
                   )}
                   {next.length === 0 && <span className="text-sm text-muted">No further action</span>}
                   {next.map((status) => (

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMe } from '../../api/auth.js';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function StudentDashboard() {
   const { data, isPending } = useMe();
@@ -12,9 +13,9 @@ export default function StudentDashboard() {
         title={isPending ? 'Welcome' : `Welcome, ${profile?.name ?? 'student'}`}
         description="Your placement dashboard."
         actions={
-          <Link to="/jobs" className="inline-flex rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90">
+          <Button as={Link} variant="primary" size="md" to="/jobs">
             Browse open jobs
-          </Link>
+          </Button>
         }
       />
 

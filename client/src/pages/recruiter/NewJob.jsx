@@ -5,6 +5,7 @@ import { jobCreateSchema, fieldErrors, BRANCHES } from '@nexus/shared';
 import { useCreateJob } from '../../api/jobs.js';
 import Field from '../../components/Field.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function NewJob() {
   const navigate = useNavigate();
@@ -120,13 +121,11 @@ export default function NewJob() {
           </div>
         </fieldset>
 
-        <button
+        <Button variant="primary" size="md"
           type="submit"
-          disabled={createJob.isPending}
-          className="rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={createJob.isPending}>
           {createJob.isPending ? 'Submitting…' : 'Submit for approval'}
-        </button>
+        </Button>
       </form>
     </>
   );

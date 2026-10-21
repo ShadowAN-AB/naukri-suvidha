@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { IronFilings } from '../components/ui/IronFilings.jsx';
+import Button from '../components/ui/Button.jsx';
 
 /**
  * The signed-out front door.
@@ -43,18 +44,14 @@ export default function Landing() {
         </p>
 
         <div className="pointer-events-auto mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/login"
-            className="rounded-lg bg-accent-solid px-5 py-2.5 text-sm font-medium text-on-solid transition hover:opacity-90"
-          >
+          <Button as={Link} variant="primary" size="lg"
+            to="/login">
             Sign in
-          </Link>
-          <Link
-            to="/register"
-            className="rounded-lg border border-line bg-card/80 px-5 py-2.5 text-sm font-medium text-ink backdrop-blur transition hover:bg-card"
-          >
+          </Button>
+          <Button as={Link} variant="secondary" size="lg" className="bg-card/80 backdrop-blur"
+            to="/register">
             Create an account
-          </Link>
+          </Button>
         </div>
 
         {/* Pointer-only instruction: there is no cursor to move on a touchscreen. */}

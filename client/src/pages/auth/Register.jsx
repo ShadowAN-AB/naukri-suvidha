@@ -5,6 +5,7 @@ import { registerSchema, fieldErrors, BRANCHES, CURRENT_BATCH_YEARS, ROLES, HOME
 import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
 import AuthLayout from '../../layouts/AuthLayout.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function Register() {
   const { user, ready, register } = useAuth();
@@ -127,13 +128,11 @@ export default function Register() {
             </>
           )}
 
-          <button
+          <Button variant="primary" size="md" className="w-full"
             type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-          >
+            disabled={busy}>
             {busy ? 'Creating…' : 'Create account'}
-          </button>
+          </Button>
         </form>
 
       <p className="mt-6 text-sm text-muted">

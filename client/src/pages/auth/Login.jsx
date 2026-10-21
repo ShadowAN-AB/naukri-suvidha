@@ -5,6 +5,7 @@ import { loginSchema, fieldErrors, HOME_FOR_ROLE } from '@nexus/shared';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
 import AuthLayout from '../../layouts/AuthLayout.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function Login() {
   const { user, ready, login } = useAuth();
@@ -63,13 +64,11 @@ export default function Login() {
           required
         />
 
-        <button
+        <Button variant="primary" size="md" className="w-full"
           type="submit"
-          disabled={busy}
-          className="w-full rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={busy}>
           {busy ? 'Signing in\u2026' : 'Sign in'}
-        </button>
+        </Button>
       </form>
 
       <p className="mt-6 text-sm text-muted">

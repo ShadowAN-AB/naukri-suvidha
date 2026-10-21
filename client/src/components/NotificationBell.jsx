@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useNotifications, useMarkRead, useMarkAllRead } from '../api/notifications.js';
 import { useRealtime } from '../context/RealtimeContext.jsx';
+import Button from './ui/Button.jsx';
 
 function ago(date) {
   const seconds = Math.round((Date.now() - new Date(date)) / 1000);
@@ -40,19 +41,17 @@ export default function NotificationBell() {
 
   return (
     <div ref={ref} className="relative">
-      <button
+      <Button variant="secondary" size="sm" className="relative"
         onClick={() => setOpen((v) => !v)}
         aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
-        aria-expanded={open}
-        className="relative rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle"
-      >
+        aria-expanded={open}>
         Alerts
         {unread > 0 && (
           <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-accent-solid text-[11px] font-semibold text-on-solid">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-card shadow-lg">

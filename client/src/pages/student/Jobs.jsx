@@ -7,6 +7,7 @@ import { useMyResumes } from '../../api/resumes.js';
 import JobCard from '../../components/JobCard.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function StudentJobs() {
   const [eligibleOnly, setEligibleOnly] = useState(false);
@@ -108,7 +109,7 @@ export default function StudentJobs() {
                     Applied · {applied}
                   </Link>
                 ) : (
-                  <button
+                  <Button variant="primary" size="sm" className="disabled:cursor-not-allowed"
                     onClick={() => onApply(job._id)}
                     disabled={!canApply || apply.isPending}
                     title={
@@ -117,11 +118,9 @@ export default function StudentJobs() {
                         : !hasResume
                           ? 'Upload a résumé first'
                           : undefined
-                    }
-                    className="rounded-lg bg-accent-solid px-3 py-1.5 font-medium text-on-solid transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
+                    }>
                     {apply.isPending ? 'Applying…' : 'Apply'}
-                  </button>
+                  </Button>
                 )
               }
             />

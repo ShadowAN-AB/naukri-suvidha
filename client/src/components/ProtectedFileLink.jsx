@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fetchBlobUrl } from '../lib/api.js';
+import { buttonClasses } from './ui/Button.jsx';
 
 /**
  * Opens a file that sits behind the API's bearer auth.
@@ -32,10 +33,7 @@ export default function ProtectedFileLink({ path, children, className = '' }) {
         type="button"
         onClick={open}
         disabled={busy}
-        className={
-          className ||
-          'rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle disabled:opacity-50'
-        }
+        className={className || buttonClasses({ variant: 'secondary', size: 'sm' })}
       >
         {busy ? 'Opening…' : children}
       </button>

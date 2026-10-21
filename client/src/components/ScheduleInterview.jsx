@@ -3,6 +3,7 @@ import { interviewScheduleSchema, fieldErrors, INTERVIEW_MODES } from '@nexus/sh
 
 import { useScheduleInterview } from '../api/interviews.js';
 import Field from './Field.jsx';
+import Button from './ui/Button.jsx';
 
 const MODE_LABEL = { online: 'Online', onsite: 'On site', phone: 'Phone' };
 
@@ -77,13 +78,11 @@ export default function ScheduleInterview({ applicationId, onDone }) {
       )}
 
       <div className="mt-4 flex gap-2">
-        <button
+        <Button variant="primary" size="sm"
           type="submit"
-          disabled={schedule.isPending}
-          className="rounded-lg bg-accent-solid px-3 py-1.5 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={schedule.isPending}>
           {schedule.isPending ? 'Scheduling…' : 'Schedule'}
-        </button>
+        </Button>
         <button type="button" onClick={onDone} className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm hover:bg-subtle">
           Cancel
         </button>

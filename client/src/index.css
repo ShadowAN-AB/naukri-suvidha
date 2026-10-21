@@ -92,6 +92,8 @@
      pastels move to the text roles and the deep shades become the fills. */
   --accent: oklch(0.846 0.081 247);
   --accent-solid: oklch(0.52 0.13 247);
+  --accent-solid-hover: oklch(0.56 0.13 247);
+  --danger-solid-hover: oklch(0.57 0.17 25);
   --accent-soft: oklch(0.3 0.07 247);
   --accent-line: oklch(0.42 0.09 247);
   --accent-strong: oklch(0.88 0.07 247);
@@ -149,6 +151,7 @@
 
   --color-accent: var(--accent);
   --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
   --color-on-solid: var(--on-solid);
   --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
@@ -171,6 +174,7 @@
   --color-danger-soft: var(--danger-soft);
   --color-danger-line: var(--danger-line);
   --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-hover: var(--danger-solid-hover);
 
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);

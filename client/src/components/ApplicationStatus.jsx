@@ -1,12 +1,14 @@
+import Badge from './ui/Badge.jsx';
+
 const STAGES = ['applied', 'shortlisted', 'interview', 'offered'];
 
-const STYLES = {
-  applied: 'bg-subtle text-chip-ink ring-line',
-  shortlisted: 'bg-info-soft text-info ring-info-line',
-  interview: 'bg-warning-soft text-warning ring-warning-line',
-  offered: 'bg-success-soft text-success ring-success-line',
-  rejected: 'bg-danger-soft text-danger ring-danger-line',
-  withdrawn: 'bg-subtle text-muted ring-line',
+const TONES = {
+  applied: 'neutral',
+  shortlisted: 'info',
+  interview: 'warning',
+  offered: 'success',
+  rejected: 'danger',
+  withdrawn: 'muted',
 };
 
 const LABELS = {
@@ -19,11 +21,7 @@ const LABELS = {
 };
 
 export function StatusPill({ status }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STYLES[status] ?? STYLES.applied}`}>
-      {LABELS[status] ?? status}
-    </span>
-  );
+  return <Badge tone={TONES[status] ?? 'neutral'}>{LABELS[status] ?? status}</Badge>;
 }
 
 /** Four dots showing how far along the funnel an application has reached. */

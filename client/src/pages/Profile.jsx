@@ -4,6 +4,7 @@ import { studentProfileUpdateSchema, companyProfileUpdateSchema, fieldErrors, BR
 import { useMyProfile, useUpdateProfile } from '../api/profiles.js';
 import Field from '../components/Field.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import Button from '../components/ui/Button.jsx';
 
 export default function Profile() {
   const { data, isPending } = useMyProfile();
@@ -123,13 +124,11 @@ export default function Profile() {
           </>
         )}
 
-        <button
+        <Button variant="primary" size="md"
           type="submit"
-          disabled={update.isPending}
-          className="rounded-lg bg-accent-solid px-4 py-2 text-sm font-medium text-on-solid transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={update.isPending}>
           {update.isPending ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
       </form>
     </>
   );

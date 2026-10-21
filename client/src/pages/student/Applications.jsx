@@ -4,6 +4,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import InterviewList from '../../components/InterviewList.jsx';
 import { formatDate, inr } from '../../lib/format.js';
 import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 const CAN_WITHDRAW = ['applied', 'shortlisted', 'interview'];
 
@@ -58,13 +59,11 @@ export default function Applications() {
 
             {CAN_WITHDRAW.includes(a.status) && (
               <div className="mt-4 border-t border-line pt-3">
-                <button
+                <Button variant="secondary" size="sm"
                   onClick={() => withdraw.mutate(a._id)}
-                  disabled={withdraw.isPending}
-                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle disabled:opacity-50"
-                >
+                  disabled={withdraw.isPending}>
                   Withdraw
-                </button>
+                </Button>
               </div>
             )}
           </article>

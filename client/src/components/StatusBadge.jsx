@@ -1,8 +1,10 @@
-const STYLES = {
-  pending: 'bg-warning-soft text-warning ring-warning-line',
-  approved: 'bg-success-soft text-success ring-success-line',
-  rejected: 'bg-danger-soft text-danger ring-danger-line',
-  closed: 'bg-subtle text-chip-ink ring-line',
+import Badge from './ui/Badge.jsx';
+
+const TONES = {
+  pending: 'warning',
+  approved: 'success',
+  rejected: 'danger',
+  closed: 'neutral',
 };
 
 const LABELS = {
@@ -13,13 +15,5 @@ const LABELS = {
 };
 
 export default function StatusBadge({ status }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-        STYLES[status] ?? STYLES.closed
-      }`}
-    >
-      {LABELS[status] ?? status}
-    </span>
-  );
+  return <Badge tone={TONES[status] ?? 'neutral'}>{LABELS[status] ?? status}</Badge>;
 }
