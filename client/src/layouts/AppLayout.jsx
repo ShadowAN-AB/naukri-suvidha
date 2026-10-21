@@ -45,9 +45,9 @@ const ROLE_LABEL = {
   [ROLES.ADMIN]: 'Placement office',
 };
 
-const Brand = () => (
+const Brand = ({ markClass = 'bg-highlight-solid' }) => (
   <span className="flex items-center gap-2 font-semibold tracking-tight">
-    <span aria-hidden className="size-2.5 rounded-full bg-highlight-solid" />
+    <span aria-hidden className={`size-2.5 rounded-full ${markClass}`} />
     Naukri Suvidha
   </span>
 );
@@ -59,9 +59,9 @@ const Brand = () => (
  */
 function Sidebar({ items, user, onSignOut }) {
   return (
-    <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-line lg:bg-card">
+    <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-64 lg:flex-col lg:bg-sidebar lg:text-sidebar-ink">
       <div className="flex h-16 shrink-0 items-center px-6">
-        <Brand />
+        <Brand markClass="bg-sidebar-mark" />
       </div>
 
       <nav aria-label="Main" className="flex-1 space-y-1 px-3">
@@ -72,8 +72,8 @@ function Sidebar({ items, user, onSignOut }) {
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${
                 isActive
-                  ? 'bg-accent-soft font-medium text-accent-strong'
-                  : 'text-muted hover:bg-subtle hover:text-ink'
+                  ? 'bg-sidebar-active font-medium text-sidebar-active-ink'
+                  : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-ink'
               }`
             }
           >
@@ -87,12 +87,12 @@ function Sidebar({ items, user, onSignOut }) {
         ))}
       </nav>
 
-      <div className="border-t border-line p-3">
+      <div className="border-t border-sidebar-line p-3">
         <p className="truncate px-3 text-sm font-medium">{user.email}</p>
-        <p className="px-3 text-xs text-muted">{ROLE_LABEL[user.role]}</p>
+        <p className="px-3 text-xs text-sidebar-muted">{ROLE_LABEL[user.role]}</p>
         <button
           onClick={onSignOut}
-          className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition-colors duration-150 hover:bg-subtle hover:text-ink"
+          className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-muted transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-ink"
         >
           <LogOut size={16} strokeWidth={1.5} aria-hidden />
           Sign out
@@ -107,7 +107,7 @@ function MobileTabBar({ items }) {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-sidebar-line bg-sidebar pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       {items.map(([to, label, Icon]) => (
         <NavLink
@@ -115,7 +115,7 @@ function MobileTabBar({ items }) {
           to={to}
           className={({ isActive }) =>
             `flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] transition-colors duration-150 ${
-              isActive ? 'text-accent-strong' : 'text-muted'
+              isActive ? 'text-sidebar-active-ink' : 'text-sidebar-muted'
             }`
           }
         >

@@ -70,6 +70,23 @@
      this is a mid-tone of the same blue: present, but still decoration. */
   --filings: oklch(0.68 0.11 247);
 
+  /*
+   * The nav rail. Deliberately the same deep indigo in both themes rather
+   * than following the surface: in light it gives the page a vertical anchor
+   * instead of a white panel edged by a hairline, and in dark it sits just
+   * above the card so it still reads as a rail. Because it never changes, it
+   * carries its own ink - the global --ink would be black on navy.
+   */
+  --sidebar: oklch(0.25 0.05 268);
+  --sidebar-ink: oklch(0.97 0.01 270);
+  --sidebar-muted: oklch(0.76 0.03 270);
+  --sidebar-line: oklch(0.33 0.04 268);
+  --sidebar-hover: oklch(0.3 0.06 266);
+  --sidebar-active: oklch(0.35 0.085 262);
+  --sidebar-active-ink: oklch(0.88 0.08 250);
+  /* The brand pink has to lift off navy, where --highlight-solid is 2.87:1. */
+  --sidebar-mark: oklch(0.7 0.17 355);
+
   --chart-1: #0076c3;
   --chart-2: #d97706;
   --chart-3: #d43b86;
@@ -185,6 +202,15 @@
   --color-info-strong: var(--info-strong);
 
   --color-filings: var(--filings);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-ink: var(--sidebar-ink);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-ink: var(--sidebar-active-ink);
+  --color-sidebar-mark: var(--sidebar-mark);
 }
 
 /*
