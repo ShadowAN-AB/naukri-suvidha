@@ -16,7 +16,7 @@ import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 /* Counted rather than summed: an application sits in exactly one stage. */
 const FUNNEL = [
   ['applied', 'Applied', 'accent'],
-  ['shortlisted', 'Shortlisted', 'info'],
+  ['shortlisted', 'Shortlisted', 'highlight'],
   ['interview', 'Interviews', 'warning'],
   ['offered', 'Offers', 'good'],
 ];

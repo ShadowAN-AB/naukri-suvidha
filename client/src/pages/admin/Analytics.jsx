@@ -30,6 +30,7 @@ function useChartColors() {
       series1: read('--chart-1'),
       series2: read('--chart-2'),
       bars: read('--chart-4'),
+      placed: read('--chart-3'),
       muted: read('--muted'),
       line: read('--line'),
       card: read('--card'),
@@ -119,14 +120,14 @@ export default function Analytics() {
             <div className="mt-3 flex h-6 w-full overflow-hidden rounded-lg bg-track">
               <div
                 className="h-full"
-                style={{ width: `${placement.rate}%`, background: c.series1 }}
+                style={{ width: `${placement.rate}%`, background: c.placed }}
                 role="img"
                 aria-label={`${placement.placed} of ${placement.total} students placed`}
               />
             </div>
             <div className="mt-2 flex justify-between text-sm">
               <span className="flex items-center gap-2 text-muted">
-                <span className="size-2 rounded-full" style={{ background: c.series1 }} aria-hidden />
+                <span className="size-2 rounded-full" style={{ background: c.placed }} aria-hidden />
                 Placed <span className="font-medium tabular-nums text-ink">{placement.placed}</span>
               </span>
               <span className="flex items-center gap-2 text-muted">
