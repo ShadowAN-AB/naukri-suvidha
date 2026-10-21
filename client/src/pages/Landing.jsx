@@ -38,7 +38,7 @@ export default function Landing() {
         <h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">
           The right role
           <br />
-          <span className="italic">pulls.</span>
+          <span className="italic text-highlight">pulls.</span>
         </h1>
 
         <p className="mx-auto mt-5 max-w-md text-sm text-muted sm:text-base">
