@@ -19,7 +19,7 @@ export default function Landing() {
       /* Track globally so the magnet keeps following over the buttons, which
          sit above the field and would otherwise swallow the pointer. */
       pointerSource="window"
-      className="flex min-h-dvh w-full items-center justify-center bg-surface text-muted"
+      className="flex min-h-dvh w-full items-center justify-center bg-surface text-filings"
     >
       <div className="pointer-events-none relative select-none px-6 text-center text-ink">
         <div

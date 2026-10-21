@@ -61,7 +61,7 @@ export default function NotificationBell() {
             <span className="flex items-center gap-2">
               <span
                 title={connected ? 'Live updates connected' : 'Reconnecting'}
-                className={`size-1.5 rounded-full ${connected ? 'bg-success-soft0' : 'bg-muted'}`}
+                className={`size-1.5 rounded-full ${connected ? 'bg-success' : 'bg-muted'}`}
               />
               {unread > 0 && (
                 <button

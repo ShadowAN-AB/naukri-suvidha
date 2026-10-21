@@ -36,7 +36,7 @@ export default function AuditLog() {
           <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
             <span className="flex items-center gap-2">
               <span
-                className={`size-2 rounded-full ${ai.provider.ok ? 'bg-success-soft0' : 'bg-warning-soft0'}`}
+                className={`size-2 rounded-full ${ai.provider.ok ? 'bg-success' : 'bg-warning'}`}
                 aria-hidden
               />
               <span className="font-medium">{ai.status}</span>

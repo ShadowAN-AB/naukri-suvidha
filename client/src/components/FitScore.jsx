@@ -8,9 +8,9 @@
  */
 
 function band(score) {
-  if (score >= 80) return { ring: 'ring-success-line', bg: 'bg-success-soft', text: 'text-success', bar: 'bg-success-soft0' };
-  if (score >= 60) return { ring: 'ring-info-line', bg: 'bg-info-soft', text: 'text-info', bar: 'bg-info-soft0' };
-  if (score >= 40) return { ring: 'ring-warning-line', bg: 'bg-warning-soft', text: 'text-warning', bar: 'bg-warning-soft0' };
+  if (score >= 80) return { ring: 'ring-success-line', bg: 'bg-success-soft', text: 'text-success', bar: 'bg-success' };
+  if (score >= 60) return { ring: 'ring-accent-line', bg: 'bg-accent-soft', text: 'text-accent-strong', bar: 'bg-accent' };
+  if (score >= 40) return { ring: 'ring-info-line', bg: 'bg-info-soft', text: 'text-info-strong', bar: 'bg-info' };
   return { ring: 'ring-line', bg: 'bg-subtle', text: 'text-chip-ink', bar: 'bg-muted' };
 }
 

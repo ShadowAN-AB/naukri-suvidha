@@ -26,7 +26,7 @@ export default function AuthLayout({ children, maxWidth = 'max-w-md' }) {
           pointerSource="window"
           spacing={18}
           length={9}
-          className="h-full w-full bg-surface text-muted"
+          className="h-full w-full bg-surface text-filings"
         />
       </div>
 

@@ -28,6 +28,7 @@ function useChartColors() {
     return {
       series1: read('--chart-1'),
       series2: read('--chart-2'),
+      bars: read('--chart-4'),
       muted: read('--muted'),
       line: read('--line'),
       card: read('--card'),
@@ -97,14 +98,15 @@ export default function Analytics() {
           hint={isPending ? '' : `${placement.placed} of ${placement.total} students`}
           tone={!isPending && placement.rate >= 50 ? 'good' : 'default'}
         />
-        <StatTile label="Offers made" value={isPending ? '—' : offers.count} />
+        <StatTile label="Offers made" tone="highlight" value={isPending ? '—' : offers.count} />
         <StatTile
+          tone="accent"
           label="Median CTC"
           value={isPending || offers.medianCtcLpa == null ? '—' : offers.medianCtcLpa}
           suffix={offers?.medianCtcLpa == null ? '' : 'LPA'}
           hint={isPending || offers.highestCtcLpa == null ? 'No offers yet' : `Highest ${offers.highestCtcLpa} LPA`}
         />
-        <StatTile label="Interviews upcoming" value={isPending ? '—' : data.interviewsUpcoming} />
+        <StatTile label="Interviews upcoming" tone="info" value={isPending ? '—' : data.interviewsUpcoming} />
       </div>
 
       {/* Placed against unplaced is one proportion, so it is one bar, not a pie. */}
@@ -203,7 +205,7 @@ export default function Analytics() {
                 <div className="h-3 flex-1 overflow-hidden rounded-full bg-track">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${(n / maxStatus) * 100}%`, background: c.series1 }}
+                    style={{ width: `${(n / maxStatus) * 100}%`, background: c.bars }}
                   />
                 </div>
                 <dd className="w-8 shrink-0 text-right text-sm font-medium tabular-nums">{n}</dd>

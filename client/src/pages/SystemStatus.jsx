@@ -13,7 +13,7 @@ const PHASES = [
 function Dot({ ok }) {
   return (
     <span
-      className={`inline-block size-2 rounded-full ${ok ? 'bg-success-soft0' : 'bg-danger-soft0'}`}
+      className={`inline-block size-2 rounded-full ${ok ? 'bg-success' : 'bg-danger'}`}
       aria-hidden="true"
     />
   );

@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useAdminOverview } from '../../api/auth.js';
+import StatTile from '../../components/StatTile.jsx';
 import PhaseNotice from '../../components/PhaseNotice.jsx';
 
+/* A tone each, so the four numbers are told apart at a glance rather than
+   read one by one. */
 const CARDS = [
-  ['students', 'Students'],
-  ['companies', 'Companies'],
-  ['jobsApproved', 'Jobs live'],
-  ['jobsPending', 'Awaiting approval'],
+  ['students', 'Students', 'accent'],
+  ['companies', 'Companies', 'info'],
+  ['jobsApproved', 'Jobs live', 'good'],
+  ['jobsPending', 'Awaiting approval', 'highlight'],
 ];
 
 export default function AdminDashboard() {
@@ -24,13 +27,13 @@ export default function AdminDashboard() {
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {CARDS.map(([key, label]) => (
-          <div key={key} className="rounded-xl border border-line bg-card p-5">
-            <p className="text-sm text-muted">{label}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
-              {isPending ? '—' : (data?.[key] ?? 0)}
-            </p>
-          </div>
+        {CARDS.map(([key, label, tone]) => (
+          <StatTile
+            key={key}
+            label={label}
+            tone={tone}
+            value={isPending ? '—' : (data?.[key] ?? 0)}
+          />
         ))}
       </div>
 

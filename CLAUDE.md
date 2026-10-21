@@ -49,6 +49,19 @@ enforces it, the client explains refusals with it. It is duplicated as a MongoDB
 filter (a per-student list must be narrowed in the query), and a test asserts
 the two return identical results over the same data. Do not add a third copy.
 
+**Colour exists exactly once**, in `client/src/index.css`, as role tokens
+(`card`, `muted`, `danger`, `accent-soft`) defined twice — under `:root` and
+`.dark`. Components name the role, never a hue, so a screen is written once and
+both themes follow. **Never write a Tailwind palette class** (`bg-white`,
+`text-slate-600`, `bg-emerald-50`) in this project; there is a token for it.
+The identity is a five-colour pastel set — `#CDB4DB #FFC8DD #FFAFCC #BDE0FE
+#A2D2FF` — which sits at L 0.80–0.89, so the pastels serve as the tint layer
+(and as text on dark), while text and solid fills use deeper shades derived at
+the same hue. Every pair that carries text was checked at 4.5:1 before being
+chosen; the ratio is in the CSS next to the value. The two line-chart series
+keep blue/amber rather than blue/pink, because blue against pink loses about
+four fifths of its separation under protanopia.
+
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
 
@@ -80,6 +93,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **dotenv `override: true`** | Needed so a parent's `PORT` can't steal the port — but it also meant `.env` beat the test runner and **the suite dropped the dev database**. `env.js` now reads `.env.test` when `NODE_ENV=test`, and `test/setup.js` refuses any DB whose name lacks "test". Do not remove either guard. |
 | **Vite proxy** | `/socket.io` needs its own entry with `ws: true`; `/api` alone silently breaks realtime. |
 | **`pkill -f "src/server.js"`** | Also kills the dev server started by the preview. Prefer stopping the preview properly. |
+| **Tailwind 50 vs 500** | Any rename sweeping `bg-x-50` before `bg-x-500` turns the latter into `bg-x-<new>0`, an invalid class that silently renders nothing. It ate every status dot and fit bar once. Order the longer key first. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---

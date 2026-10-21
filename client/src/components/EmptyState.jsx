@@ -1,6 +1,6 @@
 export default function EmptyState({ title, children }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-card/60 p-10 text-center">
+    <div className="rounded-xl border border-dashed border-info-line bg-info-soft/40 p-10 text-center">
       <p className="font-medium text-ink">{title}</p>
       {children && <p className="mx-auto mt-1 max-w-md text-sm text-muted">{children}</p>}
     </div>
