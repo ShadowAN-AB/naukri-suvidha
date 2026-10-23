@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { api, auth, makeJob, makeUser } from './helpers.js';
 import { ROLES, JOB_STATUS } from '../src/lib/constants.js';
+import { jobUpdateSchema } from '@nexus/shared';
 
 describe('the approval gate', () => {
   it('creates every job pending, whatever the recruiter sends', async () => {
@@ -68,7 +69,7 @@ describe('the approval gate', () => {
 
   it('leaves approval alone when only the description changes', async () => {
     const { profile: company, token } = await makeUser(ROLES.RECRUITER);
-    const job = await makeJob(company);
+    const job = await makeJob(company, { minCgpa: 6, allowedBranches: ['CSE'], maxBacklogs: 0 });
 
     const res = await api()
       .patch(`/api/jobs/${job._id}`)
@@ -78,6 +79,29 @@ describe('the approval gate', () => {
 
     expect(res.body.requeued).toBe(false);
     expect(res.body.job.status).toBe(JOB_STATUS.APPROVED);
+
+    // The rules themselves have to survive the edit, not just the approval.
+    expect(res.body.job.minCgpa).toBe(6);
+    expect(res.body.job.allowedBranches).toEqual(['CSE']);
+  });
+});
+
+/*
+ * Pinned because a Zod major bump already broke it once: v4 keeps a field's
+ * default through `.partial()` where v3 dropped it, which turned every edit
+ * into a full reset of the eligibility rules.
+ */
+describe('the update schema', () => {
+  it('sends only what was actually edited', () => {
+    const patch = jobUpdateSchema.parse({ description: 'A description long enough to pass.' });
+    expect(Object.keys(patch)).toEqual(['description']);
+  });
+
+  it('fills in no eligibility rule the caller left out', () => {
+    const patch = jobUpdateSchema.parse({ title: 'Backend Engineer' });
+    for (const field of ['minCgpa', 'maxBacklogs', 'allowedBranches', 'skillsRequired']) {
+      expect(patch[field]).toBeUndefined();
+    }
   });
 });
 
