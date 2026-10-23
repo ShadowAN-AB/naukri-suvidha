@@ -3,6 +3,7 @@ import { interviewScheduleSchema, fieldErrors, INTERVIEW_MODES } from '@nexus/sh
 
 import { useScheduleInterview } from '../api/interviews.js';
 import Field from './Field.jsx';
+import Button from './ui/Button.jsx';
 
 const MODE_LABEL = { online: 'Online', onsite: 'On site', phone: 'Phone' };
 
@@ -35,11 +36,11 @@ export default function ScheduleInterview({ applicationId, onDone }) {
   };
 
   return (
-    <form onSubmit={onSubmit} noValidate className="mt-3 rounded-lg border border-line bg-slate-50 p-4">
+    <form onSubmit={onSubmit} noValidate className="mt-3 rounded-lg border border-line bg-subtle p-4">
       <p className="text-sm font-medium">Schedule an interview</p>
 
       {formError && (
-        <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           {formError}
         </p>
       )}
@@ -52,7 +53,7 @@ export default function ScheduleInterview({ applicationId, onDone }) {
             onClick={() => setMode(m)}
             aria-pressed={mode === m}
             className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-              mode === m ? 'border-accent bg-accent/10 text-accent' : 'border-line bg-white text-muted hover:text-ink'
+              mode === m ? 'border-accent bg-accent-soft text-accent-strong' : 'border-line bg-card text-muted hover:text-ink'
             }`}
           >
             {MODE_LABEL[m]}
@@ -77,14 +78,12 @@ export default function ScheduleInterview({ applicationId, onDone }) {
       )}
 
       <div className="mt-4 flex gap-2">
-        <button
+        <Button variant="primary" size="sm"
           type="submit"
-          disabled={schedule.isPending}
-          className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={schedule.isPending}>
           {schedule.isPending ? 'Scheduling…' : 'Schedule'}
-        </button>
-        <button type="button" onClick={onDone} className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm hover:bg-slate-50">
+        </Button>
+        <button type="button" onClick={onDone} className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm hover:bg-subtle">
           Cancel
         </button>
       </div>

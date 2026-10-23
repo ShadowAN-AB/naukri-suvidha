@@ -3,6 +3,8 @@ import { studentProfileUpdateSchema, companyProfileUpdateSchema, fieldErrors, BR
 
 import { useMyProfile, useUpdateProfile } from '../api/profiles.js';
 import Field from '../components/Field.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import Button from '../components/ui/Button.jsx';
 
 export default function Profile() {
   const { data, isPending } = useMyProfile();
@@ -17,8 +19,10 @@ export default function Profile() {
   if (kind === 'admin') {
     return (
       <>
-        <h1 className="text-2xl font-semibold tracking-tight">Your account</h1>
-        <p className="mt-1 text-muted">Placement office accounts have no profile to edit.</p>
+        <PageHeader
+          title="Your account"
+          description="Placement office accounts have no profile to edit."
+        />
       </>
     );
   }
@@ -58,21 +62,23 @@ export default function Profile() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
-      <p className="mt-1 text-muted">
-        {isStudent
-          ? 'Your CGPA, backlogs and branch decide which jobs you are eligible for.'
-          : 'This is what students see next to your postings.'}
-      </p>
+      <PageHeader
+        title="Your profile"
+        description={
+          isStudent
+            ? 'Your CGPA, backlogs and branch decide which jobs you are eligible for.'
+            : 'This is what students see next to your postings.'
+        }
+      />
 
       <form onSubmit={onSubmit} noValidate className="mt-8 max-w-xl space-y-5">
         {formError && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
             {formError}
           </p>
         )}
         {saved && (
-          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved.</p>
+          <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">Saved.</p>
         )}
 
         {isStudent ? (
@@ -112,19 +118,17 @@ export default function Profile() {
                 name="description"
                 rows={4}
                 defaultValue={profile.description ?? ''}
-                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+                className="mt-1 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
               />
             </div>
           </>
         )}
 
-        <button
+        <Button variant="primary" size="md"
           type="submit"
-          disabled={update.isPending}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={update.isPending}>
           {update.isPending ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
       </form>
     </>
   );

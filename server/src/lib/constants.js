@@ -98,3 +98,12 @@ export const EVENTS = Object.freeze({
   APPLICATION_STATUS_CHANGED: 'application.status_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
 });
+
+export const EVENT_DELIVERY_STATUS = Object.freeze({
+  PENDING: 'pending',
+  RUNNING: 'running',
+  DONE: 'done',
+  /** Out of attempts. The dead-letter end of the queue. */
+  DEAD: 'dead',
+});
+export const EVENT_DELIVERY_STATUS_VALUES = Object.values(EVENT_DELIVERY_STATUS);

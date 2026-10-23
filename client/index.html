@@ -3,7 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus — Campus Placement</title>
+    <meta
+      name="description"
+      content="Naukri Suvidha — an AI-assisted campus placement portal. Every job ranked by how well you fit it, with the reasoning attached."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Naukri Suvidha — Campus Placement</title>
+    <script>
+      /*
+       * Runs before the first paint. React mounts a moment later, so without
+       * this anyone who chose dark gets a white flash on every page load.
+       * The key and the fallback must stay in step with ThemeContext.jsx.
+       */
+      (function () {
+        try {
+          var stored = localStorage.getItem('nexus-theme');
+          var dark =
+            stored === 'dark' ||
+            (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* Private mode: fall through to the light theme. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

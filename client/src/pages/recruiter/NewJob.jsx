@@ -4,6 +4,8 @@ import { jobCreateSchema, fieldErrors, BRANCHES } from '@nexus/shared';
 
 import { useCreateJob } from '../../api/jobs.js';
 import Field from '../../components/Field.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 export default function NewJob() {
   const navigate = useNavigate();
@@ -48,14 +50,14 @@ export default function NewJob() {
       <Link to="/jobs" className="text-sm text-muted hover:text-ink">
         ← Your postings
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Post a job</h1>
-      <p className="mt-1 text-muted">
-        The placement office reviews every posting. Students see it only after approval.
-      </p>
+      <PageHeader
+        title="Post a job"
+        description="The placement office reviews every posting. Students see it only after approval."
+      />
 
       <form onSubmit={onSubmit} noValidate className="mt-8 max-w-2xl space-y-5">
         {formError && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
             {formError}
           </p>
         )}
@@ -72,11 +74,11 @@ export default function NewJob() {
             rows={6}
             required
             aria-invalid={!!errors.description}
-            className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30 ${
-              errors.description ? 'border-red-400' : 'border-line focus:border-accent'
+            className={`mt-1 w-full rounded-lg border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30 ${
+              errors.description ? 'border-danger' : 'border-line focus:border-accent'
             }`}
           />
-          {errors.description && <p className="mt-1 text-xs text-red-600">{errors.description}</p>}
+          {errors.description && <p className="mt-1 text-xs text-danger">{errors.description}</p>}
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
@@ -92,7 +94,7 @@ export default function NewJob() {
           error={errors.skillsRequired}
         />
 
-        <fieldset className="rounded-xl border border-line bg-white p-4">
+        <fieldset className="rounded-xl border border-line bg-card p-4">
           <legend className="px-1 text-sm font-medium">Eligibility</legend>
           <p className="text-xs text-muted">
             These rules decide who can see and apply to this job. Changing them after approval
@@ -119,13 +121,11 @@ export default function NewJob() {
           </div>
         </fieldset>
 
-        <button
+        <Button variant="primary" size="md"
           type="submit"
-          disabled={createJob.isPending}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={createJob.isPending}>
           {createJob.isPending ? 'Submitting…' : 'Submit for approval'}
-        </button>
+        </Button>
       </form>
     </>
   );

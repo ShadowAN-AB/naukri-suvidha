@@ -5,8 +5,12 @@ import { registerSchema, fieldErrors, BRANCHES, CURRENT_BATCH_YEARS, ROLES, HOME
 import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
 import AuthLayout from '../../layouts/AuthLayout.jsx';
+import Button from '../../components/ui/Button.jsx';
+import { useDocumentTitle } from '../../lib/useDocumentTitle.js';
 
 export default function Register() {
+  useDocumentTitle('Create an account');
+
   const { user, ready, register } = useAuth();
   const navigate = useNavigate();
 
@@ -64,8 +68,8 @@ export default function Register() {
               }}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 role === value
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-line bg-white text-muted hover:text-ink'
+                  ? 'border-accent bg-accent-soft text-accent-strong'
+                  : 'border-line bg-card text-muted hover:text-ink'
               }`}
             >
               {label}
@@ -75,7 +79,7 @@ export default function Register() {
 
         <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
           {formError && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
               {formError}
             </p>
           )}
@@ -127,13 +131,11 @@ export default function Register() {
             </>
           )}
 
-          <button
+          <Button variant="primary" size="md" className="w-full"
             type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-          >
+            disabled={busy}>
             {busy ? 'Creating…' : 'Create account'}
-          </button>
+          </Button>
         </form>
 
       <p className="mt-6 text-sm text-muted">

@@ -3,24 +3,31 @@ import { StatusPill, StageTrack } from '../../components/ApplicationStatus.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import InterviewList from '../../components/InterviewList.jsx';
 import { formatDate, inr } from '../../lib/format.js';
+import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 const CAN_WITHDRAW = ['applied', 'shortlisted', 'interview'];
 
 export default function Applications() {
   const { data, isPending } = useApplications({ limit: 100 });
   const withdraw = useWithdraw();
+  const toast = useToast();
   const items = data?.items ?? [];
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your applications</h1>
-      <p className="mt-1 text-muted">
-        {isPending ? 'Loading…' : `${items.length} application${items.length === 1 ? '' : 's'}`}
-      </p>
+      <PageHeader
+        title="Your applications"
+        description={isPending ? 'Loading…' : `${items.length} application${items.length === 1 ? '' : 's'}`}
+      />
 
       <InterviewList heading="Your upcoming interviews" />
 
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={2} />}
+
         {!isPending && items.length === 0 && (
           <EmptyState title="You have not applied to anything yet">
             Open jobs you are eligible for appear under Jobs.
@@ -28,7 +35,7 @@ export default function Applications() {
         )}
 
         {items.map((a) => (
-          <article key={a._id} className="rounded-xl border border-line bg-white p-5">
+          <article key={a._id} className="rounded-xl border border-line bg-card p-5">
             <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
               <h2 className="text-base font-semibold tracking-tight">
                 {a.jobId?.title ?? 'A job that no longer exists'}
@@ -57,13 +64,16 @@ export default function Applications() {
 
             {CAN_WITHDRAW.includes(a.status) && (
               <div className="mt-4 border-t border-line pt-3">
-                <button
-                  onClick={() => withdraw.mutate(a._id)}
-                  disabled={withdraw.isPending}
-                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-50"
-                >
+                <Button variant="secondary" size="sm"
+                  onClick={() =>
+                    withdraw.mutate(a._id, {
+                      onSuccess: () => toast.success('Application withdrawn.'),
+                      onError: (err) => toast.error(err.message),
+                    })
+                  }
+                  disabled={withdraw.isPending}>
                   Withdraw
-                </button>
+                </Button>
               </div>
             )}
           </article>

@@ -1,3 +1,5 @@
+import Badge from './ui/Badge.jsx';
+
 /**
  * A fit score with the reasoning behind it.
  *
@@ -8,10 +10,10 @@
  */
 
 function band(score) {
-  if (score >= 80) return { ring: 'ring-emerald-200', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500' };
-  if (score >= 60) return { ring: 'ring-blue-200', bg: 'bg-blue-50', text: 'text-blue-700', bar: 'bg-blue-500' };
-  if (score >= 40) return { ring: 'ring-amber-200', bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500' };
-  return { ring: 'ring-slate-200', bg: 'bg-slate-100', text: 'text-slate-600', bar: 'bg-slate-400' };
+  if (score >= 80) return { tone: 'success', text: 'text-success', bar: 'bg-success' };
+  if (score >= 60) return { tone: 'accent', text: 'text-accent-strong', bar: 'bg-accent' };
+  if (score >= 40) return { tone: 'info', text: 'text-info-strong', bar: 'bg-info' };
+  return { tone: 'neutral', text: 'text-chip-ink', bar: 'bg-muted' };
 }
 
 const PARTS = [
@@ -23,22 +25,19 @@ const PARTS = [
 /** The compact number, for a card header. */
 export function FitBadge({ fit }) {
   if (!fit) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200">
-        Scoring…
-      </span>
-    );
+    return <Badge tone="muted">Scoring…</Badge>;
   }
   const c = band(fit.score);
   return (
-    <span
+    <Badge
+      tone={c.tone}
+      className="font-semibold"
       title={fit.fallback ? 'Estimated without the model' : `Scored by ${fit.model}`}
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${c.bg} ${c.text} ${c.ring}`}
     >
       {fit.score}
       <span className="font-normal opacity-70">fit</span>
       {fit.fallback && <span className="font-normal opacity-70">· est.</span>}
-    </span>
+    </Badge>
   );
 }
 
@@ -55,7 +54,7 @@ export default function FitScore({ fit }) {
   const c = band(fit.score);
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-slate-50/60 p-3">
+    <div className="mt-3 rounded-lg border border-line bg-subtle/60 p-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className={`text-lg font-semibold tabular-nums ${c.text}`}>{fit.score}</span>
 
@@ -66,7 +65,7 @@ export default function FitScore({ fit }) {
                 <dt>{label}</dt>
                 <dd className="tabular-nums">{fit.breakdown?.[key] ?? '—'}</dd>
               </div>
-              <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-200">
+              <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-track">
                 <div
                   className={`h-full rounded-full ${c.bar}`}
                   style={{ width: `${Math.max(0, Math.min(100, fit.breakdown?.[key] ?? 0))}%` }}

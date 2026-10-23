@@ -1,13 +1,255 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 
-@theme {
-  --color-ink: oklch(0.21 0.02 260);
-  --color-muted: oklch(0.55 0.02 260);
-  --color-line: oklch(0.91 0.01 260);
-  --color-accent: oklch(0.55 0.19 258);
-  --color-surface: oklch(0.99 0.002 260);
+/*
+ * Dark mode is a class on <html>, not a media query: the toggle in the header
+ * has to be able to override the system preference, and a media query cannot
+ * be overridden from JS. index.html sets the class before first paint.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Every colour lives here twice and nowhere else. Components name a role -
+ * card, muted, danger - so a screen is written once and both themes follow.
+ * Pairs that carry text were checked against WCAG AA (4.5:1) before being
+ * chosen; the ratio is noted where it is close enough to matter.
+ */
+:root {
+  color-scheme: light;
+
+  /* Neutrals carry a little of the palette's blue so nothing reads as grey. */
+  --surface: oklch(0.985 0.008 265);
+  --card: oklch(1 0 0);
+  --subtle: oklch(0.955 0.015 265);
+  --track: oklch(0.92 0.02 265);
+  --line: oklch(0.9 0.018 265);
+
+  --ink: oklch(0.22 0.025 275);
+  --muted: oklch(0.54 0.03 272);
+  --chip-ink: oklch(0.4 0.04 272);
+
+  /* Blue — the primary. #BDE0FE and #A2D2FF straight from the palette. */
+  --accent: oklch(0.52 0.13 247);
+  --accent-solid: oklch(0.52 0.13 247);
+  --accent-soft: oklch(0.891 0.056 244);
+  --accent-line: oklch(0.846 0.081 247);
+  --accent-strong: oklch(0.44 0.14 247);
+  --on-solid: oklch(1 0 0);
+
+  /* Pink — #FFC8DD and #FFAFCC. */
+  --highlight: oklch(0.54 0.16 355);
+  --highlight-soft: oklch(0.887 0.068 354);
+  --highlight-line: oklch(0.838 0.1 356);
+  --highlight-strong: oklch(0.46 0.17 355);
+  --highlight-solid: oklch(0.54 0.18 355); /* white on this: 5.60 */
+
+  /* Lavender — #CDB4DB. */
+  --info: oklch(0.52 0.17 313.5);
+  --info-soft: oklch(0.93 0.04 313.5);
+  --info-line: oklch(0.804 0.06 313.5);
+  --info-strong: oklch(0.44 0.18 313.5);
+
+  --success: oklch(0.52 0.13 155);
+  --success-soft: oklch(0.95 0.045 155);
+  --success-line: oklch(0.86 0.08 160);
+
+  --warning: oklch(0.52 0.12 75);
+  --warning-soft: oklch(0.96 0.05 85);
+  --warning-line: oklch(0.87 0.09 80);
+
+  --danger: oklch(0.51 0.19 25);
+  --danger-soft: oklch(0.95 0.04 20);
+  --danger-line: oklch(0.87 0.08 22);
+  --danger-solid: oklch(0.51 0.19 25);
+
+  /* chart-1 and chart-2 are the only pair a reader must tell apart, so they
+     keep the blue/amber separation: under protanopia blue against pink falls
+     to about a fifth of it. chart-3 and chart-4 label single series, where
+     there is nothing to confuse them with. */
+  /* The magnet field. A tint is invisible on a near-white page (1.5:1), so
+     this is a mid-tone of the same blue: present, but still decoration. */
+  --filings: oklch(0.68 0.11 247);
+
+  /*
+   * The nav rail. Deliberately the same deep indigo in both themes rather
+   * than following the surface: in light it gives the page a vertical anchor
+   * instead of a white panel edged by a hairline, and in dark it sits just
+   * above the card so it still reads as a rail. Because it never changes, it
+   * carries its own ink - the global --ink would be black on navy.
+   */
+  --sidebar: oklch(0.25 0.05 268);
+  --sidebar-ink: oklch(0.97 0.01 270);
+  --sidebar-muted: oklch(0.76 0.03 270);
+  --sidebar-line: oklch(0.33 0.04 268);
+  --sidebar-hover: oklch(0.3 0.06 266);
+  --sidebar-active: oklch(0.35 0.085 262);
+  --sidebar-active-ink: oklch(0.88 0.08 250);
+  /* The brand pink has to lift off navy, where --highlight-solid is 2.87:1. */
+  --sidebar-mark: oklch(0.7 0.17 355);
+
+  --chart-1: #0076c3;
+  --chart-2: #d97706;
+  --chart-3: #d43b86;
+  --chart-4: #9a41c1;
 }
 
-html {
-  -webkit-font-smoothing: antialiased;
+.dark {
+  color-scheme: dark;
+
+  --surface: oklch(0.18 0.022 275);
+  --card: oklch(0.225 0.025 275);
+  --subtle: oklch(0.275 0.028 275);
+  --track: oklch(0.32 0.03 275);
+  --line: oklch(0.32 0.028 275);
+
+  --ink: oklch(0.96 0.01 280);
+  --muted: oklch(0.72 0.03 278);
+  --chip-ink: oklch(0.8 0.03 278);
+
+  /* On a dark surface the palette works as ink rather than as tint, so the
+     pastels move to the text roles and the deep shades become the fills. */
+  --accent: oklch(0.846 0.081 247);
+  --accent-solid: oklch(0.52 0.13 247);
+  --accent-solid-hover: oklch(0.56 0.13 247);
+  --danger-solid-hover: oklch(0.57 0.17 25);
+  --accent-soft: oklch(0.3 0.07 247);
+  --accent-line: oklch(0.42 0.09 247);
+  --accent-strong: oklch(0.88 0.07 247);
+  --on-solid: oklch(1 0 0);
+
+  --highlight: oklch(0.838 0.1 356);
+  --highlight-soft: oklch(0.3 0.08 355);
+  --highlight-line: oklch(0.42 0.1 355);
+  --highlight-strong: oklch(0.89 0.07 353);
+  --highlight-solid: oklch(0.54 0.18 355);
+
+  --info: oklch(0.804 0.06 313.5);
+  --info-soft: oklch(0.3 0.06 313.5);
+  --info-line: oklch(0.42 0.08 313.5);
+  --info-strong: oklch(0.86 0.06 313.5);
+
+  --success: oklch(0.82 0.14 155);
+  --success-soft: oklch(0.28 0.055 155);
+  --success-line: oklch(0.4 0.08 155);
+
+  --warning: oklch(0.84 0.13 85);
+  --warning-soft: oklch(0.29 0.055 75);
+  --warning-line: oklch(0.41 0.08 78);
+
+  --danger: oklch(0.78 0.15 20);
+  --danger-soft: oklch(0.3 0.075 20);
+  --danger-line: oklch(0.42 0.1 22);
+  /* Stays dark in both themes: a solid fill has to keep white legible. */
+  --danger-solid: oklch(0.51 0.19 25);
+
+  --filings: oklch(0.52 0.09 247);
+
+  --chart-1: #a2d2ff;
+  --chart-2: #e8a93c;
+  --chart-3: #ffafcc;
+  --chart-4: #cdb4db;
+}
+
+/*
+ * `inline` matters: it makes the generated utility emit var(--card) rather
+ * than baking the value in, which is what lets the class on <html> repaint
+ * the whole app without a rebuild.
+ */
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-subtle: var(--subtle);
+  --color-track: var(--track);
+  --color-line: var(--line);
+
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-chip-ink: var(--chip-ink);
+
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
+  --color-on-solid: var(--on-solid);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-accent-strong: var(--accent-strong);
+
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
+  --color-highlight-line: var(--highlight-line);
+  --color-highlight-strong: var(--highlight-strong);
+  --color-highlight-solid: var(--highlight-solid);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-hover: var(--danger-solid-hover);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-info-strong: var(--info-strong);
+
+  --color-filings: var(--filings);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-ink: var(--sidebar-ink);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-ink: var(--sidebar-active-ink);
+  --color-sidebar-mark: var(--sidebar-mark);
+}
+
+/*
+ * These live in `base` rather than at the top level on purpose. Unlayered CSS
+ * beats everything in @layer utilities no matter the specificity, so an
+ * unlayered :focus-visible rule cannot be turned off by a
+ * `focus-visible:outline-none` utility - which is exactly what inputs need,
+ * since they draw their own ring and would otherwise show two indicators.
+ */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background-color: var(--highlight-soft);
+    color: var(--highlight-strong);
+  }
+
+  /* Someone tabbing through gets the same ring everywhere, including on the
+     bare <button>s that carried no focus style at all. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

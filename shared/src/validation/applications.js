@@ -34,7 +34,7 @@ export const RECRUITER_STATUSES = Object.freeze([
 
 export const changeStatusSchema = z.object({
   status: z.enum(RECRUITER_STATUSES, {
-    errorMap: () => ({ message: 'Choose a valid stage' }),
+    error: 'Choose a valid stage',
   }),
   note: z.string().trim().max(500).optional().or(z.literal('')),
 });

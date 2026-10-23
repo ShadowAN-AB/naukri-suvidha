@@ -8,6 +8,10 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ScheduleInterview from '../../components/ScheduleInterview.jsx';
 import { formatDate } from '../../lib/format.js';
 import { APPLICATION_TRANSITIONS } from '@nexus/shared';
+import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { ListSkeleton } from '../../components/ui/Skeleton.jsx';
 
 const NEXT_LABEL = {
   shortlisted: 'Shortlist',
@@ -18,35 +22,39 @@ const NEXT_LABEL = {
 
 export default function Applicants() {
   const [jobId, setJobId] = useState('');
-  const { data: jobsData } = useJobs({ limit: 100 });
+  // 50 is the schema's ceiling; 100 came back 400 and left the filter empty.
+  const { data: jobsData } = useJobs({ limit: 50 });
   const { data, isPending } = useApplications({ jobId: jobId || undefined, limit: 100 });
   const changeStatus = useChangeStatus();
-  const [error, setError] = useState(null);
+  const toast = useToast();
   const [scheduling, setScheduling] = useState(null);
 
   const jobs = jobsData?.items ?? [];
   const items = data?.items ?? [];
 
   const move = (id, status) => {
-    setError(null);
-    changeStatus.mutate({ id, status }, { onError: (err) => setError(err.message) });
+    changeStatus.mutate(
+      { id, status },
+      {
+        onSuccess: () => toast.success(`Moved to ${NEXT_LABEL[status] ?? status}.`),
+        onError: (err) => toast.error(err.message),
+      },
+    );
   };
 
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Applicants</h1>
-          <p className="mt-1 text-muted">
-            {isPending ? 'Loading…' : `${items.length} across your postings · best fit first`}
-          </p>
-        </div>
+        <PageHeader
+          title="Applicants"
+          description={isPending ? 'Loading…' : `${items.length} across your postings · best fit first`}
+        />
         <label className="text-sm">
           <span className="sr-only">Filter by job</span>
           <select
             value={jobId}
             onChange={(e) => setJobId(e.target.value)}
-            className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+            className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           >
             <option value="">All postings</option>
             {jobs.map((j) => (
@@ -58,13 +66,9 @@ export default function Applicants() {
         </label>
       </div>
 
-      {error && (
-        <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
       <div className="mt-6 space-y-4">
+        {isPending && <ListSkeleton count={3} />}
+
         {!isPending && items.length === 0 && (
           <EmptyState title="No applicants yet">
             Students see a posting only after the placement office approves it.
@@ -75,7 +79,7 @@ export default function Applicants() {
           const s = a.studentId ?? {};
           const next = APPLICATION_TRANSITIONS[a.status] ?? [];
           return (
-            <article key={a._id} className="rounded-xl border border-line bg-white p-5">
+            <article key={a._id} className="rounded-xl border border-line bg-card p-5">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
                 <h2 className="text-base font-semibold tracking-tight">{s.name ?? 'Unknown student'}</h2>
                 <FitBadge fit={a.fit} />
@@ -94,7 +98,7 @@ export default function Applicants() {
               {s.skills?.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-1.5">
                   {s.skills.slice(0, 10).map((skill) => (
-                    <li key={skill} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                    <li key={skill} className="rounded bg-highlight-soft/60 px-2 py-0.5 text-xs font-medium text-highlight-strong">
                       {skill}
                     </li>
                   ))}
@@ -109,12 +113,10 @@ export default function Applicants() {
                 )}
                 <span className="ml-auto flex flex-wrap gap-2">
                   {['shortlisted', 'interview'].includes(a.status) && (
-                    <button
-                      onClick={() => setScheduling(scheduling === a._id ? null : a._id)}
-                      className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-slate-50"
-                    >
+                    <Button variant="secondary" size="sm"
+                      onClick={() => setScheduling(scheduling === a._id ? null : a._id)}>
                       Schedule
-                    </button>
+                    </Button>
                   )}
                   {next.length === 0 && <span className="text-sm text-muted">No further action</span>}
                   {next.map((status) => (
@@ -124,8 +126,8 @@ export default function Applicants() {
                       disabled={changeStatus.isPending}
                       className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
                         status === 'rejected'
-                          ? 'border border-line hover:bg-slate-50'
-                          : 'bg-accent text-white hover:opacity-90'
+                          ? 'border border-line hover:bg-subtle'
+                          : 'bg-accent-solid text-on-solid hover:opacity-90'
                       }`}
                     >
                       {NEXT_LABEL[status] ?? status}

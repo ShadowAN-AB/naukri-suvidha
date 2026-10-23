@@ -35,7 +35,7 @@ const STATUS_COPY = {
 
 export function registerNotificationConsumers() {
   // A posting going live is news for the recruiter who submitted it.
-  eventBus.subscribe(EVENTS.JOB_APPROVED, async ({ jobId }) => {
+  eventBus.subscribe(EVENTS.JOB_APPROVED, 'notifications:job-approved', async ({ jobId }) => {
     const { userId, job } = await userOfCompanyForJob(jobId);
     await notify({
       userId,
@@ -47,7 +47,7 @@ export function registerNotificationConsumers() {
   });
 
   // A new applicant is news for the recruiter.
-  eventBus.subscribe(EVENTS.APPLICATION_SUBMITTED, async ({ jobId, studentId }) => {
+  eventBus.subscribe(EVENTS.APPLICATION_SUBMITTED, 'notifications:application-submitted', async ({ jobId, studentId }) => {
     const [{ userId, job }, student] = await Promise.all([
       userOfCompanyForJob(jobId),
       Student.findById(studentId).select('name rollNo').lean(),
@@ -62,7 +62,7 @@ export function registerNotificationConsumers() {
   });
 
   // A status change is news for the student, and also a live update.
-  eventBus.subscribe(EVENTS.APPLICATION_STATUS_CHANGED, async ({ applicationId, studentId, jobId, status }) => {
+  eventBus.subscribe(EVENTS.APPLICATION_STATUS_CHANGED, 'notifications:application-status-changed', async ({ applicationId, studentId, jobId, status }) => {
     const [userId, job] = await Promise.all([
       userOfStudent(studentId),
       Job.findById(jobId).select('title').lean(),
@@ -88,7 +88,7 @@ export function registerNotificationConsumers() {
   });
 
   // A parsed resume is news for the student, who has been waiting on it.
-  eventBus.subscribe(EVENTS.RESUME_PROCESSED, async ({ resumeId, studentId, fallback }) => {
+  eventBus.subscribe(EVENTS.RESUME_PROCESSED, 'notifications:resume-processed', async ({ resumeId, studentId, fallback }) => {
     const userId = await userOfStudent(studentId);
     await notify({
       userId,
@@ -109,7 +109,7 @@ export function registerNotificationConsumers() {
   });
 
   // A scheduled interview is news for the student.
-  eventBus.subscribe(EVENTS.INTERVIEW_SCHEDULED, async ({ applicationId, scheduledAt, mode }) => {
+  eventBus.subscribe(EVENTS.INTERVIEW_SCHEDULED, 'notifications:interview-scheduled', async ({ applicationId, scheduledAt, mode }) => {
     const application = await Application.findById(applicationId).select('studentId jobId').lean();
     if (!application) return;
     const [userId, job] = await Promise.all([

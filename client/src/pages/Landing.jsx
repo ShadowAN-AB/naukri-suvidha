@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { IronFilings } from '../components/ui/IronFilings.jsx';
+import Button from '../components/ui/Button.jsx';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 
 /**
  * The signed-out front door.
@@ -12,6 +14,8 @@ import { IronFilings } from '../components/ui/IronFilings.jsx';
  * colour for the filings; the content sets text-ink back for the copy.
  */
 export default function Landing() {
+  useDocumentTitle();
+
   return (
     <IronFilings
       spacing={16}
@@ -19,7 +23,7 @@ export default function Landing() {
       /* Track globally so the magnet keeps following over the buttons, which
          sit above the field and would otherwise swallow the pointer. */
       pointerSource="window"
-      className="flex min-h-dvh w-full items-center justify-center bg-surface text-muted"
+      className="flex min-h-dvh w-full items-center justify-center bg-surface text-filings"
     >
       <div className="pointer-events-none relative select-none px-6 text-center text-ink">
         <div
@@ -28,13 +32,13 @@ export default function Landing() {
         />
 
         <p className="mb-4 text-xs font-medium uppercase tracking-[0.3em] text-muted">
-          Nexus · campus placement
+          Naukri Suvidha · campus placement
         </p>
 
         <h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">
           The right role
           <br />
-          <span className="italic">pulls.</span>
+          <span className="italic text-highlight">pulls.</span>
         </h1>
 
         <p className="mx-auto mt-5 max-w-md text-sm text-muted sm:text-base">
@@ -43,18 +47,14 @@ export default function Landing() {
         </p>
 
         <div className="pointer-events-auto mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/login"
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-          >
+          <Button as={Link} variant="primary" size="lg"
+            to="/login">
             Sign in
-          </Link>
-          <Link
-            to="/register"
-            className="rounded-lg border border-line bg-white/80 px-5 py-2.5 text-sm font-medium text-ink backdrop-blur transition hover:bg-white"
-          >
+          </Button>
+          <Button as={Link} variant="secondary" size="lg" className="bg-card/80 backdrop-blur"
+            to="/register">
             Create an account
-          </Link>
+          </Button>
         </div>
 
         {/* Pointer-only instruction: there is no cursor to move on a touchscreen. */}

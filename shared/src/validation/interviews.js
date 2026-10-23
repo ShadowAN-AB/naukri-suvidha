@@ -10,7 +10,7 @@ export const interviewScheduleSchema = z
       .regex(/^[a-f0-9]{24}$/i, 'That does not look like a valid id'),
     scheduledAt: z.coerce.date().refine((d) => d > new Date(), 'Pick a time in the future'),
     durationMinutes: z.coerce.number().int().min(5).max(480).default(30),
-    mode: z.enum(INTERVIEW_MODES, { errorMap: () => ({ message: 'Choose a mode' }) }),
+    mode: z.enum(INTERVIEW_MODES, { error: 'Choose a mode' }),
     meetingLink: z.string().trim().url('Enter a valid URL').optional().or(z.literal('')),
     location: z.string().trim().max(160).optional().or(z.literal('')),
     notes: z.string().trim().max(1000).optional().or(z.literal('')),

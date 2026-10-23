@@ -3,6 +3,8 @@ import { useMyResumes, useUploadResume } from '../../api/resumes.js';
 import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import { formatDate } from '../../lib/format.js';
+import PageHeader from '../../components/PageHeader.jsx';
+import Button from '../../components/ui/Button.jsx';
 
 const MAX_MB = 5;
 
@@ -38,10 +40,10 @@ export default function Resume() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Your résumé</h1>
-      <p className="mt-1 text-muted">
-        Upload once. The newest version is the one sent with every application you make.
-      </p>
+      <PageHeader
+        title="Your résumé"
+        description="Upload once. The newest version is the one sent with every application you make."
+      />
 
       <div
         onDragOver={(e) => {
@@ -55,18 +57,16 @@ export default function Resume() {
           send(e.dataTransfer.files?.[0]);
         }}
         className={`mt-6 rounded-xl border-2 border-dashed p-8 text-center transition ${
-          dragging ? 'border-accent bg-accent/5' : 'border-line bg-white'
+          dragging ? 'border-accent bg-accent-soft/50' : 'border-line bg-card'
         }`}
       >
         <p className="text-sm font-medium">Drag a file here, or</p>
-        <button
+        <Button variant="primary" size="md" className="mt-3"
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={upload.isPending}
-          className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={upload.isPending}>
           {upload.isPending ? 'Uploading…' : 'Choose a file'}
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -81,13 +81,13 @@ export default function Resume() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
 
       {upload.data?.warning && (
-        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mt-4 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
           Uploaded, but no text could be read from it: {upload.data.warning} You can still
           apply, though the ranking in phase 5 will have nothing to work from.
         </p>
@@ -103,19 +103,19 @@ export default function Resume() {
         )}
 
         {items.map((r) => (
-          <div key={r._id} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-white p-4">
+          <div key={r._id} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-card p-4">
             <span className="font-medium">v{r.version}</span>
             <span className="min-w-0 flex-1 truncate text-sm text-muted">{r.originalName}</span>
 
             {String(r._id) === String(currentId) && (
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+              <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success ring-1 ring-inset ring-success-line">
                 In use
               </span>
             )}
             {r.parseStatus === 'failed' && (
               <span
                 title={r.parseError ?? ''}
-                className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200"
+                className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning ring-1 ring-inset ring-warning-line"
               >
                 No text found
               </span>

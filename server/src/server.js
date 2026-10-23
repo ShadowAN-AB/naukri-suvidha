@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import { aiWorker } from './modules/ai/worker.js';
+import { eventRetryWorker } from './infra/events/retryWorker.js';
 import { initRealtime, closeRealtime } from './modules/realtime/index.js';
 import { registerNotificationConsumers } from './modules/notifications/consumers.js';
 
@@ -13,6 +14,8 @@ async function main() {
   // left unfinished. Started before listening so no event is missed.
   registerNotificationConsumers();
   await aiWorker.start();
+  // Started after the consumers, so a retry has handlers to find.
+  await eventRetryWorker.start();
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
@@ -25,6 +28,7 @@ async function main() {
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
+      eventRetryWorker.stop();
       await closeRealtime();
       await disconnectDb();
       logger.info('shutdown complete');

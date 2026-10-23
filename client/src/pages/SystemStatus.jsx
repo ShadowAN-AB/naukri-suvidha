@@ -1,4 +1,5 @@
 import { useHealth } from '../api/health.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 
 const PHASES = [
   ['1', 'Foundation', 'scaffold, 11 schemas, seed data, infra interfaces', 'current'],
@@ -13,25 +14,27 @@ const PHASES = [
 function Dot({ ok }) {
   return (
     <span
-      className={`inline-block size-2 rounded-full ${ok ? 'bg-emerald-500' : 'bg-red-500'}`}
+      className={`inline-block size-2 rounded-full ${ok ? 'bg-success' : 'bg-danger'}`}
       aria-hidden="true"
     />
   );
 }
 
 export default function SystemStatus() {
+  useDocumentTitle('System status');
+
   const { data, isPending, isError, error } = useHealth();
 
   return (
     <main className="min-h-dvh bg-surface text-ink">
       <div className="mx-auto max-w-2xl px-6 py-16">
-        <p className="text-sm font-medium tracking-wide text-muted uppercase">Nexus</p>
+        <p className="text-sm font-medium tracking-wide text-muted uppercase">Naukri Suvidha</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Campus placement portal</h1>
         <p className="mt-3 text-muted">
           Phase 1 of 7 — foundation. This page exists to prove the stack is wired end to end.
         </p>
 
-        <section className="mt-10 rounded-xl border border-line bg-white p-5">
+        <section className="mt-10 rounded-xl border border-line bg-card p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             System status
           </h2>
@@ -40,7 +43,7 @@ export default function SystemStatus() {
 
           {isError && (
             <div className="mt-3 text-sm">
-              <p className="flex items-center gap-2 font-medium text-red-600">
+              <p className="flex items-center gap-2 font-medium text-danger">
                 <Dot ok={false} /> API unreachable
               </p>
               <p className="mt-1 text-muted">
@@ -48,7 +51,7 @@ export default function SystemStatus() {
                 {error.requestId ? ` (request ${error.requestId.slice(0, 8)})` : ''}
               </p>
               <p className="mt-2 text-muted">
-                Is the server running? <code className="rounded bg-slate-100 px-1">npm run dev</code>
+                Is the server running? <code className="rounded bg-subtle px-1">npm run dev</code>
               </p>
             </div>
           )}
@@ -73,14 +76,14 @@ export default function SystemStatus() {
 
         <section className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Build phases</h2>
-          <ol className="mt-3 divide-y divide-line rounded-xl border border-line bg-white">
+          <ol className="mt-3 divide-y divide-line rounded-xl border border-line bg-card">
             {PHASES.map(([n, name, detail, state]) => (
               <li key={n} className="flex gap-4 px-5 py-3">
                 <span
                   className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                     state === 'current'
-                      ? 'bg-accent text-white'
-                      : 'bg-slate-100 text-muted'
+                      ? 'bg-accent-solid text-on-solid'
+                      : 'bg-subtle text-muted'
                   }`}
                 >
                   {n}
@@ -89,7 +92,7 @@ export default function SystemStatus() {
                   <span className="block text-sm font-medium">
                     {name}
                     {state === 'current' && (
-                      <span className="ml-2 rounded bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent">
+                      <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent-strong">
                         in progress
                       </span>
                     )}

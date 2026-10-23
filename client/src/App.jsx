@@ -26,6 +26,7 @@ const AuditLog = lazy(() => import('./pages/admin/AuditLog.jsx'));
 const Loading = () => <p className="text-sm text-muted">Loading…</p>;
 import SystemStatus from './pages/SystemStatus.jsx';
 import Landing from './pages/Landing.jsx';
+import NotFound from './pages/NotFound.jsx';
 
 /** Signed-in users go straight to their dashboard; everyone else gets the front door. */
 function Home() {
@@ -146,7 +147,7 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

@@ -36,7 +36,7 @@ export const studentRegisterSchema = z.object({
     .min(3, 'Roll number is required')
     .max(20)
     .regex(/^[A-Z0-9]+$/, 'Roll number may only contain letters and numbers'),
-  branch: z.enum(BRANCHES, { errorMap: () => ({ message: 'Choose a branch' }) }),
+  branch: z.enum(BRANCHES, { error: 'Choose a branch' }),
   batchYear: z.coerce
     .number()
     .int()

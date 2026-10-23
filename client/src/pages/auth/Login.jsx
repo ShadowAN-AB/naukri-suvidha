@@ -5,8 +5,12 @@ import { loginSchema, fieldErrors, HOME_FOR_ROLE } from '@nexus/shared';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Field from '../../components/Field.jsx';
 import AuthLayout from '../../layouts/AuthLayout.jsx';
+import Button from '../../components/ui/Button.jsx';
+import { useDocumentTitle } from '../../lib/useDocumentTitle.js';
 
 export default function Login() {
+  useDocumentTitle('Sign in');
+
   const { user, ready, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,12 +47,12 @@ export default function Login() {
 
   return (
     <AuthLayout maxWidth="max-w-sm">
-      <h1 className="text-2xl font-semibold tracking-tight">Sign in to Nexus</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Sign in to Naukri Suvidha</h1>
       <p className="mt-1 text-sm text-muted">Campus placement portal.</p>
 
       <form onSubmit={onSubmit} noValidate className="mt-8 space-y-4">
         {formError && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
             {formError}
           </p>
         )}
@@ -63,13 +67,11 @@ export default function Login() {
           required
         />
 
-        <button
+        <Button variant="primary" size="md" className="w-full"
           type="submit"
-          disabled={busy}
-          className="w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+          disabled={busy}>
           {busy ? 'Signing in\u2026' : 'Sign in'}
-        </button>
+        </Button>
       </form>
 
       <p className="mt-6 text-sm text-muted">
