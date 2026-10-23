@@ -45,15 +45,15 @@ class AiWorker {
     if (this.started) return;
     this.started = true;
 
-    eventBus.subscribe(EVENTS.RESUME_UPLOADED, ({ resumeId }) =>
+    eventBus.subscribe(EVENTS.RESUME_UPLOADED, 'ai:resume-uploaded', ({ resumeId }) =>
       this.enqueue(AI_TASK_TYPE.EXTRACT_RESUME, resumeId),
     );
 
     // A newly approved job needs scoring against everyone who could apply.
-    eventBus.subscribe(EVENTS.JOB_APPROVED, ({ jobId }) => this.scoreJobAgainstStudents(jobId));
+    eventBus.subscribe(EVENTS.JOB_APPROVED, 'ai:job-approved', ({ jobId }) => this.scoreJobAgainstStudents(jobId));
 
     // A changed profile invalidates every score that student already has.
-    eventBus.subscribe(EVENTS.RESUME_PROCESSED, ({ studentId, resumeId }) => {
+    eventBus.subscribe(EVENTS.RESUME_PROCESSED, 'ai:resume-processed', ({ studentId, resumeId }) => {
       this.enqueue(AI_TASK_TYPE.EMBED_RESUME, resumeId);
       this.scoreStudentAgainstJobs(studentId);
     });
