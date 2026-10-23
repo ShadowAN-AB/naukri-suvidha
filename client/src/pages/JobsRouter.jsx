@@ -1,4 +1,4 @@
-import { ROLES } from '@nexus/shared';
+import { ROLES } from '@naukri-suvidha/shared';
 import { useAuth } from '../context/AuthContext.jsx';
 import StudentJobs from './student/Jobs.jsx';
 import RecruiterJobs from './recruiter/Jobs.jsx';

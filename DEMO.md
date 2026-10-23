@@ -4,8 +4,8 @@ Roughly eight minutes, end to end. Rehearse it twice: once normally, and once
 with the model stopped, because that second run is the one that proves the
 system degrades honestly instead of falling over.
 
-Sign-ins: `tpo@nexus.edu` (placement office),
-`recruiter2@vertexsystems.example.com`, `aarav.kaur1@nexus.edu` (student).
+Sign-ins: `tpo@naukrisuvidha.edu` (placement office),
+`recruiter2@vertexsystems.example.com`, `aarav.kaur1@naukrisuvidha.edu` (student).
 The shared seed password is in `server/scripts/seed.js`.
 
 ---

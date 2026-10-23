@@ -1,4 +1,4 @@
-import { fitScoreSchema } from '@nexus/shared';
+import { fitScoreSchema } from '@naukri-suvidha/shared';
 
 import { logger } from '../../config/logger.js';
 import { getLLM } from '../../infra/llm/index.js';

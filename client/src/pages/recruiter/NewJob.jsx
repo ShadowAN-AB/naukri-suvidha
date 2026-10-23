@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { jobCreateSchema, fieldErrors, BRANCHES } from '@nexus/shared';
+import { jobCreateSchema, fieldErrors, BRANCHES } from '@naukri-suvidha/shared';
 
 import { useCreateJob } from '../../api/jobs.js';
 import Field from '../../components/Field.jsx';

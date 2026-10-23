@@ -1,4 +1,4 @@
-# Nexus — working notes for Claude
+# Naukri Suvidha — working notes for Claude
 
 AI-assisted campus placement portal. Final-year project, built solo over seven
 phases. **Phases 1–6 complete and tagged; Phase 7 is ~5/8 done.**
@@ -101,6 +101,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **Tailwind 50 vs 500** | Any rename sweeping `bg-x-50` before `bg-x-500` turns the latter into `bg-x-<new>0`, an invalid class that silently renders nothing. It ate every status dot and fit bar once. Order the longer key first. |
 | **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
+| **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---

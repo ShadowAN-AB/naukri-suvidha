@@ -19,7 +19,7 @@ async function main() {
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
-    logger.info(`nexus server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+    logger.info(`naukri suvidha server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
   });
 
   // Shares the HTTP server, so there is one process and one port to deploy.

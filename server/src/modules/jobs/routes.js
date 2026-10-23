@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { jobCreateSchema, jobUpdateSchema, jobRejectSchema, jobListQuerySchema } from '@nexus/shared';
+import { jobCreateSchema, jobUpdateSchema, jobRejectSchema, jobListQuerySchema } from '@naukri-suvidha/shared';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';

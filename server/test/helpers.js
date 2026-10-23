@@ -17,7 +17,7 @@ const PASSWORD = 'Passw0rd1';
 export async function makeUser(role, overrides = {}) {
   const suffix = Math.random().toString(36).slice(2, 8);
   const user = await User.create({
-    email: overrides.email ?? `${role}-${suffix}@nexus.test`,
+    email: overrides.email ?? `${role}-${suffix}@naukrisuvidha.test`,
     role,
     passwordHash: await bcrypt.hash(PASSWORD, 10),
   });

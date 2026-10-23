@@ -1,4 +1,4 @@
-import { checkEligibility, canTransition } from '@nexus/shared';
+import { checkEligibility, canTransition } from '@naukri-suvidha/shared';
 
 import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';

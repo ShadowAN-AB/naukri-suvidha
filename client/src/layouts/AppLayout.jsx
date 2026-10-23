@@ -11,7 +11,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { ROLES } from '@nexus/shared';
+import { ROLES } from '@naukri-suvidha/shared';
 
 import { useAuth } from '../context/AuthContext.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { studentProfileUpdateSchema, companyProfileUpdateSchema, fieldErrors, BRANCHES } from '@nexus/shared';
+import { studentProfileUpdateSchema, companyProfileUpdateSchema, fieldErrors, BRANCHES } from '@naukri-suvidha/shared';
 
 import { useMyProfile, useUpdateProfile } from '../api/profiles.js';
 import Field from '../components/Field.jsx';

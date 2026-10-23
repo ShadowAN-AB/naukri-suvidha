@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { interviewScheduleSchema, interviewRescheduleSchema } from '@nexus/shared';
+import { interviewScheduleSchema, interviewRescheduleSchema } from '@naukri-suvidha/shared';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';

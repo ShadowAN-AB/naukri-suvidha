@@ -7,7 +7,7 @@ import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ScheduleInterview from '../../components/ScheduleInterview.jsx';
 import { formatDate } from '../../lib/format.js';
-import { APPLICATION_TRANSITIONS } from '@nexus/shared';
+import { APPLICATION_TRANSITIONS } from '@naukri-suvidha/shared';
 import PageHeader from '../../components/PageHeader.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useToast } from '../../context/ToastContext.jsx';

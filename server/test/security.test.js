@@ -51,7 +51,7 @@ describe('rate limiting', () => {
     for (let i = 0; i < 8; i++) {
       const res = await api()
         .post('/api/auth/login')
-        .send({ email: 'nobody@nexus.test', password: 'WrongPass1' });
+        .send({ email: 'nobody@naukrisuvidha.test', password: 'WrongPass1' });
       attempts.push(res.status);
     }
     expect(attempts).toContain(429);

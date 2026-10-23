@@ -3,7 +3,7 @@
 # not in the repository.
 services:
   - type: web
-    name: nexus-api
+    name: naukri-suvidha-api
     runtime: node
     plan: free
     region: singapore

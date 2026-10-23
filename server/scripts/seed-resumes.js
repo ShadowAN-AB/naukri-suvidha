@@ -142,7 +142,7 @@ async function main() {
 
   const storage = getStorage();
   const embeddings = getEmbeddings();
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-resumes-'));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'naukri-suvidha-resumes-'));
 
   const texts = [];
   const created = [];

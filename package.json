@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Nexus - an AI-assisted campus placement portal",
+  "description": "Naukri Suvidha - an AI-assisted campus placement portal",
   "workspaces": [
     "shared",
     "server",
