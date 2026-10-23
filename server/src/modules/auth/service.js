@@ -1,11 +1,18 @@
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { AppError } from '../../middleware/error.js';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/tokens.js';
+import {
+  hashRefreshToken,
+  signAccessToken,
+  signRefreshToken,
+  ttlSeconds,
+  verifyRefreshToken,
+} from '../../lib/tokens.js';
 import { ROLES, USER_STATUS } from '../../lib/constants.js';
-import { User } from './model.js';
+import { RefreshToken, User } from './model.js';
 import { Student, Company } from '../profiles/model.js';
 import { AuditLog } from '../admin/model.js';
 
@@ -88,8 +95,7 @@ export async function register(input, ip) {
     return {
       user: publicUser(user),
       profile,
-      accessToken: signAccessToken(user),
-      refreshToken: signRefreshToken(user),
+      ...(await issueSession(user)),
     };
   } catch (err) {
     await User.deleteOne({ _id: user._id });
@@ -100,6 +106,32 @@ export async function register(input, ip) {
     }
     throw err;
   }
+}
+
+/**
+ * Start a session: a new family, and the first refresh token in it.
+ *
+ * The row is written before the token is handed out, so a token can never be
+ * valid without a record to rotate or revoke.
+ */
+async function issueSession(user, familyId = new mongoose.Types.ObjectId()) {
+  const refreshToken = signRefreshToken(user, familyId);
+  await RefreshToken.create({
+    userId: user._id,
+    familyId,
+    tokenHash: hashRefreshToken(refreshToken),
+    expiresAt: new Date(Date.now() + ttlSeconds(env.REFRESH_TOKEN_TTL) * 1000),
+  });
+  return { accessToken: signAccessToken(user), refreshToken };
+}
+
+/** Tear down a whole session, every token in the chain at once. */
+async function revokeFamily(familyId) {
+  if (!mongoose.isValidObjectId(familyId)) return;
+  await RefreshToken.updateMany(
+    { familyId, revokedAt: null },
+    { $set: { revokedAt: new Date() } },
+  );
 }
 
 export async function login({ email, password }, ip) {
@@ -123,8 +155,7 @@ export async function login({ email, password }, ip) {
 
   return {
     user: publicUser(user),
-    accessToken: signAccessToken(user),
-    refreshToken: signRefreshToken(user),
+    ...(await issueSession(user)),
   };
 }
 
@@ -145,7 +176,48 @@ export async function refresh(token) {
     throw AppError.unauthorized('Session ended, sign in again');
   }
 
-  return { user: publicUser(user), accessToken: signAccessToken(user) };
+  /*
+   * Claim the token and retire it in one write. Doing it atomically is what
+   * makes the replay check mean anything: two requests holding the same token
+   * cannot both find it unused, so the loser is treated as a replay rather
+   * than quietly issued a second live session.
+   */
+  const claimed = await RefreshToken.findOneAndUpdate(
+    { tokenHash: hashRefreshToken(token), usedAt: null, revokedAt: null },
+    { $set: { usedAt: new Date() } },
+  );
+
+  if (!claimed) {
+    /*
+     * The token verifies but could not be claimed, which leaves three cases
+     * and one correct response. Either it was already exchanged - so someone
+     * is replaying a token that should have been discarded - or its family was
+     * revoked, or it was signed with a leaked secret and no row was ever
+     * written. A stolen token looks exactly like the first case, so the whole
+     * session is torn down and both the thief and the real user are sent back
+     * to the sign-in page. Being wrong here costs one sign-in; being lenient
+     * costs the account.
+     */
+    await revokeFamily(claims.fam);
+    logger.warn({ userId: String(user._id) }, 'refresh token replayed; session revoked');
+    throw AppError.unauthorized('Session ended, sign in again');
+  }
+
+  return {
+    user: publicUser(user),
+    ...(await issueSession(user, claimed.familyId)),
+  };
+}
+
+/** Sign out: the cookie goes, and so does every token in its family. */
+export async function logout(token) {
+  if (!token) return;
+  try {
+    await revokeFamily(verifyRefreshToken(token).fam);
+  } catch {
+    // An expired or forged cookie has no session to end. Logging out is not
+    // a place to report that.
+  }
 }
 
 export async function me(userId) {

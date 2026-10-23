@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env, isProd } from '../config/env.js';
 
@@ -24,12 +25,30 @@ export function signAccessToken(user) {
   );
 }
 
-export function signRefreshToken(user) {
+export function signRefreshToken(user, familyId) {
   return jwt.sign(
-    { v: user.tokenVersion ?? 0 },
+    {
+      v: user.tokenVersion ?? 0,
+      fam: String(familyId),
+      /*
+       * A nonce, and not decoration. `iat` has one-second resolution, so two
+       * tokens signed for the same user and family inside the same second are
+       * byte-identical - which during rotation means the successor collides
+       * with its own predecessor on the stored hash.
+       */
+      jti: crypto.randomUUID(),
+    },
     env.JWT_REFRESH_SECRET,
     { subject: String(user._id), expiresIn: env.REFRESH_TOKEN_TTL },
   );
+}
+
+/**
+ * What goes in the database. The token is the credential; its hash is only a
+ * lookup key, so a leaked dump cannot be replayed.
+ */
+export function hashRefreshToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 export function verifyAccessToken(token) {
@@ -41,7 +60,7 @@ export function verifyRefreshToken(token) {
 }
 
 /** Seconds, parsed from the "7d"-style TTL, for the cookie's maxAge. */
-function ttlSeconds(ttl) {
+export function ttlSeconds(ttl) {
   const match = /^(\d+)([smhd])$/.exec(ttl);
   if (!match) return 7 * 24 * 3600;
   const n = Number(match[1]);

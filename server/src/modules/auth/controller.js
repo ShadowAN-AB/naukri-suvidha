@@ -27,7 +27,11 @@ export async function login(req, res, next) {
 
 export async function refresh(req, res, next) {
   try {
-    const { user, accessToken } = await service.refresh(req.cookies?.[REFRESH_COOKIE]);
+    const { user, accessToken, refreshToken } = await service.refresh(
+      req.cookies?.[REFRESH_COOKIE],
+    );
+    // Rotation only works if the browser gets the successor.
+    setRefreshCookie(res, refreshToken);
     res.json({ user, accessToken });
   } catch (err) {
     next(err);
@@ -36,6 +40,7 @@ export async function refresh(req, res, next) {
 
 export async function logout(req, res, next) {
   try {
+    await service.logout(req.cookies?.[REFRESH_COOKIE]);
     // Clearing has to use the same attributes the cookie was set with, or the
     // browser keeps it.
     const { maxAge: _maxAge, ...options } = refreshCookieOptions();

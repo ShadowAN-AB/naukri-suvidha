@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { api, auth, makeUser } from './helpers.js';
 import { ROLES } from '../src/lib/constants.js';
-import { User } from '../src/modules/auth/model.js';
+import { RefreshToken, User } from '../src/modules/auth/model.js';
 
 const validStudent = {
   role: 'student',
@@ -118,5 +118,72 @@ describe('access control', () => {
     await api().get('/api/auth/me').set(auth(token)).expect(200);
     await User.updateOne({ _id: user._id }, { $inc: { tokenVersion: 1 } });
     await api().get('/api/auth/me').set(auth(token)).expect(401);
+  });
+});
+
+/** The refresh cookie's value, as the browser would send it back. */
+const refreshCookie = (res) => {
+  const raw = (res.headers['set-cookie'] ?? []).find((c) => c.startsWith('nexus_rt='));
+  return raw ? raw.split(';')[0].slice('nexus_rt='.length) : null;
+};
+
+const refreshWith = (token) =>
+  api().post('/api/auth/refresh').set('Cookie', `nexus_rt=${token}`);
+
+async function signedIn() {
+  const { user, password } = await makeUser(ROLES.STUDENT);
+  const res = await api().post('/api/auth/login').send({ email: user.email, password }).expect(200);
+  return { user, token: refreshCookie(res) };
+}
+
+describe('refresh token rotation', () => {
+  it('hands back a different token each time', async () => {
+    const { token } = await signedIn();
+
+    const res = await refreshWith(token).expect(200);
+    const next = refreshCookie(res);
+
+    expect(next).toBeTruthy();
+    expect(next).not.toBe(token);
+    expect(res.body.accessToken).toBeTruthy();
+  });
+
+  it('retires the token it just exchanged', async () => {
+    const { token } = await signedIn();
+    await refreshWith(token).expect(200);
+
+    // The same cookie a second time is a replay, not a retry.
+    await refreshWith(token).expect(401);
+  });
+
+  it('revokes the whole session when a retired token is replayed', async () => {
+    const { token } = await signedIn();
+    const live = refreshCookie(await refreshWith(token).expect(200));
+
+    // Someone replays the old one: the successor must die with it, because we
+    // cannot tell which holder is the thief.
+    await refreshWith(token).expect(401);
+    await refreshWith(live).expect(401);
+  });
+
+  it('stores only a hash of the token', async () => {
+    const { token } = await signedIn();
+    const rows = await RefreshToken.find().lean();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.tokenHash).not.toBe(token);
+    }
+  });
+
+  it('ends the session on logout', async () => {
+    const { token } = await signedIn();
+    await api().post('/api/auth/logout').set('Cookie', `nexus_rt=${token}`).expect(204);
+
+    await refreshWith(token).expect(401);
+  });
+
+  it('logs out cleanly with no cookie at all', async () => {
+    await api().post('/api/auth/logout').expect(204);
   });
 });
