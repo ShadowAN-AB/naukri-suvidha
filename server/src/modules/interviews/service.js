@@ -31,6 +31,53 @@ async function applicationForRecruiter(user, applicationId) {
   return application;
 }
 
+/**
+ * A student cannot be in two places at once.
+ *
+ * Interviews carry an application rather than a student, so the student's
+ * applications are resolved first. The overlap itself is computed in the
+ * query, where each row's own duration is available - fetching a window and
+ * filtering in memory would have to guess how long the longest interview is.
+ *
+ * This is a check before a write, so two recruiters booking the same instant
+ * can both pass it. The unique index closes that race when it is the same
+ * application; across two applications a narrow window remains, and closing it
+ * properly needs a lock this single process does not have. Recorded in the
+ * system design document under the same heading.
+ */
+async function assertSlotIsFree(studentId, start, durationMinutes, excludeInterviewId) {
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+
+  const applications = await Application.find({ studentId }).select('_id').lean();
+  if (applications.length === 0) return;
+
+  const clash = await Interview.findOne({
+    applicationId: { $in: applications.map((a) => a._id) },
+    status: INTERVIEW_STATUS.SCHEDULED,
+    ...(excludeInterviewId ? { _id: { $ne: excludeInterviewId } } : {}),
+    // Two ranges overlap when each starts before the other ends.
+    $expr: {
+      $and: [
+        { $lt: ['$scheduledAt', end] },
+        {
+          $gt: [
+            { $add: ['$scheduledAt', { $multiply: ['$durationMinutes', 60_000] }] },
+            start,
+          ],
+        },
+      ],
+    },
+  }).lean();
+
+  if (clash) {
+    throw AppError.conflict('That student already has an interview overlapping this slot', {
+      scheduledAt: `Clashes with an interview already booked for ${new Date(
+        clash.scheduledAt,
+      ).toUTCString()}`,
+    });
+  }
+}
+
 export async function schedule(user, input, ip) {
   const application = await applicationForRecruiter(user, input.applicationId);
 
@@ -42,16 +89,28 @@ export async function schedule(user, input, ip) {
     );
   }
 
-  const interview = await Interview.create({
-    applicationId: application._id,
-    scheduledAt: input.scheduledAt,
-    durationMinutes: input.durationMinutes,
-    mode: input.mode,
-    meetingLink: input.meetingLink || undefined,
-    location: input.location || undefined,
-    notes: input.notes || undefined,
-    scheduledBy: user.id,
-  });
+  await assertSlotIsFree(application.studentId, input.scheduledAt, input.durationMinutes);
+
+  let interview;
+  try {
+    interview = await Interview.create({
+      applicationId: application._id,
+      scheduledAt: input.scheduledAt,
+      durationMinutes: input.durationMinutes,
+      mode: input.mode,
+      meetingLink: input.meetingLink || undefined,
+      location: input.location || undefined,
+      notes: input.notes || undefined,
+      scheduledBy: user.id,
+    });
+  } catch (err) {
+    // The partial unique index, hit by a second booking for the same
+    // application that got past the status gate at the same moment.
+    if (err?.code === 11000) {
+      throw AppError.conflict('That applicant already has an interview scheduled');
+    }
+    throw err;
+  }
 
   eventBus.publish(EVENTS.INTERVIEW_SCHEDULED, {
     interviewId: String(interview._id),
@@ -67,11 +126,19 @@ export async function schedule(user, input, ip) {
 export async function reschedule(user, id, input, ip) {
   const interview = await Interview.findById(id);
   if (!interview) throw AppError.notFound('That interview does not exist');
-  await applicationForRecruiter(user, interview.applicationId);
+  const application = await applicationForRecruiter(user, interview.applicationId);
 
   if (interview.status !== INTERVIEW_STATUS.SCHEDULED) {
     throw AppError.conflict(`A ${interview.status} interview cannot be moved`);
   }
+
+  // Excluding itself, or an interview could never be moved by five minutes.
+  await assertSlotIsFree(
+    application.studentId,
+    input.scheduledAt,
+    interview.durationMinutes,
+    interview._id,
+  );
 
   interview.scheduledAt = input.scheduledAt;
   if (input.notes) interview.notes = input.notes;

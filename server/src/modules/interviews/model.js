@@ -31,4 +31,23 @@ const interviewSchema = new mongoose.Schema(
 
 interviewSchema.index({ scheduledAt: 1 });
 
+/*
+ * One live interview per application. Partial rather than plain: a plain
+ * unique index would make a cancellation permanent, because the cancelled row
+ * would keep the slot forever. Only `scheduled` rows are constrained, so an
+ * application can be booked again after its interview is called off.
+ */
+interviewSchema.index(
+  { applicationId: 1 },
+  {
+    // Named, because the field above already declares a plain applicationId
+    // index and an unnamed one here would collide with it: same key pattern,
+    // same generated name, different options. The two coexist happily once
+    // this one has a name of its own.
+    name: 'applicationId_scheduled_unique',
+    unique: true,
+    partialFilterExpression: { status: INTERVIEW_STATUS.SCHEDULED },
+  },
+);
+
 export const Interview = mongoose.model('Interview', interviewSchema);
