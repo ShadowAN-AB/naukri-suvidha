@@ -17,6 +17,12 @@ npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
+
+npm run docker:up         # the whole stack in containers, on :8080
+npm run docker:seed       # seed the containerised mongo (one shot)
+npm run docker:scale      # take the API to 3 replicas, live
+npm run docker:ps         # what is running
+npm run docker:down       # stop it
 ```
 
 Health: `/api/health` (db state) and `/api/ai/health` (provider, queue, degraded behaviour).
@@ -67,6 +73,13 @@ hamburger. A hamburger hides every destination behind a tap on exactly the
 screen size where people browse most. Both read one `NAV` table in
 `AppLayout.jsx`, so a route is added in one place.
 
+**The infrastructure concepts are built, not described.** The course requires
+load balancing, Redis, Kafka, Kubernetes, an API gateway, microservices, CDN
+and Docker. The system design document designs all of them; `docker-compose.yml`
+is where they actually run. **Step 1 is done** — see "Running it as containers"
+below. Steps 2–5 are in "What's left". Treat the compose stack as the thing to
+extend, not a parallel toy: it builds from the same Dockerfiles a deploy would.
+
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
 
@@ -102,11 +115,29 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
+| **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---
 
 ## What's left
+
+**Infrastructure, in order. Each step must run and be demonstrable before the
+next begins, and this list is the record of where it got to.**
+
+1. ~~**Docker Compose stack**~~ — **done**: nginx + 2 API replicas + mongo,
+   scaling live, balancing visible. `docker-compose.yml`.
+2. **Redis** — drop into `infra/cache/` behind the existing interface, then
+   the rate limiter (§2.3) and the Socket.IO adapter (§2.8). The adapter is
+   what lets `/socket.io` stop being pinned to one replica in nginx.
+3. **Kafka** — behind `infra/events/`, which already publishes seven named
+   domain events. Closes the publish-time window in §2.2.
+4. **Kubernetes** — manifests plus an HPA, on kind or minikube. Replaces the
+   DNS-TTL balancing with per-connection Service balancing.
+5. **Extract a service** — auth or ai first; they are the cleanest seams.
+   An API gateway in front of it.
+
+Then the original list:
 
 1. **Deploy** — Vercel + Render + Atlas + an S3 bucket. Configs are written;
    see `DEPLOYMENT.md`. Needs the user's accounts. The step people miss is
@@ -117,6 +148,44 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
    Extraction is tuned against clean text; real résumés are two-column or scanned.
 5. Optional: a UI for semantic search (API-only today), and Atlas `$vectorSearch`
    (written, untested — a standalone mongod rejects it).
+
+---
+
+## Running it as containers
+
+`npm run docker:up` builds two images and starts four containers on
+**http://localhost:8080**. `npm run docker:seed` fills the containerised
+database; the host's own mongod and dev server are untouched.
+
+| Container | What it is | Reachable at |
+| --- | --- | --- |
+| `edge` | nginx: serves the built client, proxies `/api`, balances it | `localhost:8080` |
+| `api` ×2 | the Express server | **nowhere from the host, on purpose** |
+| `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
+
+**The API publishes no host port.** That is deliberate: the only way in is
+through the load balancer, which is also what lets it scale past one replica
+without a port collision. `npm run docker:scale` takes it to three while it
+is running.
+
+To see the balancing rather than take it on trust, nginx returns the replica
+that answered:
+
+```bash
+for i in $(seq 1 10); do
+  curl -s -D - -o /dev/null http://localhost:8080/api/health | grep -i x-upstream-addr
+  sleep 2.5
+done
+```
+
+**What this demonstrates today:** containerisation, horizontal scaling, load
+balancing, an edge that is simultaneously static host, reverse proxy and
+cache. Redis and Kafka are steps 2 and 3 and are not in the file yet — do not
+claim them until they are.
+
+The model is deliberately *not* containerised: it runs on the host and the
+API reaches it through `host.docker.internal`. It is large, and the portal is
+built to degrade without it anyway.
 
 ---
 

@@ -24,6 +24,9 @@ COPY package.json ./
 COPY shared ./shared
 COPY server/package.json ./server/
 COPY server/src ./server/src
+# The operational scripts ship too: seeding the stack is part of running it,
+# and `docker compose run seed` has nowhere else to get them from.
+COPY server/scripts ./server/scripts
 
 # Never root. The uploads directory has to be writable by this user when the
 # local storage provider is in use.

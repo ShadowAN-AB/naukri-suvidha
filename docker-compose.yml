@@ -1,0 +1,111 @@
+# The whole portal on one machine, as containers.
+#
+# What this demonstrates, and why each piece is here rather than described:
+#   · containerisation  - the API and the client each build to an image
+#   · load balancing    - nginx spreads /api over N API replicas
+#   · horizontal scaling- `--scale api=N`, no host ports on the API at all
+#   · an edge           - one nginx doing static hosting, proxying and caching
+#
+# Redis and Kafka arrive in the next two steps; this file is the floor they
+# stand on. Everything here runs with `docker compose up --build`.
+
+name: naukri-suvidha
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    # 27018 on the host: a local mongod on the default port is normal on a
+    # development machine and this must not fight it.
+    ports:
+      - '27018:27017'
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.runCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    # No `ports`. The API is deliberately unreachable from the host, so the
+    # only way in is through the load balancer - which is the point, and also
+    # what lets this scale past one replica without a port collision.
+    deploy:
+      replicas: 2
+    environment:
+      NODE_ENV: production
+      PORT: '5001'
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+      # Development values, in the repository on purpose: this stack is a demo
+      # that must come up with one command. Render generates real ones.
+      JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
+      JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      BCRYPT_ROUNDS: '12'
+      CLIENT_ORIGIN: http://localhost:8080
+      STORAGE_PROVIDER: local
+      UPLOAD_DIR: /app/server/uploads
+      MAX_UPLOAD_BYTES: '5242880'
+      LLM_PROVIDER: ollama
+      # The model runs on the host, not in a container: it is large, and the
+      # portal is built to degrade when it is absent anyway.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.1:8b
+      AI_CONCURRENCY: '2'
+      EMBEDDING_MODEL: nomic-embed-text
+      VECTOR_INDEX: memory
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:5001/api/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  edge:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Not started by default. `npm run docker:seed` runs it once and exits.
+  seed:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    profiles: ['tools']
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+      JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
+      JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
+      BCRYPT_ROUNDS: '10'
+      CLIENT_ORIGIN: http://localhost:8080
+      STORAGE_PROVIDER: local
+      UPLOAD_DIR: /app/server/uploads
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    command: ['node', 'server/scripts/seed.js', '--fresh']
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
