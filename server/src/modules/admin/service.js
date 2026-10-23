@@ -5,8 +5,22 @@ import { Application } from '../applications/model.js';
 import { Interview } from '../interviews/model.js';
 import { AuditLog } from './model.js';
 import { User } from '../auth/model.js';
+import { getCache } from '../../infra/cache/index.js';
 
 const WEEKS = 8;
+
+/*
+ * Analytics is six aggregations over four collections, read by a dashboard
+ * that several people refresh at once, and nobody needs it to the second. One
+ * minute of staleness buys the database an enormous amount of quiet.
+ *
+ * The key carries no user in it because the figures are the same for every
+ * admin. With Redis configured the cache is shared, so the first admin to
+ * open the page pays for it and the rest do not - which is the difference
+ * between a cache and a per-process one that each replica fills separately.
+ */
+const ANALYTICS_KEY = 'admin:analytics';
+const ANALYTICS_TTL_SECONDS = 60;
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -37,6 +51,10 @@ export async function overview() {
 }
 
 export async function analytics() {
+  const cache = getCache();
+  const hit = await cache.get(ANALYTICS_KEY);
+  if (hit) return { ...hit, cached: true };
+
   const since = startOfWeek(new Date());
   since.setDate(since.getDate() - (WEEKS - 1) * 7);
 
@@ -75,7 +93,7 @@ export async function analytics() {
 
   const statuses = Object.fromEntries(byStatus.map((s) => [s._id, s.n]));
 
-  return {
+  const result = {
     placement: {
       placed,
       unplaced: totalStudents - placed,
@@ -94,6 +112,9 @@ export async function analytics() {
     interviewsUpcoming: interviews,
     weekly: [...buckets.values()],
   };
+
+  await cache.set(ANALYTICS_KEY, result, ANALYTICS_TTL_SECONDS);
+  return { ...result, cached: false };
 }
 
 export async function auditLog({ limit = 50, actorId, action } = {}) {

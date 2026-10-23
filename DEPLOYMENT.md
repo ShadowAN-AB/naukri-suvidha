@@ -1,4 +1,4 @@
-# Deploying Nexus
+# Deploying Naukri Suvidha
 
 Three free tiers: **Vercel** for the client, **Render** for the API, **MongoDB
 Atlas** for the database, plus an S3-compatible bucket for résumés.
@@ -27,7 +27,7 @@ It also means `CLIENT_ORIGIN` on Render is the **Vercel** URL, not Render's own.
 3. Network Access → allow `0.0.0.0/0`. Render's outbound IPs are not fixed on
    the free plan, so a narrower rule will intermittently fail.
 4. Copy the connection string and append the database name:
-   `mongodb+srv://USER:PASSWORD@cluster.mongodb.net/nexus?retryWrites=true&w=majority`
+   `mongodb+srv://USER:PASSWORD@cluster.mongodb.net/naukri_suvidha?retryWrites=true&w=majority`
 
 > The password goes in the URL, so URL-encode any `@ : / ?` it contains.
 

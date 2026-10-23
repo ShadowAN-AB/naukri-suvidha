@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { studentProfileUpdateSchema, companyProfileUpdateSchema, ROLES } from '@nexus/shared';
+import { studentProfileUpdateSchema, companyProfileUpdateSchema, ROLES } from '@naukri-suvidha/shared';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';

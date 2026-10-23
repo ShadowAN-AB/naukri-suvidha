@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-const STORAGE_KEY = 'nexus-theme';
+const STORAGE_KEY = 'naukri-suvidha-theme';
 
 const ThemeContext = createContext(null);
 

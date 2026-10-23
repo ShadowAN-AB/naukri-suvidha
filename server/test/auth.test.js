@@ -6,7 +6,7 @@ import { RefreshToken, User } from '../src/modules/auth/model.js';
 
 const validStudent = {
   role: 'student',
-  email: 'new.student@nexus.test',
+  email: 'new.student@naukrisuvidha.test',
   password: 'Passw0rd1',
   name: 'New Student',
   rollNo: '2027CSE001',
@@ -32,7 +32,7 @@ describe('registration', () => {
     await api().post('/api/auth/register').send(validStudent).expect(201);
     const res = await api()
       .post('/api/auth/register')
-      .send({ ...validStudent, email: 'other@nexus.test' })
+      .send({ ...validStudent, email: 'other@naukrisuvidha.test' })
       .expect(409);
     expect(res.body.error.details.rollNo).toBeTruthy();
   });
@@ -40,7 +40,7 @@ describe('registration', () => {
   it('refuses a self-service admin account', async () => {
     await api()
       .post('/api/auth/register')
-      .send({ role: 'admin', email: 'evil@nexus.test', password: 'Passw0rd1' })
+      .send({ role: 'admin', email: 'evil@naukrisuvidha.test', password: 'Passw0rd1' })
       .expect(400);
   });
 
@@ -73,7 +73,7 @@ describe('login', () => {
   it('gives an unknown email the identical message', async () => {
     const res = await api()
       .post('/api/auth/login')
-      .send({ email: 'ghost@nexus.test', password: 'WrongPass1' })
+      .send({ email: 'ghost@naukrisuvidha.test', password: 'WrongPass1' })
       .expect(401);
     expect(res.body.error.message).toBe('Email or password is incorrect');
   });
@@ -81,7 +81,7 @@ describe('login', () => {
   it('sets an httpOnly refresh cookie that script cannot read', async () => {
     const { user, password } = await makeUser(ROLES.STUDENT);
     const res = await api().post('/api/auth/login').send({ email: user.email, password }).expect(200);
-    const cookie = res.headers['set-cookie'].find((c) => c.startsWith('nexus_rt='));
+    const cookie = res.headers['set-cookie'].find((c) => c.startsWith('naukri_suvidha_rt='));
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/Path=\/api\/auth/i);
   });
@@ -123,12 +123,12 @@ describe('access control', () => {
 
 /** The refresh cookie's value, as the browser would send it back. */
 const refreshCookie = (res) => {
-  const raw = (res.headers['set-cookie'] ?? []).find((c) => c.startsWith('nexus_rt='));
-  return raw ? raw.split(';')[0].slice('nexus_rt='.length) : null;
+  const raw = (res.headers['set-cookie'] ?? []).find((c) => c.startsWith('naukri_suvidha_rt='));
+  return raw ? raw.split(';')[0].slice('naukri_suvidha_rt='.length) : null;
 };
 
 const refreshWith = (token) =>
-  api().post('/api/auth/refresh').set('Cookie', `nexus_rt=${token}`);
+  api().post('/api/auth/refresh').set('Cookie', `naukri_suvidha_rt=${token}`);
 
 async function signedIn() {
   const { user, password } = await makeUser(ROLES.STUDENT);
@@ -178,7 +178,7 @@ describe('refresh token rotation', () => {
 
   it('ends the session on logout', async () => {
     const { token } = await signedIn();
-    await api().post('/api/auth/logout').set('Cookie', `nexus_rt=${token}`).expect(204);
+    await api().post('/api/auth/logout').set('Cookie', `naukri_suvidha_rt=${token}`).expect(204);
 
     await refreshWith(token).expect(401);
   });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { interviewScheduleSchema, fieldErrors, INTERVIEW_MODES } from '@nexus/shared';
+import { interviewScheduleSchema, fieldErrors, INTERVIEW_MODES } from '@naukri-suvidha/shared';
 
 import { useScheduleInterview } from '../api/interviews.js';
 import Field from './Field.jsx';

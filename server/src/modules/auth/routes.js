@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { loginSchema, registerSchema } from '@nexus/shared';
+import { loginSchema, registerSchema } from '@naukri-suvidha/shared';
 
 import * as controller from './controller.js';
 import { validate } from '../../middleware/validate.js';

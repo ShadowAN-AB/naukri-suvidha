@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FALLBACK_SCORE_CAP, parsedProfileSchema, fitScoreSchema } from '@nexus/shared';
+import { FALLBACK_SCORE_CAP, parsedProfileSchema, fitScoreSchema } from '@naukri-suvidha/shared';
 
 import { extractProfileFallback, scoreFitFallback } from '../src/modules/ai/fallback.js';
 import { extractProfile } from '../src/modules/ai/extract.js';
@@ -9,14 +9,14 @@ import { parseJSON } from '../src/infra/llm/ollama.js';
 import { api } from './helpers.js';
 
 const CV = `Aarav Kaur
-aarav.kaur@nexus.test | 9876543210
+aarav.kaur@naukrisuvidha.test | 9876543210
 Skills: AutoCAD, Git, Python, SQL
 Worked on a bridge load simulator.`;
 
 describe('the deterministic fallback', () => {
   it('finds contact details and known skills without a model', () => {
     const profile = extractProfileFallback(CV);
-    expect(profile.email).toBe('aarav.kaur@nexus.test');
+    expect(profile.email).toBe('aarav.kaur@naukrisuvidha.test');
     expect(profile.phone).toBe('9876543210');
     expect(profile.skills).toEqual(expect.arrayContaining(['AutoCAD', 'Git', 'Python', 'SQL']));
   });

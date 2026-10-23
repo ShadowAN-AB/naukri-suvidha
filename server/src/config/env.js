@@ -36,6 +36,11 @@ const schema = z.object({
   REFRESH_TOKEN_TTL: z.string().default('7d'),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
 
+  // Optional. Set it and the cache, the rate limiter and the socket gateway
+  // all become shared between replicas; leave it unset and each process keeps
+  // its own, which is correct for one instance and wrong for two.
+  REDIS_URL: z.string().url().optional(),
+
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),

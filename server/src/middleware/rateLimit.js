@@ -1,4 +1,23 @@
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+
+import { getRedis, redisEnabled } from '../infra/redis/index.js';
+
+/**
+ * Without Redis the counters live in this process's memory, which is correct
+ * for one instance and quietly wrong for two: each replica sees roughly half
+ * the traffic, so the effective limit doubles with every container added. A
+ * limit that relaxes as you scale is not a limit.
+ *
+ * `prefix` keeps the two limiters from sharing a bucket.
+ */
+function store(prefix) {
+  if (!redisEnabled()) return undefined; // memory, the library's default
+  return new RedisStore({
+    prefix,
+    sendCommand: (...args) => getRedis().call(...args),
+  });
+}
 
 /**
  * Login is the one endpoint worth guessing against, so it gets its own
@@ -6,6 +25,7 @@ import rateLimit from 'express-rate-limit';
  * legitimate user is never locked out by their own activity.
  */
 export const loginLimiter = rateLimit({
+  store: store('rl:login:'),
   windowMs: 60_000,
   limit: 5,
   skipSuccessfulRequests: true,
@@ -33,6 +53,7 @@ export const loginLimiter = rateLimit({
  * stuck.
  */
 export const registerLimiter = rateLimit({
+  store: store('rl:register:'),
   windowMs: 60 * 60_000,
   limit: 40,
   skipFailedRequests: true,

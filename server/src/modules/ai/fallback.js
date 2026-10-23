@@ -1,4 +1,4 @@
-import { FALLBACK_SCORE_CAP } from '@nexus/shared';
+import { FALLBACK_SCORE_CAP } from '@naukri-suvidha/shared';
 
 /**
  * What happens when the model is unavailable, too slow, or returns nonsense.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { api, auth, makeJob, makeUser } from './helpers.js';
 import { ROLES, JOB_STATUS } from '../src/lib/constants.js';
-import { jobUpdateSchema } from '@nexus/shared';
+import { jobUpdateSchema } from '@naukri-suvidha/shared';
 
 describe('the approval gate', () => {
   it('creates every job pending, whatever the recruiter sends', async () => {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Nexus - an AI-assisted campus placement portal",
+  "description": "Naukri Suvidha - an AI-assisted campus placement portal",
   "workspaces": [
     "shared",
     "server",
@@ -20,7 +20,13 @@
     "resumes:check": "node server/scripts/check-resumes.js",
     "lint:fix": "eslint . --fix",
     "start": "npm start --workspace=server",
-    "seed:resumes": "node server/scripts/seed-resumes.js"
+    "seed:resumes": "node server/scripts/seed-resumes.js",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f api edge",
+    "docker:seed": "docker compose --profile tools run --rm seed",
+    "docker:scale": "docker compose up -d --no-recreate --scale api=3",
+    "docker:ps": "docker compose ps"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

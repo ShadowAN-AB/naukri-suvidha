@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { HOME_FOR_ROLE } from '@nexus/shared';
+import { HOME_FOR_ROLE } from '@naukri-suvidha/shared';
 import { useAuth } from '../context/AuthContext.jsx';
 
 /**

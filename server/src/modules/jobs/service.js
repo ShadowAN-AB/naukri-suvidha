@@ -1,4 +1,4 @@
-import { checkEligibility, eligibilityFilter } from '@nexus/shared';
+import { checkEligibility, eligibilityFilter } from '@naukri-suvidha/shared';
 
 import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';

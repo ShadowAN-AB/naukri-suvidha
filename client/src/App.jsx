@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ROLES, HOME_FOR_ROLE } from '@nexus/shared';
+import { ROLES, HOME_FOR_ROLE } from '@naukri-suvidha/shared';
 
 import { useAuth } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';

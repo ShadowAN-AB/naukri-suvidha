@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkEligibility, eligibilityFilter, ELIGIBILITY } from '@nexus/shared';
+import { checkEligibility, eligibilityFilter, ELIGIBILITY } from '@naukri-suvidha/shared';
 
 import { Job } from '../src/modules/jobs/model.js';
 import { makeJob, makeUser } from './helpers.js';

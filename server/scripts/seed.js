@@ -111,7 +111,7 @@ async function main() {
   // ---- admins ----
   const admins = [];
   for (const slug of ['tpo', 'registrar', 'dean']) {
-    const u = await makeUser(`${slug}@nexus.edu`, ROLES.ADMIN, passwordHash);
+    const u = await makeUser(`${slug}@naukrisuvidha.edu`, ROLES.ADMIN, passwordHash);
     admins.push(u);
   }
 
@@ -138,7 +138,7 @@ async function main() {
     const branch = pick(BRANCHES);
     const batchYear = pick([2026, 2027]);
     const rollNo = `${batchYear}${branch}${String(i + 1).padStart(3, '0')}`;
-    const u = await makeUser(`${first.toLowerCase()}.${last.toLowerCase()}${i + 1}@nexus.edu`, ROLES.STUDENT, passwordHash);
+    const u = await makeUser(`${first.toLowerCase()}.${last.toLowerCase()}${i + 1}@naukrisuvidha.edu`, ROLES.STUDENT, passwordHash);
     const s = await Student.create({
       userId: u._id,
       name: `${first} ${last}`,

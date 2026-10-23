@@ -1,10 +1,12 @@
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { verifyAccessToken } from '../../lib/tokens.js';
 import { User } from '../auth/model.js';
 import { USER_STATUS } from '../../lib/constants.js';
+import { duplicateRedis, redisEnabled } from '../../infra/redis/index.js';
 
 /** The three events the client listens for, all scoped to one user's room. */
 export const SOCKET_EVENTS = Object.freeze({
@@ -32,6 +34,21 @@ export function initRealtime(httpServer) {
     cors: { origin: env.CLIENT_ORIGIN, credentials: true },
     path: '/socket.io',
   });
+
+  /*
+   * Without this, a second replica breaks realtime in a way that looks like
+   * nothing is wrong: a student's socket is held by one container and the
+   * event meant for them is emitted on another, so the push silently never
+   * arrives. The adapter puts the emit on Redis pub/sub so every replica
+   * delivers to whatever sockets it holds.
+   *
+   * Two connections, because a client in subscriber mode cannot issue
+   * ordinary commands.
+   */
+  if (redisEnabled()) {
+    io.adapter(createAdapter(duplicateRedis('socket-pub'), duplicateRedis('socket-sub')));
+    logger.info('realtime using the redis adapter');
+  }
 
   io.use(async (socket, next) => {
     try {

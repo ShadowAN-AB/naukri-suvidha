@@ -1,4 +1,4 @@
-# Naukri Suvidha — Nexus
+# Naukri Suvidha — Naukri Suvidha
 
 An AI-assisted campus placement portal. Students upload a résumé once, an LLM turns it
 into a structured profile, and every job they see is ranked by how well they actually fit
@@ -15,7 +15,7 @@ interview scheduling and placement analytics. Only hardening and deployment rema
 Campus placement today runs on spreadsheets, WhatsApp groups and notice boards. Three
 things break repeatedly:
 
-| Problem | What Nexus does |
+| Problem | What Naukri Suvidha does |
 | --- | --- |
 | Students apply to jobs they are not eligible for | Eligibility is a rule on the job, checked by the server before an application is written |
 | Recruiters read hundreds of résumés by hand | Every résumé is parsed once and scored against the job, with reasoning attached |
@@ -441,7 +441,7 @@ not have.
   line — `POST /api/auth/login 200` — with 4xx logged as a warning and only 5xx as an
   error with a stack. The path comes from `originalUrl`, because Express rewrites
   `req.url` to the router-relative path and the log would otherwise read `/login`.
-- **Shared validation.** A third workspace, `@nexus/shared`, holds the Zod schemas and the
+- **Shared validation.** A third workspace, `@naukri-suvidha/shared`, holds the Zod schemas and the
   role constants. The register form and the register endpoint validate against the same
   object, so the two cannot drift apart.
 - **Auth module.** Register, login, refresh, logout and me, with bcrypt at cost 12. Login

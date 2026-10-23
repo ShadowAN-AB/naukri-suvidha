@@ -25,7 +25,7 @@ import { AuditLog } from '../admin/model.js';
  * malformed and returns in microseconds, which leaves exactly the user
  * enumeration oracle it was meant to close.
  */
-const DUMMY_HASH = bcrypt.hashSync('nexus placeholder, never a real password', env.BCRYPT_ROUNDS);
+const DUMMY_HASH = bcrypt.hashSync('naukri suvidha placeholder, never a real password', env.BCRYPT_ROUNDS);
 
 /** Shape sent to the client. Never includes the hash. */
 function publicUser(user) {

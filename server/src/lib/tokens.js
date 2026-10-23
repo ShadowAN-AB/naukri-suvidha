@@ -15,7 +15,7 @@ import { env, isProd } from '../config/env.js';
  * every token already issued to that user.
  */
 
-export const REFRESH_COOKIE = 'nexus_rt';
+export const REFRESH_COOKIE = 'naukri_suvidha_rt';
 
 export function signAccessToken(user) {
   return jwt.sign(

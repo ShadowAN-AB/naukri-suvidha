@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { applySchema, changeStatusSchema, applicationListQuerySchema } from '@nexus/shared';
+import { applySchema, changeStatusSchema, applicationListQuerySchema } from '@naukri-suvidha/shared';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';
