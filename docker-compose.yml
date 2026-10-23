@@ -28,6 +28,19 @@ services:
       retries: 10
       start_period: 20s
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # 6380: a developer machine often already runs one on 6379.
+    ports:
+      - '6380:6379'
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   api:
     build:
       context: .
@@ -43,6 +56,10 @@ services:
       PORT: '5001'
       LOG_LEVEL: info
       MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+      # With this set, the cache, the rate limiter and the socket gateway are
+      # shared between replicas. Without it each container keeps its own,
+      # which is exactly the bug this step exists to fix.
+      REDIS_URL: redis://redis:6379
       # Development values, in the repository on purpose: this stack is a demo
       # that must come up with one command. Render generates real ones.
       JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
@@ -64,6 +81,8 @@ services:
       VECTOR_INDEX: memory
     depends_on:
       mongo:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'curl', '-fsS', 'http://localhost:5001/api/health']

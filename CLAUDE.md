@@ -80,6 +80,15 @@ is where they actually run. **Step 1 is done** — see "Running it as containers
 below. Steps 2–5 are in "What's left". Treat the compose stack as the thing to
 extend, not a parallel toy: it builds from the same Dockerfiles a deploy would.
 
+**Redis is optional, and the portal must stay correct without it.** No
+`REDIS_URL` and everything runs as it always did: an in-process cache, a
+per-process rate limiter, sockets held in one process. That is right for one
+instance and quietly wrong for two, which is the whole reason step 2 exists.
+With it set, three things become shared — the cache (`infra/cache/redis.js`),
+the rate-limit counters, and the Socket.IO adapter. A Redis failure is always
+a miss or a warning, never a failed request: a cache that takes the request
+down with it is worse than no cache.
+
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
 
@@ -116,6 +125,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
 | **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix. |
+| **ioredis offline queue** | Leave it ON. `rate-limit-redis` loads its Lua script inside its constructor, which runs at **import time**, long before a connection exists. With `enableOfflineQueue: false` that command rejects immediately, nothing is listening, and the process dies on boot — every replica unhealthy, with a stack trace pointing at the rate limiter rather than at the flag. `maxRetriesPerRequest` is what bounds the queue; disabling it is not. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---
@@ -127,9 +137,10 @@ next begins, and this list is the record of where it got to.**
 
 1. ~~**Docker Compose stack**~~ — **done**: nginx + 2 API replicas + mongo,
    scaling live, balancing visible. `docker-compose.yml`.
-2. **Redis** — drop into `infra/cache/` behind the existing interface, then
-   the rate limiter (§2.3) and the Socket.IO adapter (§2.8). The adapter is
-   what lets `/socket.io` stop being pinned to one replica in nginx.
+2. ~~**Redis**~~ — **done**: shared cache behind `infra/cache/`, shared
+   rate-limit counters, and the Socket.IO adapter, which let `/socket.io`
+   stop being pinned to one replica in nginx. Analytics is the first real
+   consumer of the cache, at a 60s TTL.
 3. **Kafka** — behind `infra/events/`, which already publishes seven named
    domain events. Closes the publish-time window in §2.2.
 4. **Kubernetes** — manifests plus an HPA, on kind or minikube. Replaces the
@@ -162,6 +173,7 @@ database; the host's own mongod and dev server are untouched.
 | `edge` | nginx: serves the built client, proxies `/api`, balances it | `localhost:8080` |
 | `api` ×2 | the Express server | **nowhere from the host, on purpose** |
 | `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
+| `redis` | cache, rate-limit counters, socket pub/sub | `localhost:6380` (6379 left for the host's own) |
 
 **The API publishes no host port.** That is deliberate: the only way in is
 through the load balancer, which is also what lets it scale past one replica
@@ -180,8 +192,25 @@ done
 
 **What this demonstrates today:** containerisation, horizontal scaling, load
 balancing, an edge that is simultaneously static host, reverse proxy and
-cache. Redis and Kafka are steps 2 and 3 and are not in the file yet — do not
-claim them until they are.
+cache, and Redis doing the three jobs a second replica makes necessary.
+Kafka is step 3 and is not in the file yet — do not claim it until it is.
+
+Three one-liners that prove Redis rather than asserting it:
+
+```bash
+# Shared rate limit: 429 on the 6th attempt even across 3 replicas.
+# Per-process counters would have allowed 15.
+for i in $(seq 1 7); do curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"tpo@naukrisuvidha.edu","password":"wrong"}'; done
+
+# Shared cache: cached:false once, then cached:true - from any replica.
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/admin/analytics | grep -o '"cached":[a-z]*'
+
+# The socket adapter's pub/sub channels, one Redis for every replica.
+docker compose exec redis redis-cli PUBSUB CHANNELS 'socket.io*'
+```
 
 The model is deliberately *not* containerised: it runs on the host and the
 API reaches it through `host.docker.internal`. It is large, and the portal is

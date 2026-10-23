@@ -4,6 +4,7 @@ import { logger } from './config/logger.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import { aiWorker } from './modules/ai/worker.js';
 import { eventRetryWorker } from './infra/events/retryWorker.js';
+import { closeRedis } from './infra/redis/index.js';
 import { initRealtime, closeRealtime } from './modules/realtime/index.js';
 import { registerNotificationConsumers } from './modules/notifications/consumers.js';
 
@@ -30,6 +31,7 @@ async function main() {
     server.close(async () => {
       eventRetryWorker.stop();
       await closeRealtime();
+      await closeRedis();
       await disconnectDb();
       logger.info('shutdown complete');
       process.exit(0);
