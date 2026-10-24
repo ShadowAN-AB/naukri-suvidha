@@ -1,0 +1,230 @@
+# The API, and the Service that replaces step 1's load balancing.
+#
+# This is the point of step 4. In compose, nginx had to `proxy_pass` to a
+# *variable* with a `resolver`, because a literal upstream is resolved once at
+# start-up and pins replica 1 forever. That worked, and it balanced per DNS
+# lookup - so the granularity was the resolver TTL, the spread followed
+# whatever order Docker's DNS returned records in (measured 6/5/3 over three
+# replicas), and a burst of requests inside one TTL window all landed on one
+# container.
+#
+# A Service fixes that properly. `api` resolves to one stable ClusterIP that
+# never moves, so there is nothing to re-resolve; kube-proxy on every node
+# holds the pod list behind it and picks a pod per *connection*. nginx can go
+# back to a literal upstream - see edge-nginx.conf - and the balancing gets
+# better rather than worse, because the layer doing it finally knows which
+# pods are ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 5001
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  # Two, matching compose - but this number is only the starting point. The
+  # HorizontalPodAutoscaler owns it from here, which is why it is not pinned
+  # anywhere else and why `kubectl apply` must not fight it.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        # `naukri-suvidha/api:dev` is a mutable tag: rebuilding changes what it
+        # points at without changing its name, so the pod template is byte for
+        # byte identical and `kubectl apply` reports "unchanged" while the pods
+        # keep running the previous build. That is a genuinely confusing way to
+        # lose twenty minutes - the manifests are applied, the image is loaded,
+        # and the fix is still not running.
+        #
+        # up.sh substitutes the built image's id here, which makes the content
+        # part of the template. A rebuild that changed nothing leaves this
+        # alone and apply is correctly a no-op; a rebuild that changed
+        # something rolls the Deployment.
+        naukri-suvidha/image-id: '__API_IMAGE_ID__'
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      # The server closes the HTTP server, then Kafka, the socket gateway,
+      # Redis and mongo in order, and gives up after 10s. 30 leaves room for
+      # that to finish rather than being killed halfway through an offset
+      # commit.
+      terminationGracePeriodSeconds: 30
+      # Spread the replicas across nodes where possible. Two pods of a
+      # two-replica Deployment on one node is a Service that load balances
+      # across a single machine, which demonstrates nothing and survives
+      # nothing.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      # compose had `depends_on: condition: service_healthy`. Kubernetes has no
+      # equivalent - every pod in a Deployment starts the moment it is
+      # scheduled, in parallel with everything it needs. The API cannot
+      # tolerate that on its own: connectDb() gives mongo 10s and then throws,
+      # and main() exits 1 on a throw.
+      #
+      # Left to crash-loop it does eventually recover, because that is what
+      # CrashLoopBackOff is for - but the backoff is exponential up to five
+      # minutes, so a broker that takes 40s to start can leave the API down
+      # for minutes afterwards. These gates turn a race into an ordering, and
+      # they cost one short-lived container each.
+      #
+      # busybox and not the API image: `nc -z` is the whole job, and pulling
+      # in Node to do it would make the gate slower than the thing it waits
+      # for. A port being open is also the right question here - readiness of
+      # those pods is already asserted by their own probes, and this only
+      # needs to know the Service has an endpoint to hand out.
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z mongo 27017; do echo "waiting for mongo"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-redis
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z redis 6379; do echo "waiting for redis"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-kafka
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z kafka 9092; do echo "waiting for kafka"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: api
+          image: naukri-suvidha/api:dev
+          # The image is side-loaded with `kind load docker-image`, so there
+          # is nothing to pull and no registry in this story at all.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5001
+          envFrom:
+            - configMapRef:
+                name: api-config
+            - secretRef:
+                name: api-secrets
+          resources:
+            # requests, not limits, are what the HPA measures against: target
+            # utilisation is a percentage of the request. Leaving this out
+            # does not give the autoscaler a generous budget, it gives it no
+            # denominator and the HPA reports <unknown> and never scales.
+            requests:
+              # 200m is chosen from measurement, not habit. An idle pod burns
+              # ~39m just holding its eight Kafka consumer groups open, and a
+              # saturated one reaches about a full core - Node is
+              # single-threaded, so ~1000m is its ceiling.
+              #
+              # At a 100m request that idle floor is 39% against a 60% target,
+              # leaving 21m of headroom, and scaling up makes it worse rather
+              # than better: every new pod joins those eight groups and adds
+              # its own baseline, so a cluster can talk itself from 2 replicas
+              # to 6 and stay there. 200m puts idle near 20% and the trigger
+              # at 120m, about three times the floor - far enough that a
+              # scale-up means real traffic.
+              cpu: 200m
+              memory: 192Mi
+            limits:
+              # No CPU limit. Throttling a Node process at the moment it is
+              # busy is what the autoscaler is supposed to respond to; capping
+              # it instead hides the signal the HPA runs on.
+              memory: 512Mi
+          readinessProbe:
+            # /api/health answers 503 while mongo is unreachable, which is
+            # exactly right here: the pod leaves the Service's endpoints and
+            # stops being sent traffic, without being killed.
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # Deliberately *not* /api/health. Liveness failing means "kill this
+            # container", and a mongo blip would then restart every replica at
+            # once - turning a recoverable dependency outage into an outage of
+            # the portal. A listening socket is the honest liveness question:
+            # is this process still serving at all.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            # Boot is not instant: mongo connects, eight Kafka consumer groups
+            # join (in parallel - serially this took ~40s and the healthcheck
+            # gave up), stranded aiTasks are reclaimed. Until this passes the
+            # liveness probe is not armed, so a slow start cannot be mistaken
+            # for a hang.
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 40
+          lifecycle:
+            preStop:
+              exec:
+                # Endpoint removal and SIGTERM race: kube-proxy rules on every
+                # node are updated asynchronously, so a pod can still receive
+                # a connection after it has begun shutting down. Sleeping here
+                # delays the signal, not the deregistration, so the rules are
+                # already updated by the time the server stops accepting.
+                command: ['/bin/sh', '-c', 'sleep 5']
+          volumeMounts:
+            # Local storage with more than one replica means an upload is only
+            # on the pod that received it, and an autoscaled pod takes its
+            # uploads with it when it goes. That is already true of the
+            # compose stack; S3 (STORAGE_PROVIDER=s3) is the fix and it is in
+            # the deploy step, not this one. An emptyDir at least keeps the
+            # path writable and makes the scope of the gap explicit.
+            - name: uploads
+              mountPath: /app/server/uploads
+      volumes:
+        - name: uploads
+          emptyDir: {}

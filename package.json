@@ -26,7 +26,14 @@
     "docker:logs": "docker compose logs -f api edge",
     "docker:seed": "docker compose --profile tools run --rm seed",
     "docker:scale": "docker compose up -d --no-recreate --scale api=3",
-    "docker:ps": "docker compose ps"
+    "docker:ps": "docker compose ps",
+    "k8s:up": "bash infra/k8s/up.sh",
+    "k8s:down": "bash infra/k8s/down.sh",
+    "k8s:seed": "bash infra/k8s/seed.sh",
+    "k8s:ps": "kubectl -n naukri-suvidha get pods,svc,hpa -o wide",
+    "k8s:logs": "kubectl -n naukri-suvidha logs -l app.kubernetes.io/name=api --tail=50 -f --max-log-requests=8",
+    "k8s:hpa": "kubectl -n naukri-suvidha get hpa api --watch",
+    "k8s:load": "bash infra/k8s/load.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

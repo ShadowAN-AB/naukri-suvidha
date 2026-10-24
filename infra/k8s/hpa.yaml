@@ -1,0 +1,56 @@
+# The autoscaler.
+#
+# This is the half of step 4 that compose could not express at all. `docker
+# compose up --scale api=3` is a number a human types; an HPA is a controller
+# that reads the metric and owns the replica count from then on.
+#
+# It needs metrics-server in the cluster, which kind does not ship - `npm run
+# k8s:up` installs it. Without it this object exists and reports <unknown>
+# forever, which is the usual reason an HPA "does nothing".
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # 60% of the *request* (100m), so ~60m of CPU per pod sustained is
+          # what triggers a scale-up. Deliberately low: the demonstration has
+          # to happen inside a demo, not inside a load test, and the portal's
+          # real work is bursty anyway.
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      # React fast. The default 15s window plus a doubling policy is already
+      # aggressive enough; what matters is that it is visible while someone
+      # is watching.
+      stabilizationWindowSeconds: 15
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+    scaleDown:
+      # Slow, and on purpose. Each API pod joins eight Kafka consumer groups,
+      # and every join and leave costs the group a rebalance. An autoscaler
+      # that removed a pod the moment load dipped would spend the cluster's
+      # time rebalancing instead of serving. Five minutes of sustained quiet
+      # is the price of giving a pod back.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

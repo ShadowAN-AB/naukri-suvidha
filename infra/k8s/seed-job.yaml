@@ -1,0 +1,64 @@
+# Seeding, as a Job rather than a long-running pod.
+#
+# `npm run k8s:seed` deletes and re-creates this, because a completed Job is
+# immutable - re-applying it is a no-op, which looks exactly like a seed that
+# silently did nothing.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: seed
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seed
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      restartPolicy: Never
+      # The Job can be created before mongo has a listening socket - by
+      # `npm run k8s:up` on a cold cluster, for instance. Without this the
+      # script throws, the pod fails, and backoffLimit burns an attempt on a
+      # database that was simply not up yet.
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z mongo 27017; do echo "waiting for mongo"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: seed
+          image: naukri-suvidha/api:dev
+          imagePullPolicy: IfNotPresent
+          command: ['node', 'server/scripts/seed.js', '--fresh']
+          envFrom:
+            - configMapRef:
+                name: api-config
+            - secretRef:
+                name: api-secrets
+          env:
+            # Cheaper hashing for 40 seeded students. The API keeps 12; this
+            # is a one-shot script and bcrypt at 12 x 49 accounts is most of
+            # the job's runtime.
+            - name: BCRYPT_ROUNDS
+              value: '10'
+            # The seed script writes to mongo and nothing else. Pointing it at
+            # the broker would have it produce events for records that are
+            # being created, not changed - noise for every consumer group.
+            - name: KAFKA_BROKERS
+              value: ''
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              memory: 512Mi

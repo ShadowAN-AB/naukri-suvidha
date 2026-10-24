@@ -53,10 +53,34 @@ export function getRedis() {
  * A second connection. The Socket.IO adapter needs one for publishing and one
  * for subscribing, because a client in subscriber mode may not issue ordinary
  * commands.
+ *
+ * `maxRetriesPerRequest: null` here, deliberately different from the shared
+ * connection above, and the difference is the point.
+ *
+ * On the main connection a bounded queue is right: the cache is on the
+ * request path, so a command should fail fast and be treated as a miss rather
+ * than making someone wait for a Redis that is not coming back.
+ *
+ * These two are not on the request path. The only commands they carry are the
+ * adapter's SUBSCRIBE and the pub/sub traffic behind an emit, and nothing is
+ * awaiting either. With a bound, ioredis eventually gives up and calls
+ * flushQueue, which rejects every queued command - including the SUBSCRIBE
+ * that @socket.io/redis-adapter issued and never attached a handler to. That
+ * is an unhandled rejection, and Node's answer to an unhandled rejection is
+ * to exit, so a Redis outage killed the whole API about thirty seconds in.
+ * The portal had already logged "server listening" and was serving requests
+ * perfectly well at the time.
+ *
+ * Unbounded, those commands wait for the connection instead of rejecting, and
+ * run when Redis comes back. Queueing a subscribe until the broker returns is
+ * what you want anyway; the bound was only ever protecting the request path.
  */
 export function duplicateRedis(label) {
   const base = getRedis();
-  return base ? base.duplicate().on('error', (err) => logger.warn({ err, label }, 'redis error')) : null;
+  if (!base) return null;
+  return base
+    .duplicate({ maxRetriesPerRequest: null })
+    .on('error', (err) => logger.warn({ err, label }, 'redis error'));
 }
 
 export async function closeRedis() {

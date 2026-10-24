@@ -1,0 +1,37 @@
+# One entry point: `kubectl apply -k infra/k8s`.
+#
+# kustomize ships inside kubectl, so this adds no tool to the project - and it
+# is what lets the nginx config stay a real .conf file on disk while still
+# arriving in the cluster as a ConfigMap.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: naukri-suvidha
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - mongo.yaml
+  - redis.yaml
+  - kafka.yaml
+  - api.yaml
+  - edge.yaml
+  - hpa.yaml
+
+configMapGenerator:
+  - name: edge-nginx
+    files:
+      - edge-nginx.conf
+
+generatorOptions:
+  # No content hash in the name. A hash is usually what you want - it makes a
+  # config change roll the pods that mount it - but edge.yaml refers to this
+  # ConfigMap by a fixed name in a volume, and the demonstration is easier to
+  # follow when the object is called `edge-nginx` and nothing else.
+  disableNameSuffixHash: true
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: naukri-suvidha

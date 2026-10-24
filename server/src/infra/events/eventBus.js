@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { logger } from '../../config/logger.js';
 import { EventDelivery } from './model.js';
 import { backoffFrom } from './retry.js';
-import { kafkaEnabled, produce, startConsumer, startProducer } from './kafka.js';
+import { ensureTopics, kafkaEnabled, produce, startConsumer, startProducer } from './kafka.js';
 
 /**
  * In-process publish/subscribe. This is the seam that keeps the modules from
@@ -80,6 +80,10 @@ class EventBus {
       return;
     }
     await startProducer();
+
+    // Before any consumer subscribes - see ensureTopics for why a listening
+    // broker is not yet a broker with topics.
+    await ensureTopics([...new Set([...this.handlers.values()].map((h) => h.event))]);
 
     /*
      * In parallel, and the difference is not cosmetic. Joining a consumer

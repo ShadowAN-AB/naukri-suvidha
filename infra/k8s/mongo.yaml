@@ -1,0 +1,88 @@
+# A StatefulSet, not a Deployment. The distinction is not ceremony: a database
+# needs a stable name and its own volume that survives rescheduling, and a
+# StatefulSet is what binds a pod identity to a PersistentVolumeClaim.
+#
+# Still standalone, still one replica. Making it a replica set is what the
+# transactional outbox needs - see "what Kafka does not close" in CLAUDE.md -
+# and that is the next honest increment, not something to claim here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: mongo
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  # Headless. There is one mongod and clients should talk to *it*, not to a
+  # virtual address that load balances - balancing writes over database pods
+  # is never what anyone wants.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: mongo
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongo
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7
+          ports:
+            - name: mongo
+              containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - db.runCommand({ping:1}).ok
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            # TCP, not a ping. A mongod busy enough to be slow to answer a
+            # command is not a mongod that should be killed and restarted.
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 2Gi
