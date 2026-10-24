@@ -158,6 +158,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 | **A rebuilt image under an unchanged tag does not roll** | `naukri-suvidha/api:dev` is mutable, so rebuilding changes what it points at without changing the pod template. `kubectl apply` says `unchanged`, `kind load` says it loaded, and the pods keep serving the previous build — the fix is applied everywhere except where it runs. `up.sh` substitutes the built image's id into a pod-template annotation, which puts the content back inside the thing apply compares. A rebuild that changed nothing is then still correctly a no-op. |
 | **`kind load docker-image` and multi-arch public images** | It imports `--all-platforms`, but `docker pull busybox:1.37` on an arm64 Mac leaves a manifest list whose other platforms' layers are absent, so the import dies with `content digest … not found` — and `set -e` then aborts the rest of the script. Only side-load the two images that have no registry behind them; let the nodes pull anything public themselves. |
+| **A listening Kafka port is not a Kafka that has your topics** | `nc -z kafka 9092` succeeds the moment the broker binds, which on a cold cluster is well before any topic exists. A consumer subscribing then gets `KafkaJSProtocolError: This server does not host this topic-partition` from its metadata request, `startTransport` throws, and `main()` exits 1 — one restart, only ever on a genuinely cold broker, which is why compose never showed it. The irony is that the failing metadata request is itself what triggers auto-creation, so the retry always worked. kafkajs marks the error `retriable: true`; the fix is to not be in the race — `ensureTopics` creates every registered event's topic with `waitForLeaders: true` before any consumer subscribes. Topic names come from the handlers, so there is no second list of events to keep in step. |
 | **nginx `$upstream_addr` stops meaning anything under a Service** | It reports the ClusterIP on every request, never a pod, because kube-proxy chooses the pod in the kernel and never tells nginx. Do not read a single repeated value there as "the balancing is broken". `/api/health` returns `instance` for that. |
 
 ---
@@ -384,6 +385,14 @@ does recover, but the backoff is exponential to five minutes, so a broker that
 takes 40s to start can keep the API down for several. This is also what
 surfaced the two unhandled-rejection crashes in the gotchas table; those are
 fixed properly rather than hidden behind the gates.
+
+A port gate is necessary and not sufficient, and the cold-start path is the
+only place that shows it. `nc -z kafka 9092` passes as soon as the broker
+binds, but the topics do not exist yet, so the first consumer to subscribe
+used to take the process down — see the Kafka topics row in the gotchas.
+`ensureTopics` now runs before any consumer starts. **A cold
+`npm run k8s:down && npm run k8s:up` reaches a serving portal with 0
+restarts**, which is the only version of this claim worth making.
 
 ### Proving it rather than asserting it
 
