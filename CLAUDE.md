@@ -25,7 +25,8 @@ npm run docker:ps         # what is running
 npm run docker:down       # stop it
 ```
 
-Health: `/api/health` (db state) and `/api/ai/health` (provider, queue, degraded behaviour).
+Health: `/api/health` (db state, plus `instance` — which replica answered) and
+`/api/ai/health` (provider, queue, degraded behaviour).
 
 ---
 

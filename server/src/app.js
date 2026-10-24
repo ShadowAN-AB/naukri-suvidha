@@ -1,3 +1,5 @@
+import { hostname } from 'node:os';
+
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -89,6 +91,18 @@ export function createApp() {
       uptimeSeconds: Math.round(process.uptime()),
       db: db ? 'up' : 'down',
       env: env.NODE_ENV,
+      // Which instance answered. Behind the compose load balancer nginx could
+      // report this itself, in X-Upstream-Addr - it had chosen the container,
+      // so it knew. Under a Kubernetes Service it cannot: nginx connects to
+      // one stable ClusterIP and kube-proxy picks the pod underneath, in the
+      // kernel, so $upstream_addr is the virtual address every time and the
+      // proxy never learns which pod served the request.
+      //
+      // So the instance has to say. os.hostname() needs no configuration to
+      // do it: in a pod it is the pod name, in a compose container the
+      // container id, and on a laptop the laptop. This is what makes the
+      // Service's balancing observable rather than asserted.
+      instance: hostname(),
       requestId: req.id,
     });
   });
