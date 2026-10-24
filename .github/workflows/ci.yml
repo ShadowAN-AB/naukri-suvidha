@@ -51,6 +51,13 @@ jobs:
         # precisely so this step needs no secrets.
         run: npm test
 
+      - name: Check the design document's claims
+        # The document is a submittable artifact drafted against a different
+        # codebase. This does not read it - it asserts that what its
+        # retargeted sections say about this repo is still true, so a renamed
+        # route or a dropped index fails here rather than in front of a marker.
+        run: npm run docs:check
+
       - name: Build the client
         run: npm run build --workspace=client
 
