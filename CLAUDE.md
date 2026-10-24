@@ -89,6 +89,18 @@ the rate-limit counters, and the Socket.IO adapter. A Redis failure is always
 a miss or a warning, never a failed request: a cache that takes the request
 down with it is worse than no cache.
 
+**Kafka is optional too, and what it buys is narrower than it looks.** With
+`KAFKA_BROKERS` set, a domain event is produced to a topic named after it and
+delivered by a consumer group named after the subscriber — so `notifications`
+and `ai` each get their own copy of `application.submitted` instead of
+competing, and a handler interrupted by a dying container has not committed
+its offset, so the event comes back. Without it the bus is in-process exactly
+as before. **It does not close the publish-side window**: producing still
+happens after the database write rather than with it. That needs a
+transactional outbox, which needs transactions, which need a replica set —
+and development runs on a standalone mongod. Say that plainly rather than
+claiming §2.2 is closed.
+
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
 
@@ -126,6 +138,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
 | **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix. |
 | **ioredis offline queue** | Leave it ON. `rate-limit-redis` loads its Lua script inside its constructor, which runs at **import time**, long before a connection exists. With `enableOfflineQueue: false` that command rejects immediately, nothing is listening, and the process dies on boot — every replica unhealthy, with a stack trace pointing at the rate limiter rather than at the flag. `maxRetriesPerRequest` is what bounds the queue; disabling it is not. |
+| **Kafka consumer startup is serial by default** | Joining a consumer group costs a rebalance round trip of seconds. Started one after another, eight groups took ~40s before `app.listen()` ran — the healthcheck gave up and Docker restarted the container, which started the 40s again. Start them with `Promise.all`: it drops to under a second. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
 
 ---
@@ -141,8 +154,11 @@ next begins, and this list is the record of where it got to.**
    rate-limit counters, and the Socket.IO adapter, which let `/socket.io`
    stop being pinned to one replica in nginx. Analytics is the first real
    consumer of the cache, at a 60s TTL.
-3. **Kafka** — behind `infra/events/`, which already publishes seven named
-   domain events. Closes the publish-time window in §2.2.
+3. ~~**Kafka**~~ — **done**: events travel through a broker, one consumer
+   group per named subscriber, crash-redelivery on the consume side. The
+   publish-side window is *not* closed — that needs an outbox, which needs
+   transactions, which need a replica set (the compose mongo is standalone).
+   Making it one would be the next honest increment.
 4. **Kubernetes** — manifests plus an HPA, on kind or minikube. Replaces the
    DNS-TTL balancing with per-connection Service balancing.
 5. **Extract a service** — auth or ai first; they are the cleanest seams.
@@ -174,6 +190,7 @@ database; the host's own mongod and dev server are untouched.
 | `api` ×2 | the Express server | **nowhere from the host, on purpose** |
 | `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
 | `redis` | cache, rate-limit counters, socket pub/sub | `localhost:6380` (6379 left for the host's own) |
+| `kafka` | the domain event log, KRaft mode, no ZooKeeper | `localhost:9094` from the host, `kafka:9092` inside |
 
 **The API publishes no host port.** That is deliberate: the only way in is
 through the load balancer, which is also what lets it scale past one replica
@@ -192,8 +209,8 @@ done
 
 **What this demonstrates today:** containerisation, horizontal scaling, load
 balancing, an edge that is simultaneously static host, reverse proxy and
-cache, and Redis doing the three jobs a second replica makes necessary.
-Kafka is step 3 and is not in the file yet — do not claim it until it is.
+cache, Redis doing the three jobs a second replica makes necessary, and Kafka
+carrying the domain events between them.
 
 Three one-liners that prove Redis rather than asserting it:
 
@@ -210,7 +227,18 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/admin/analyt
 
 # The socket adapter's pub/sub channels, one Redis for every replica.
 docker compose exec redis redis-cli PUBSUB CHANNELS 'socket.io*'
+
+# Kafka: approve a posting, then watch the event that carried it.
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --list
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 --describe --group notifications.job-approved
 ```
+
+That last one is the demonstration worth showing: CURRENT-OFFSET equal to
+LOG-END-OFFSET with LAG 0 means the event was produced to the broker and
+consumed by that group, and the notification it wrote proves the handler
+ran.
 
 The model is deliberately *not* containerised: it runs on the host and the
 API reaches it through `host.docker.internal`. It is large, and the portal is

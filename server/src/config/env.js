@@ -41,6 +41,12 @@ const schema = z.object({
   // its own, which is correct for one instance and wrong for two.
   REDIS_URL: z.string().url().optional(),
 
+  // Optional. Comma-separated list, e.g. "kafka:9092". Set it and domain
+  // events travel through a broker and survive the process; leave it unset
+  // and they are delivered in-process, which is lost on restart.
+  KAFKA_BROKERS: z.string().optional(),
+  KAFKA_CLIENT_ID: z.string().default('naukri-suvidha-api'),
+
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
