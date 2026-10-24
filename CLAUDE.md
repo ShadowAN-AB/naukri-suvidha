@@ -448,9 +448,34 @@ writes per machine because it is not the same address everywhere.
 
 ## Documents
 
+- **System design** (23 sections, the artifact that gets marked):
+  https://claude.ai/artifact/HgRayARQuXmeapQ6emymMF
 - **Project plan** (design, data model, phase checklists):
   https://claude.ai/code/artifact/9e031f77-7e4b-442b-9edb-d85c7c00c803
 - **Project report** (21 sections, submittable draft):
   https://claude.ai/code/artifact/9ee5f933-efa2-40ac-9d36-a7f69079a76d
 
-Both are living documents — keep them in step with the code.
+All three are living documents — keep them in step with the code.
+
+**The system design document was drafted against a different repository**
+(`smart-placement-portal`) and is being retargeted section by section. Treat
+it as unreliable about this codebase until a section says otherwise, and
+never cite it as evidence of what is built — this file and the code are the
+record.
+
+Retargeted and trustworthy: §1 existing system, §2 problems, §4 services,
+§8 data, §10 workflows, §12 security, §17 diagrams, §20 decisions, §22
+monolith-vs-microservices, §23 summary, README.
+
+Still carrying the other project's inventory — endpoints, collections, Redis
+keys, service names that do not exist here: §3, §5, §6, §7, §9, §11, §13,
+§14, §15, §16, §18, §19, §21.
+
+Three document-wide errors are fixed and worth not reintroducing:
+
+- **No section may claim a transactional outbox exists.** §7.7 states the
+  publish-side window and that a replica set is the prerequisite. §10, §18,
+  §20 and §21 point at it.
+- **No "Nexus", and no `spp_` identifiers.** Same rule as the code.
+- **No email/SMTP channel and no "Ask Assistant".** Neither exists in this
+  repo. **§4.12 is the authoritative statement**; align anything new to it.
