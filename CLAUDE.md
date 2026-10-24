@@ -309,12 +309,21 @@ Measured, through the edge, with no delay between requests:
 
 ```
 20 requests, 2 pods  →  10 / 10
-24 requests, 6 pods  →  6 / 6 / 5 / 5 / 1 / 1   (all six, back to back)
+16 requests, 2 pods  →   5 / 11
+24 requests, 6 pods  →   6 / 6 / 5 / 5 / 1 / 1   (all six, back to back)
 ```
 
-Compose over three replicas managed 6/5/3, then 7/3, *with 2.5s gaps*; fired
-back to back they all landed on one container. Nothing about the application
-changed — only which layer decides.
+Be precise about what those numbers mean. kube-proxy in iptables mode picks a
+pod **at random per connection**, not round-robin, so 10/10 and 5/11 are both
+ordinary draws from the same mechanism and neither is the headline. The
+property that matters is that *consecutive* requests are balanced
+independently at all.
+
+That is the categorical difference. Compose over three replicas managed 6/5/3,
+then 7/3, *with 2.5s gaps* — and fired back to back they all landed on one
+container, because within a single resolver TTL there was only one answer to
+give. Here there is no window in which the choice is already made. Nothing
+about the application changed; only which layer decides, and how often.
 
 Two consequences worth knowing:
 
