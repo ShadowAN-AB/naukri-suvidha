@@ -308,6 +308,7 @@ Measured, through the edge, with no delay between requests:
 
 ```
 20 requests, 2 pods  →  10 / 10
+24 requests, 6 pods  →  6 / 6 / 5 / 5 / 1 / 1   (all six, back to back)
 ```
 
 Compose over three replicas managed 6/5/3, then 7/3, *with 2.5s gaps*; fired
@@ -332,11 +333,16 @@ a HorizontalPodAutoscaler: 2 to 6 replicas, 60% CPU of request. Observed under
 `npm run k8s:load`:
 
 ```
-t=0s    cpu:   39%/60%   replicas 2
-t=40s   cpu:  246%/60%   replicas 2 → 4
-t=60s   cpu: 1196%/60%   replicas 4 → 6
-t=180s  cpu:  485%/60%   replicas 6     (1,397,265 requests, 0 failures)
+idle    cpu:   17%/60%   replicas 2
+t=20s   cpu:   66%/60%   replicas 2
+t=60s   cpu:  617%/60%   replicas 2 → 4 → 6
+t=160s  cpu:  243%/60%   replicas 6     (1,209,773 requests, 0 failures)
 ```
+
+At peak the six pods sat **3/3 across the two schedulable nodes** — the
+`topologySpreadConstraint` is `ScheduleAnyway`, a preference rather than a
+rule, so it is worth checking rather than assuming; it held. (kind taints the
+control-plane `NoSchedule`, so three nodes means two that take workload.)
 
 Two things that configuration cost real time:
 
@@ -346,11 +352,13 @@ Two things that configuration cost real time:
   which is the usual reason one "does nothing".
 - **The CPU request is measured, not guessed.** An idle pod burns ~39m just
   holding its eight Kafka consumer groups open; a saturated one reaches about a
-  full core, Node being single-threaded. At a 100m request that idle floor is
-  39% against a 60% target, and scaling up *raises* the floor, because every
-  new pod joins those eight groups — a cluster can talk itself to maxReplicas
-  and stay there. 200m puts idle near 20% and the trigger at three times the
-  floor.
+  full core, Node being single-threaded. At a 100m request that idle floor
+  measured 39% against a 60% target — 21m of headroom — and scaling up
+  *raises* the floor, because every new pod joins those same eight groups, so a
+  cluster can talk itself to maxReplicas and stay there. At 200m idle measures
+  **17%** and the trigger sits at three times the floor. The request is an
+  HPA denominator first and a capacity estimate second; getting it wrong does
+  not waste capacity, it makes the autoscaler lie.
 
 **Probes can say the two different things compose could not.** Readiness is
 `/api/health`, which already answers 503 while mongo is unreachable, so an
@@ -361,6 +369,12 @@ at a dependency check would turn one mongo blip into a restart of every
 replica at once. A startup probe covers the slow boot (mongo, eight consumer
 groups, reclaiming stranded `aiTasks`) so a slow start is never mistaken for a
 hang.
+
+Measured: `kubectl rollout restart deployment/api` with `maxUnavailable: 0`
+and a 5s `preStop` sleep served **73 consecutive requests with 0 non-200s**.
+The preStop sleep is load-bearing — endpoint removal and SIGTERM race, because
+kube-proxy's rules are updated asynchronously on every node, so without it a
+pod can still be handed a connection after it has begun shutting down.
 
 **Ordering had to be rebuilt.** compose had `depends_on: service_healthy`;
 Kubernetes has no equivalent and starts everything in parallel. The API cannot
