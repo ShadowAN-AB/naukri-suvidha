@@ -41,6 +41,41 @@ services:
       timeout: 3s
       retries: 10
 
+  # KRaft mode: no ZooKeeper. One node, which is all a laptop needs and all
+  # the demonstration requires - the interesting property is consumer groups,
+  # not replication.
+  kafka:
+    image: apache/kafka:3.9.0
+    restart: unless-stopped
+    ports:
+      - '9094:9094'
+    environment:
+      KAFKA_NODE_ID: '1'
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      # Two listeners on purpose: containers reach the broker as `kafka`, and
+      # anything on the host reaches it as `localhost`. A single advertised
+      # name cannot be correct for both.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: '1'
+      # Zero, so a restarting replica rejoins its group immediately instead of
+      # waiting out the default three seconds.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      CLUSTER_ID: naukri-suvidha-kraft-01
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1']
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 40s
+
   api:
     build:
       context: .
@@ -60,6 +95,9 @@ services:
       # shared between replicas. Without it each container keeps its own,
       # which is exactly the bug this step exists to fix.
       REDIS_URL: redis://redis:6379
+      # With this set the domain events travel through the broker and survive
+      # the process. Without it they are in-process and lost on restart.
+      KAFKA_BROKERS: kafka:9092
       # Development values, in the repository on purpose: this stack is a demo
       # that must come up with one command. Render generates real ones.
       JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
@@ -83,6 +121,8 @@ services:
       mongo:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'curl', '-fsS', 'http://localhost:5001/api/health']

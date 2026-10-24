@@ -153,3 +153,34 @@ describe('the retry worker', () => {
     expect(stats).toHaveProperty('pending');
   });
 });
+
+describe('transport selection', () => {
+  /*
+   * The bus attaches a handler to the in-process emitter only when Kafka is
+   * absent; with a broker the consumer delivers instead. Getting that wrong
+   * in either direction is silent - either every handler runs twice, or none
+   * of them runs at all - so it is worth an explicit assertion rather than
+   * trusting that the integration happened to look right.
+   */
+  it('delivers to each named handler exactly once', async () => {
+    const calls = [];
+    listen('test.once', 'test:once-a', async () => {
+      calls.push('a');
+    });
+    listen('test.once', 'test:once-b', async () => {
+      calls.push('b');
+    });
+
+    eventBus.publish('test.once', {});
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(calls.sort()).toEqual(['a', 'b']);
+  });
+
+  it('hands the retry worker the raw handler, not the wrapper', () => {
+    const handler = async () => {};
+    listen('test.lookup', 'test:lookup', handler);
+    expect(eventBus.handlerFor('test:lookup')).toBe(handler);
+    expect(eventBus.handlerFor('test:nothing-registered')).toBeUndefined();
+  });
+});

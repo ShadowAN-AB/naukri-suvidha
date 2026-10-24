@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { logger } from '../../config/logger.js';
 import { EventDelivery } from './model.js';
 import { backoffFrom } from './retry.js';
+import { kafkaEnabled, produce, startConsumer, startProducer } from './kafka.js';
 
 /**
  * In-process publish/subscribe. This is the seam that keeps the modules from
@@ -15,7 +16,13 @@ import { backoffFrom } from './retry.js';
  * yesterday's logs.
  *
  * Every subscriber is named, and the name is not decoration: it is how a
- * retry finds the handler again in a process that has restarted since.
+ * retry finds the handler again in a process that has restarted since - and,
+ * with Kafka configured, it is the consumer group, so two modules listening
+ * to the same event each get their own copy instead of competing for it.
+ *
+ * The transport is swappable and the call sites do not know which is in use.
+ * Without KAFKA_BROKERS an event is delivered in-process and is lost if the
+ * process dies; with it, delivery survives.
  */
 class EventBus {
   constructor() {
@@ -37,9 +44,7 @@ class EventBus {
     if (this.handlers.has(name)) {
       throw new Error(`Duplicate event handler name: ${name}`);
     }
-    this.handlers.set(name, handler);
-
-    const wrapped = async (payload) => {
+    const deliver = async (payload) => {
       try {
         await handler(payload);
       } catch (err) {
@@ -48,16 +53,45 @@ class EventBus {
       }
     };
 
-    this.emitter.on(event, wrapped);
+    this.handlers.set(name, { event, handler, deliver });
+
+    // With Kafka the consumer delivers; attaching here as well would run
+    // every handler twice.
+    if (!kafkaEnabled()) this.emitter.on(event, deliver);
+
     return () => {
-      this.emitter.off(event, wrapped);
+      this.emitter.off(event, deliver);
       this.handlers.delete(name);
     };
   }
 
   /** The retry worker's way back to a handler, given only its name. */
   handlerFor(name) {
-    return this.handlers.get(name);
+    return this.handlers.get(name)?.handler;
+  }
+
+  /**
+   * Called once, after every module has subscribed. Consumers cannot be
+   * started earlier: the set of named handlers is what they are built from.
+   */
+  async startTransport() {
+    if (!kafkaEnabled()) {
+      logger.info('event bus: in-process delivery');
+      return;
+    }
+    await startProducer();
+
+    /*
+     * In parallel, and the difference is not cosmetic. Joining a consumer
+     * group costs a rebalance round trip of a few seconds; started one after
+     * another, eight groups took about forty seconds, during which the HTTP
+     * server has not begun listening. The healthcheck gave up before that and
+     * Docker restarted the container, which started the forty seconds again.
+     */
+    await Promise.all(
+      [...this.handlers].map(([name, { event, deliver }]) => startConsumer(event, name, deliver)),
+    );
+    logger.info({ subscribers: this.handlers.size }, 'event bus: kafka delivery');
   }
 
   async #recordFailure(event, handler, payload, err) {
@@ -79,6 +113,10 @@ class EventBus {
 
   publish(event, payload) {
     logger.debug({ event, payload }, 'event published');
+    if (kafkaEnabled()) {
+      produce(event, payload);
+      return;
+    }
     this.emitter.emit(event, payload);
   }
 
