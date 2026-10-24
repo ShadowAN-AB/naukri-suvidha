@@ -1,0 +1,51 @@
+# Non-secret API configuration. The same values the compose stack sets inline,
+# lifted out so that changing one does not mean rebuilding an image.
+#
+# The addresses are Service names. `mongo`, `redis` and `kafka` resolve through
+# cluster DNS to a stable ClusterIP, which is the whole difference between this
+# and step 1: in compose the name resolved to a container IP that moved, so
+# nginx needed a resolver and a re-lookup. Here the name resolves to a virtual
+# address that does not move, and the balancing happens underneath it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: naukri-suvidha
+data:
+  NODE_ENV: production
+  PORT: '5001'
+  LOG_LEVEL: info
+
+  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+  # Set, so the cache, the rate-limit counters and the socket adapter are
+  # shared. With an HPA deciding how many replicas exist, "correct without
+  # Redis" stops being a position anyone can hold.
+  REDIS_URL: redis://redis:6379
+  # Set, so a handler killed mid-event has not committed its offset and the
+  # event comes back. An autoscaler deletes pods as a matter of routine, so
+  # this is the transport that matches how this deployment behaves.
+  KAFKA_BROKERS: kafka:9092
+
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 7d
+  BCRYPT_ROUNDS: '12'
+  # The edge is a NodePort mapped to 8081 on the host by the kind config.
+  CLIENT_ORIGIN: http://localhost:8081
+
+  STORAGE_PROVIDER: local
+  UPLOAD_DIR: /app/server/uploads
+  MAX_UPLOAD_BYTES: '5242880'
+
+  LLM_PROVIDER: ollama
+  # The model is not in the cluster: it is large, and the portal is built to
+  # degrade without it. Pods cannot use `host.docker.internal` the way compose
+  # containers can, so this is the gateway of the kind Docker network, which
+  # `npm run k8s:up` writes for the host it is running on.
+  OLLAMA_BASE_URL: http://172.18.0.1:11434
+  OLLAMA_MODEL: llama3.1:8b
+  AI_CONCURRENCY: '2'
+  EMBEDDING_MODEL: nomic-embed-text
+  VECTOR_INDEX: memory

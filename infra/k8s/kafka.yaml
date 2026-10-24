@@ -1,0 +1,130 @@
+# Kafka in KRaft mode, one node - the same broker the compose stack runs, for
+# the same reason: the property worth demonstrating is consumer groups and
+# offset commits, not replication.
+#
+# A StatefulSet because a broker's identity and its log directory belong
+# together. Scaling this to three would mean three node ids and a quorum, and
+# nothing in the portal needs it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: kafka
+  ports:
+    - name: plaintext
+      port: 9092
+      targetPort: 9092
+    - name: controller
+      port: 9093
+      targetPort: 9093
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          ports:
+            - name: plaintext
+              containerPort: 9092
+            - name: controller
+              containerPort: 9093
+          env:
+            - name: KAFKA_NODE_ID
+              value: '1'
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://:9092,CONTROLLER://:9093
+            # One listener is enough here, unlike compose. Nothing outside the
+            # cluster talks to this broker - `kubectl exec` runs the admin
+            # tools *inside* it, so there is no host-facing address to
+            # advertise and no second listener to keep correct.
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka-0.kafka.naukri-suvidha.svc.cluster.local:9092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@kafka-0.kafka.naukri-suvidha.svc.cluster.local:9093
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: '1'
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: '1'
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: '1'
+            # Zero, so a replica the autoscaler just created joins its groups
+            # immediately instead of waiting out the default three seconds.
+            # With an HPA this happens often enough to matter.
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: '0'
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: 'true'
+            - name: CLUSTER_ID
+              value: naukri-suvidha-kraft-01
+            # Bounded on purpose. The JVM's default heap is a quarter of the
+            # node's memory, and on a kind node that is a much larger number
+            # than this broker has any use for.
+            - name: KAFKA_HEAP_OPTS
+              value: '-Xmx512M -Xms256M'
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 640Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+            # A broker takes tens of seconds to be useful. Probing earlier
+            # just logs failures that mean nothing.
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 15
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 60
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 2Gi

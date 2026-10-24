@@ -1,0 +1,24 @@
+# The cluster the manifests are developed and demonstrated against.
+#
+# kind rather than minikube: the nodes are containers on the Docker daemon
+# that already builds these images, so `kind load docker-image` is a copy
+# between local stores rather than a push to a registry.
+#
+# Three nodes, not one. A single-node cluster hides the thing step 4 exists
+# to show - a Service load balancing across pods that sit on *different*
+# machines, with kube-proxy on each node holding the same rules.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: naukri-suvidha
+
+nodes:
+  - role: control-plane
+    # The edge Service is a NodePort on 30080. Mapping it to 8081 on the host
+    # leaves 8080 to the compose stack, so step 1 and step 4 can run at the
+    # same time and be compared.
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 8081
+        protocol: TCP
+  - role: worker
+  - role: worker

@@ -12,7 +12,7 @@ and should not be re-litigated without a reason.
 
 ```bash
 npm run dev            # client :5173, API :5001  (needs mongod + ollama)
-npm test               # 84 tests, Vitest + Supertest, needs a local mongod
+npm test               # 123 tests, Vitest + Supertest, needs a local mongod
 npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
@@ -23,6 +23,14 @@ npm run docker:seed       # seed the containerised mongo (one shot)
 npm run docker:scale      # take the API to 3 replicas, live
 npm run docker:ps         # what is running
 npm run docker:down       # stop it
+
+npm run k8s:up            # kind cluster + metrics-server + the whole stack, on :8081
+npm run k8s:seed          # seed the clustered mongo (a Job, one shot)
+npm run k8s:ps            # pods, services and the HPA
+npm run k8s:hpa           # watch the autoscaler decide
+npm run k8s:load          # drive enough load to make it scale (default 120s)
+npm run k8s:logs          # tail every API pod at once
+npm run k8s:down          # delete the cluster, volumes and all
 ```
 
 Health: `/api/health` (db state, plus `instance` — which replica answered) and
@@ -76,10 +84,16 @@ screen size where people browse most. Both read one `NAV` table in
 
 **The infrastructure concepts are built, not described.** The course requires
 load balancing, Redis, Kafka, Kubernetes, an API gateway, microservices, CDN
-and Docker. The system design document designs all of them; `docker-compose.yml`
-is where they actually run. **Step 1 is done** — see "Running it as containers"
-below. Steps 2–5 are in "What's left". Treat the compose stack as the thing to
-extend, not a parallel toy: it builds from the same Dockerfiles a deploy would.
+and Docker. The system design document designs all of them; `docker-compose.yml` and
+`infra/k8s/` are where they actually run. **Steps 1–4 are done** — see
+"Running it as containers" and "Running it on Kubernetes" below. Step 5 is in
+"What's left".
+
+Both stacks are real and both are kept working, because they demonstrate
+different things and disagree in a way that is worth being able to show: the
+compose edge balances by re-resolving DNS, the Kubernetes one cannot and does
+not need to. They build from the same two Dockerfiles, so neither is a
+parallel toy.
 
 **Redis is optional, and the portal must stay correct without it.** No
 `REDIS_URL` and everything runs as it always did: an in-process cache, a
@@ -137,11 +151,14 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
-| **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix. |
+| **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix — now built, in `infra/k8s/`, measured at 10/10 over 20 back-to-back requests. The compose edge keeps this behaviour on purpose; the two stacks are meant to differ. |
 | **ioredis offline queue** | Leave it ON. `rate-limit-redis` loads its Lua script inside its constructor, which runs at **import time**, long before a connection exists. With `enableOfflineQueue: false` that command rejects immediately, nothing is listening, and the process dies on boot — every replica unhealthy, with a stack trace pointing at the rate limiter rather than at the flag. `maxRetriesPerRequest` is what bounds the queue; disabling it is not. |
 | **A queued Redis command that nobody awaits kills the process** | The offline queue defers a command; `maxRetriesPerRequest` eventually gives up on it and `flushQueue` **rejects every queued command**. Any of those without a handler is an unhandled rejection, and Node exits on those. Two places had none, and neither was visible under compose because `depends_on: service_healthy` meant Redis was always up first. Kubernetes starts pods in parallel and an autoscaler churns them, so both showed up immediately. (1) `RedisStore`'s constructor keeps its two `SCRIPT LOAD` promises unawaited — the API died on boot, in `CrashLoopBackOff`, 5–6 restarts before Redis happened to win the race. The library already self-heals (`retryableIncrement` reloads the script on a rejection); it just never got to, so observing the rejection is the entire fix. (2) The Socket.IO adapter's `SUBSCRIBE` — this one let the API reach "server listening", serve traffic for ~30s, and *then* exit. The pub/sub pair is now `maxRetriesPerRequest: null`: nothing awaits those commands, so queueing them until Redis returns is right, while the main connection keeps a bound because the cache is on the request path and must fail fast to a miss. Verified: a pod with `REDIS_URL` on a dead port now runs 3m+ with 0 restarts and serves `200`. |
 | **Kafka consumer startup is serial by default** | Joining a consumer group costs a rebalance round trip of seconds. Started one after another, eight groups took ~40s before `app.listen()` ran — the healthcheck gave up and Docker restarted the container, which started the 40s again. Start them with `Promise.all`: it drops to under a second. |
 | **ESLint + JSX** | Base `no-unused-vars` doesn't count JSX references; `react/jsx-uses-vars` is enabled for that. |
+| **A rebuilt image under an unchanged tag does not roll** | `naukri-suvidha/api:dev` is mutable, so rebuilding changes what it points at without changing the pod template. `kubectl apply` says `unchanged`, `kind load` says it loaded, and the pods keep serving the previous build — the fix is applied everywhere except where it runs. `up.sh` substitutes the built image's id into a pod-template annotation, which puts the content back inside the thing apply compares. A rebuild that changed nothing is then still correctly a no-op. |
+| **`kind load docker-image` and multi-arch public images** | It imports `--all-platforms`, but `docker pull busybox:1.37` on an arm64 Mac leaves a manifest list whose other platforms' layers are absent, so the import dies with `content digest … not found` — and `set -e` then aborts the rest of the script. Only side-load the two images that have no registry behind them; let the nodes pull anything public themselves. |
+| **nginx `$upstream_addr` stops meaning anything under a Service** | It reports the ClusterIP on every request, never a pod, because kube-proxy chooses the pod in the kernel and never tells nginx. Do not read a single repeated value there as "the balancing is broken". `/api/health` returns `instance` for that. |
 
 ---
 
@@ -161,8 +178,11 @@ next begins, and this list is the record of where it got to.**
    publish-side window is *not* closed — that needs an outbox, which needs
    transactions, which need a replica set (the compose mongo is standalone).
    Making it one would be the next honest increment.
-4. **Kubernetes** — manifests plus an HPA, on kind or minikube. Replaces the
-   DNS-TTL balancing with per-connection Service balancing.
+4. ~~**Kubernetes**~~ — **done**: `infra/k8s/`, on kind, with an HPA that
+   scales the API 2→6 on CPU. The DNS-TTL balancing is gone — a Service
+   balances per connection, measured 10/10 over 20 back-to-back requests
+   where compose managed 6/5/3 with 2.5s between them. See "Running it on
+   Kubernetes" below.
 5. **Extract a service** — auth or ai first; they are the cleanest seams.
    An API gateway in front of it.
 
@@ -245,6 +265,152 @@ ran.
 The model is deliberately *not* containerised: it runs on the host and the
 API reaches it through `host.docker.internal`. It is large, and the portal is
 built to degrade without it anyway.
+
+---
+
+## Running it on Kubernetes
+
+`npm run k8s:up` creates a kind cluster, installs metrics-server, builds and
+side-loads the two images and applies `infra/k8s/`. The portal is on
+**http://localhost:8081** — 8081 and not 8080, so the compose stack can run at
+the same time and the two can be compared. `npm run k8s:seed` fills the
+clustered database.
+
+Three nodes, because a one-node cluster cannot show a Service balancing across
+machines. The API publishes no host port here either; the only way in is the
+edge.
+
+| Object | What it is | Reachable at |
+| --- | --- | --- |
+| `edge` | Deployment + **NodePort** 30080 → host 8081 | `localhost:8081` |
+| `api` | Deployment, 2–6 replicas, **owned by the HPA** | `api:5001`, in-cluster only |
+| `mongo` | StatefulSet + headless Service + PVC | `mongo:27017`, in-cluster only |
+| `redis` | Deployment + Service, no volume | `redis:6379`, in-cluster only |
+| `kafka` | StatefulSet + headless Service, KRaft | `kafka:9092`, in-cluster only |
+
+`kubectl apply -k infra/k8s` is the single entry point; kustomize ships inside
+kubectl, so this adds no tool. The nginx config stays a real `.conf` file
+(`infra/k8s/edge-nginx.conf`) and arrives as a generated ConfigMap mounted over
+the one baked into the image — one image, two stacks, each with the upstream
+strategy that is right for it.
+
+### What step 4 actually changed
+
+**The balancing moved into the kernel, and got better.** The compose edge has
+to `proxy_pass` to a *variable* with a `resolver`, because `api` resolved to
+container IPs that moved and nginx resolves a literal upstream once at
+start-up. The re-lookup *was* the balancing, so its granularity was the
+resolver TTL. Under Kubernetes `api` is one stable ClusterIP that never moves,
+so the literal upstream is correct again — and kube-proxy picks a pod per
+connection, on every node, from the set the readiness probes say is ready.
+
+Measured, through the edge, with no delay between requests:
+
+```
+20 requests, 2 pods  →  10 / 10
+```
+
+Compose over three replicas managed 6/5/3, then 7/3, *with 2.5s gaps*; fired
+back to back they all landed on one container. Nothing about the application
+changed — only which layer decides.
+
+Two consequences worth knowing:
+
+- **`X-Upstream-Addr` now reports the ClusterIP on every request, never a pod.**
+  That is the mechanism showing through, not a bug: nginx is no longer the
+  balancer, so it genuinely does not know which pod served the request. Which
+  pod answered comes from the pod — `/api/health` returns `instance`, which is
+  `os.hostname()`.
+- **There is no `upstream` block and so no `keepalive`, deliberately.** nginx
+  opens a connection per proxied request, and the Service balances per
+  connection; an upstream keepalive pool would pin a reused connection to one
+  pod and quietly undo the whole thing — the same class of mistake as the
+  resolver TTL, one layer up.
+
+**Replica count stopped being a number a human types.** `--scale api=3` became
+a HorizontalPodAutoscaler: 2 to 6 replicas, 60% CPU of request. Observed under
+`npm run k8s:load`:
+
+```
+t=0s    cpu:   39%/60%   replicas 2
+t=40s   cpu:  246%/60%   replicas 2 → 4
+t=60s   cpu: 1196%/60%   replicas 4 → 6
+t=180s  cpu:  485%/60%   replicas 6     (1,397,265 requests, 0 failures)
+```
+
+Two things that configuration cost real time:
+
+- **The HPA needs metrics-server, which kind does not ship**, and kind's
+  kubelets serve metrics with a self-signed certificate it will not trust. Both
+  are handled in `up.sh`; without them the HPA reports `<unknown>` forever,
+  which is the usual reason one "does nothing".
+- **The CPU request is measured, not guessed.** An idle pod burns ~39m just
+  holding its eight Kafka consumer groups open; a saturated one reaches about a
+  full core, Node being single-threaded. At a 100m request that idle floor is
+  39% against a 60% target, and scaling up *raises* the floor, because every
+  new pod joins those eight groups — a cluster can talk itself to maxReplicas
+  and stay there. 200m puts idle near 20% and the trigger at three times the
+  floor.
+
+**Probes can say the two different things compose could not.** Readiness is
+`/api/health`, which already answers 503 while mongo is unreachable, so an
+unhealthy pod leaves the Service's endpoints and stops being sent traffic
+without being killed. Liveness is deliberately a **TCP check, not
+`/api/health`** — liveness failing means "kill this container", so pointing it
+at a dependency check would turn one mongo blip into a restart of every
+replica at once. A startup probe covers the slow boot (mongo, eight consumer
+groups, reclaiming stranded `aiTasks`) so a slow start is never mistaken for a
+hang.
+
+**Ordering had to be rebuilt.** compose had `depends_on: service_healthy`;
+Kubernetes has no equivalent and starts everything in parallel. The API cannot
+survive that alone — `connectDb()` gives mongo 10s and then throws — so three
+busybox initContainers gate on mongo, Redis and Kafka. Left to crash-loop it
+does recover, but the backoff is exponential to five minutes, so a broker that
+takes 40s to start can keep the API down for several. This is also what
+surfaced the two unhandled-rejection crashes in the gotchas table; those are
+fixed properly rather than hidden behind the gates.
+
+### Proving it rather than asserting it
+
+```bash
+# Per-connection balancing: back to back, no sleep, both pods answer.
+for i in $(seq 1 20); do
+  curl -s http://localhost:8081/api/health | sed 's/.*"instance":"\([^"]*\)".*/\1/'; echo
+done | sort | uniq -c
+
+# The autoscaler, in one terminal each.
+npm run k8s:hpa
+npm run k8s:load 180
+
+# Readiness, not DNS, decides who gets traffic. Endpoints shrink and recover.
+kubectl -n naukri-suvidha get endpointslices -l kubernetes.io/service-name=api
+
+# Shared cache and shared rate limit still hold, now across pods the HPA made.
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8081/api/admin/analytics | grep -o '"cached":[a-z]*'
+for i in $(seq 1 7); do curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST http://localhost:8081/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"tpo@naukrisuvidha.edu","password":"wrong"}'; done
+
+# Kafka, inside the cluster - no host listener here, unlike compose.
+kubectl -n naukri-suvidha exec kafka-0 -- /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 --describe --group notifications.job-approved
+```
+
+**What this demonstrates that step 1 could not:** per-connection load
+balancing, readiness as a routing decision, autoscaling from a metric rather
+than a typed number, rolling updates with `maxUnavailable: 0`, declarative
+config and secrets separated from the image, and a StatefulSet binding a
+database to its own volume.
+
+**What it still does not fix.** Uploads are `STORAGE_PROVIDER=local` on an
+`emptyDir`, so a file lives only on the pod that received it and leaves with
+it — worse under an autoscaler than under compose, and S3 is the fix, in the
+deploy step. Mongo is still a standalone, so the transactional outbox that
+would close Kafka's publish-side window is still out of reach. The model still
+runs on the host; pods reach it at the kind network's gateway, which `up.sh`
+writes per machine because it is not the same address everywhere.
+
 
 ---
 
