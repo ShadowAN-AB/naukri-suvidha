@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { logger } from '../../config/logger.js';
-import { EventDelivery } from './model.js';
+import { EventDelivery, OutboxEvent } from './model.js';
 import { backoffFrom } from './retry.js';
-import { ensureTopics, kafkaEnabled, produce, startConsumer, startProducer } from './kafka.js';
+import { ensureTopics, kafkaEnabled, produceAndWait, startConsumer, startProducer } from './kafka.js';
 
 /**
  * In-process publish/subscribe. This is the seam that keeps the modules from
@@ -23,6 +23,13 @@ import { ensureTopics, kafkaEnabled, produce, startConsumer, startProducer } fro
  * The transport is swappable and the call sites do not know which is in use.
  * Without KAFKA_BROKERS an event is delivered in-process and is lost if the
  * process dies; with it, delivery survives.
+ *
+ * `publish` takes an optional session. Given one, the event is written to the
+ * outbox inside that transaction rather than published immediately, so the
+ * event and the record it describes commit together and `outboxWorker`
+ * publishes it afterwards. That is what closes the publish-side window, and
+ * it needs a replica set - without transactions there is no session to pass,
+ * and publishing stays immediate.
  */
 class EventBus {
   constructor() {
@@ -115,10 +122,57 @@ class EventBus {
     }
   }
 
-  publish(event, payload) {
-    logger.debug({ event, payload }, 'event published');
+  /**
+   * @param {string} event
+   * @param {unknown} payload
+   * @param {{ session?: import('mongoose').ClientSession | null }} [opts]
+   *   Pass the session of the transaction that wrote the record this event is
+   *   about, and the event is committed with it instead of being published
+   *   now. That is the outbox, and it is what closes the publish-side window.
+   *
+   * Returns a promise when it writes an outbox row and nothing when it
+   * publishes directly, so callers inside a transaction must await it.
+   */
+  publish(event, payload, { session } = {}) {
+    logger.debug({ event, payload, outboxed: Boolean(session) }, 'event published');
+
+    /*
+     * The session is the whole signal. If one is present we are inside a
+     * transaction that is about to commit a business record, so the event
+     * joins it: either both land or neither does, and there is no window in
+     * between for a dying process to fall into.
+     *
+     * No session means either a standalone mongod (no transactions to join)
+     * or a caller that has not been converted, and the behaviour is the one
+     * that shipped before: publish now, and accept the window.
+     */
+    if (session) {
+      return OutboxEvent.create([{ event, payload }], { session });
+    }
+
+    /*
+     * Not outboxed, so this is the old contract and it keeps the old
+     * behaviour: the business write has already succeeded, so a transport
+     * failure must not become a failed request. It is logged at a level that
+     * gets noticed and the event is lost - which is precisely the window the
+     * outbox exists to close, and precisely why the message says so.
+     */
+    return this.publishNow(event, payload).catch((err) =>
+      logger.error({ err, event }, 'publish failed outside a transaction; event lost'),
+    );
+  }
+
+  /**
+   * Put an event on the bus this instant, with no durability of its own.
+   *
+   * Called directly for events with nothing transactional behind them, and by
+   * `outboxWorker` once a row has committed. A failure here must throw rather
+   * than be swallowed, because the worker decides whether to retry and can
+   * only do that if it is told.
+   */
+  async publishNow(event, payload) {
     if (kafkaEnabled()) {
-      produce(event, payload);
+      await produceAndWait(event, payload);
       return;
     }
     this.emitter.emit(event, payload);

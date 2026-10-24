@@ -53,22 +53,26 @@ export async function startProducer() {
 }
 
 /**
- * Fire and forget, deliberately. `publish` is called from inside services
- * that are mid-request and must not wait on a broker; a produce that fails is
- * logged loudly rather than turned into a failed request, because the
- * business write has already succeeded by then.
+ * Produce, and report whether it worked.
+ *
+ * The earlier version of this was fire-and-forget on purpose: `publish` ran
+ * inside a request that must not wait on a broker, and the business write had
+ * already succeeded, so a failed produce was logged rather than turned into a
+ * failed request. The cost was that nobody could tell it had happened, and
+ * the event was simply gone.
+ *
+ * With the outbox there is finally something that can act on the answer. The
+ * event is already committed, `outboxWorker` is not on anyone's request path,
+ * and it can retry for as long as it takes - but only if it is told. So this
+ * throws, and the two callers choose: the worker retries, and a direct
+ * publish still only logs.
  */
-export function produce(event, payload) {
-  if (!producer) {
-    logger.warn({ event }, 'kafka producer not ready; event dropped');
-    return;
-  }
-  producer
-    .send({
-      topic: event,
-      messages: [{ value: JSON.stringify(payload ?? {}) }],
-    })
-    .catch((err) => logger.error({ err, event }, 'kafka produce failed'));
+export async function produceAndWait(event, payload) {
+  if (!producer) throw new Error(`kafka producer not ready (event: ${event})`);
+  await producer.send({
+    topic: event,
+    messages: [{ value: JSON.stringify(payload ?? {}) }],
+  });
 }
 
 /**

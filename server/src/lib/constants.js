@@ -99,6 +99,13 @@ export const EVENTS = Object.freeze({
   INTERVIEW_SCHEDULED: 'interview.scheduled',
 });
 
+export const OUTBOX_STATUS = Object.freeze({
+  PENDING: 'pending',
+  PUBLISHING: 'publishing',
+  PUBLISHED: 'published',
+});
+export const OUTBOX_STATUS_VALUES = Object.values(OUTBOX_STATUS);
+
 export const EVENT_DELIVERY_STATUS = Object.freeze({
   PENDING: 'pending',
   RUNNING: 'running',
