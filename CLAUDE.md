@@ -17,6 +17,7 @@ npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
+npm run docs:check        # 46 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -465,12 +466,19 @@ record.
 
 Retargeted and trustworthy: §1 existing system, §2 problems, §4 services,
 §6 Redis, §8 data, §9 résumé/AI, §10 workflows, §12 security, §17 diagrams,
-§18 sequence diagrams, §20 decisions, §22 monolith-vs-microservices, §23
-summary, README.
+§11 notifications, §18 sequence diagrams, §20 decisions, §22
+monolith-vs-microservices, §23 summary, README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
-keys, service names that do not exist here: §3, §5, §7, §11, §13, §14, §15,
-§16, §19, §21.
+keys, service names that do not exist here: §3, §5, §7, §13, §14, §15, §16,
+§19, §21.
+
+**`npm run docs:check` pins the retargeted sections to the code** — 46
+claims over routes, indexes, constants and the three document-wide
+invariants. It runs in CI. A renamed route or a dropped index fails there
+and names the section whose prose has just become fiction. It does not read
+the document (it cannot — that lives in an artifact); it checks that what
+the document says is still true.
 
 Three document-wide errors are fixed and worth not reintroducing:
 
