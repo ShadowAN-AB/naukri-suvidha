@@ -20,11 +20,14 @@
  * §18 sequence diagrams, plus the three document-wide invariants.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const cache = new Map();
+/** Set by the old-name invariant so its failure can name the files. */
+let offenders = '';
 
 /** Returns '' for a missing file so a claim about it fails rather than throws. */
 function read(rel) {
@@ -47,8 +50,23 @@ const EV = 'server/src/infra/events';
 
 const claims = [
   // ---- document-wide invariants -------------------------------------------
-  ['invariant', 'the old product name appears nowhere in the server',
-    () => !/nexus/i.test(read('server/src/app.js') + read('server/src/server.js'))],
+  // Scanned across every tracked text file rather than a couple of entrypoints:
+  // the one place the old name actually survived was server/.env.example, which
+  // a fresh checkout copies to make its .env — so the narrow check passed while
+  // a new setup would still have created a database called after the old name.
+  ['invariant', 'the old product name appears in no tracked file',
+    () => {
+      // `git grep` exits 1 when it matches nothing, which is the passing case
+      // here — so the exit code has to be read rather than left to throw.
+      const r = spawnSync('git', ['grep', '-ril', '-e', 'nexus', '-e', 'smart-placement',
+        '--', '.', ':!package-lock.json', ':!CLAUDE.md', ':!server/scripts/check-design-doc.js'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false; // git missing: do not claim a pass
+      if (r.status === 1) return true;                // no matches: clean
+      if (r.status !== 0) return false;               // a real git failure
+      offenders = r.stdout.trim();
+      return offenders === '';
+    }],
   ['invariant', 'no email/SMTP transport exists (§4.12)',
     () => !existsSync(path.join(root, 'server/src/modules/notifications/email.js'))
        && !/nodemailer/i.test(read('server/package.json'))],
@@ -198,6 +216,9 @@ for (const [sec, claim, test] of claims) {
   }
   if (!ok) failed += 1;
   console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${claim}`);
+  if (!ok && offenders) {
+    for (const f of offenders.split('\n')) console.log(`         ${f}`);
+  }
 }
 
 const total = claims.length;
