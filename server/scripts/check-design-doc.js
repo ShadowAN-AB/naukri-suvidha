@@ -111,6 +111,69 @@ const claims = [
   ['§6', 'duplicate applies are stopped by a unique index',
     () => has('server/src/modules/applications/model.js', 'jobId: 1, studentId: 1 }, { unique: true')],
 
+  // ---- §7 message broker --------------------------------------------------
+  ['§7', 'exactly seven domain events exist',
+    () => {
+      const m = read('server/src/lib/constants.js').match(/EVENTS = Object\.freeze\(\{([\s\S]*?)\}\)/);
+      return m ? m[1].split('\n').filter((l) => l.includes(':')).length === 7 : false;
+    }],
+  ['§7', 'the seven event names are the ones the table lists',
+    () => ["RESUME_UPLOADED: 'resume.uploaded'", "RESUME_PROCESSED: 'resume.processed'",
+           "JOB_CREATED: 'job.created'", "JOB_APPROVED: 'job.approved'",
+           "APPLICATION_SUBMITTED: 'application.submitted'",
+           "APPLICATION_STATUS_CHANGED: 'application.status_changed'",
+           "INTERVIEW_SCHEDULED: 'interview.scheduled'"]
+      .every((e) => has('server/src/lib/constants.js', e))],
+  ['§7', 'exactly eight named subscribers exist',
+    () => countOf(`${AI}/worker.js`, 'eventBus.subscribe') === 3
+       && countOf(`${NOT}/consumers.js`, 'eventBus.subscribe') === 5],
+  ['§7', 'the subscriber names are the ones that become consumer groups',
+    () => ["'ai:resume-uploaded'", "'ai:job-approved'", "'ai:resume-processed'"]
+            .every((n) => has(`${AI}/worker.js`, n))
+       && ["'notifications:job-approved'", "'notifications:application-submitted'",
+           "'notifications:application-status-changed'", "'notifications:resume-processed'",
+           "'notifications:interview-scheduled'"]
+            .every((n) => has(`${NOT}/consumers.js`, n))],
+  ['§7', 'job.created is published and has no subscriber',
+    () => has('server/src/modules/jobs/service.js', 'EVENTS.JOB_CREATED')
+       && !has(`${AI}/worker.js`, 'JOB_CREATED') && !has(`${NOT}/consumers.js`, 'JOB_CREATED')],
+  ['§7', 'resume.processed is published by ai and consumed by ai',
+    () => has(`${AI}/worker.js`, 'EVENTS.RESUME_PROCESSED')
+       && has(`${AI}/worker.js`, "'ai:resume-processed'")],
+  ['§7', 'interview.scheduled is published from two sites, and there is no rescheduled event',
+    () => countOf('server/src/modules/interviews/service.js', 'EVENTS.INTERVIEW_SCHEDULED') === 2
+       && !has('server/src/lib/constants.js', 'interview.rescheduled')],
+  ['§7', 'a duplicate subscriber name throws',
+    () => has(`${EV}/eventBus.js`, 'Duplicate event handler name')],
+  ['§7', 'the group id is the subscriber name with colons rewritten to dots',
+    () => has(`${EV}/kafka.js`, "name.replace(/:/g, '.')")],
+  ['§7', 'no module imports another module\'s service',
+    () => {
+      const r = spawnSync('git', ['grep', '-l', "from '../", '--',
+        'server/src/modules/*/service.js'], { cwd: root, encoding: 'utf8' });
+      if (r.status === 1) return true;
+      if (r.status !== 0) return false;
+      // Cross-module imports are allowed for models, not services.
+      return !/from '\.\.\/[a-z]+\/service\.js'/.test(
+        r.stdout.trim().split('\n').map((f) => read(f)).join('\n'));
+    }],
+  ['§7', 'cross-module coupling is model imports, as the section says',
+    () => has('server/src/modules/jobs/service.js', "from '../ai/model.js'")
+       && has('server/src/modules/applications/service.js', "from '../admin/model.js'")],
+  ['§7', 'consumers start in parallel, not serially',
+    () => has(`${EV}/eventBus.js`, 'Promise.all')],
+  ['§7', 'the transport starts after every module has subscribed',
+    () => has('server/src/server.js', 'registerNotificationConsumers()')
+       && read('server/src/server.js').indexOf('registerNotificationConsumers()')
+          < read('server/src/server.js').indexOf('eventBus.startTransport()')],
+  ['§7', 'produce is fire-and-forget, logged not thrown',
+    () => has(`${EV}/kafka.js`, 'kafka produce failed')],
+  ['§7', 'retry is 5 attempts with the stated backoff, ending dead',
+    () => has(`${EV}/retry.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
+       && has(`${EV}/retry.js`, '10s, 20s, 40s, 80s, 160s')],
+  ['§7', 'ensureTopics waits for leaders before any consumer subscribes',
+    () => has(`${EV}/kafka.js`, 'waitForLeaders: true')],
+
   // ---- §9 résumé & AI ------------------------------------------------------
   ['§9', 'the five résumé endpoints exist',
     () => ["router.post('/'", "router.get('/search'", "router.get('/'",
