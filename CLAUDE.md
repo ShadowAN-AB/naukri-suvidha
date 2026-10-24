@@ -152,6 +152,9 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
+| **A replica set advertises its members, so the member host matters** | A client connects to the seed address, is told the member list, and then connects to *those* names. So the host in `rs.initiate` has to be an address the clients can resolve: `mongo:27017` in compose, the pod's own `mongo-0.mongo.<ns>.svc.cluster.local` in Kubernetes (not the headless Service, which answers with whatever pod it likes), and `127.0.0.1:27017` in CI. Get it wrong and the driver connects, discovers a member it cannot reach, and hangs in server selection rather than failing clearly. Reaching the compose mongo from the **host** now needs `directConnection=true`, because `mongo:27017` resolves only inside that network. |
+| **`?replicaSet=rs0` is not optional in the URI** | A single seed host with no `replicaSet` parameter is treated as a direct connection, and `withTransaction` is refused on a direct connection even when the node *is* a replica set member. The replica set without the URI parameter buys nothing. |
+| **A CI service container cannot be given a command** | The `services:` syntax takes an image, env, ports and docker-create options — there is no way to pass `--replSet`. mongod is therefore started as a **step** in `ci.yml`, with its own wait-and-initiate loop. Worth knowing before trying to put it back as a service: a standalone CI would pass while never once exercising the transactional path. |
 | **nginx balances per DNS lookup** | `proxy_pass` to a *variable* plus `resolver` is what makes scaling work at all — a literal upstream resolves once at start-up and pins replica 1. But the granularity is then the resolver TTL, not the request, and the spread is uneven because it follows Docker's record order: measured 6/5/3, then 7/3, over three replicas. Back-to-back requests inside one TTL window all hit one container. Kubernetes Services balance per connection, which is the real fix — now built, in `infra/k8s/`, measured at 10/10 over 20 back-to-back requests. The compose edge keeps this behaviour on purpose; the two stacks are meant to differ. |
 | **ioredis offline queue** | Leave it ON. `rate-limit-redis` loads its Lua script inside its constructor, which runs at **import time**, long before a connection exists. With `enableOfflineQueue: false` that command rejects immediately, nothing is listening, and the process dies on boot — every replica unhealthy, with a stack trace pointing at the rate limiter rather than at the flag. `maxRetriesPerRequest` is what bounds the queue; disabling it is not. |
 | **A queued Redis command that nobody awaits kills the process** | The offline queue defers a command; `maxRetriesPerRequest` eventually gives up on it and `flushQueue` **rejects every queued command**. Any of those without a handler is an unhandled rejection, and Node exits on those. Two places had none, and neither was visible under compose because `depends_on: service_healthy` meant Redis was always up first. Kubernetes starts pods in parallel and an autoscaler churns them, so both showed up immediately. (1) `RedisStore`'s constructor keeps its two `SCRIPT LOAD` promises unawaited — the API died on boot, in `CrashLoopBackOff`, 5–6 restarts before Redis happened to win the race. The library already self-heals (`retryableIncrement` reloads the script on a rejection); it just never got to, so observing the rejection is the entire fix. (2) The Socket.IO adapter's `SUBSCRIBE` — this one let the API reach "server listening", serve traffic for ~30s, and *then* exit. The pub/sub pair is now `maxRetriesPerRequest: null`: nothing awaits those commands, so queueing them until Redis returns is right, while the main connection keeps a bound because the cache is on the request path and must fail fast to a miss. Verified: a pod with `REDIS_URL` on a dead port now runs 3m+ with 0 restarts and serves `200`. |
@@ -177,14 +180,19 @@ next begins, and this list is the record of where it got to.**
    consumer of the cache, at a 60s TTL.
 3. ~~**Kafka**~~ — **done**: events travel through a broker, one consumer
    group per named subscriber, crash-redelivery on the consume side. The
-   publish-side window is *not* closed — that needs an outbox, which needs
-   transactions, which need a replica set (the compose mongo is standalone).
-   Making it one would be the next honest increment.
+   publish-side window needed an outbox, which needed transactions, which
+   needed a replica set — step 4a below.
 4. ~~**Kubernetes**~~ — **done**: `infra/k8s/`, on kind, with an HPA that
    scales the API 2→6 on CPU. The DNS-TTL balancing is gone — a Service
    balances per connection, measured 10/10 over 20 back-to-back requests
    where compose managed 6/5/3 with 2.5s between them. See "Running it on
    Kubernetes" below.
+4a. ~~**Single-node replica set**~~ — **done**: both mongods run
+   `--replSet rs0`, so `session.withTransaction` is legal where it was
+   refused. One node, no redundancy — that is not what it is for. The
+   healthcheck in compose and the readiness probe in Kubernetes double as
+   the initiator, which is idempotent by construction and needs no one-shot
+   Job ordered against a node that may not be listening yet.
 5. **Extract a service** — auth or ai first; they are the cleanest seams.
    An API gateway in front of it.
 

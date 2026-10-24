@@ -2,9 +2,13 @@
 # needs a stable name and its own volume that survives rescheduling, and a
 # StatefulSet is what binds a pod identity to a PersistentVolumeClaim.
 #
-# Still standalone, still one replica. Making it a replica set is what the
-# transactional outbox needs - see "what Kafka does not close" in CLAUDE.md -
-# and that is the next honest increment, not something to claim here.
+# One replica, but a **replica set**, not a standalone. That distinction is
+# the whole reason this changed: MongoDB offers multi-document transactions
+# only on a replica set, and without transactions there is no transactional
+# outbox, so the event bus's publish-side window cannot be closed.
+#
+# One node gives no redundancy. It is not here for redundancy - it is the
+# smallest configuration that makes `session.withTransaction` legal.
 apiVersion: v1
 kind: Service
 metadata:
@@ -48,6 +52,7 @@ spec:
       containers:
         - name: mongo
           image: mongo:7
+          args: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
           ports:
             - name: mongo
               containerPort: 27017
@@ -60,17 +65,28 @@ spec:
               memory: 256Mi
             limits:
               memory: 1Gi
+          # The readiness probe doubles as the initiator, as in compose and for
+          # the same reason: it is idempotent by construction, so there is no
+          # one-shot Job to order against a node that may not be listening yet.
+          #
+          # The member host is the pod's stable DNS name, not the Service's.
+          # A replica set advertises its members and clients then connect to
+          # the advertised name, so it has to be a name that resolves to this
+          # pod specifically - `mongo` would resolve to whatever the headless
+          # Service returns.
           readinessProbe:
             exec:
               command:
-                - mongosh
-                - --quiet
-                - --eval
-                - db.runCommand({ping:1}).ok
+                - /bin/sh
+                - -c
+                - >-
+                  mongosh --quiet --eval "try { rs.status().ok } catch (e) {
+                  rs.initiate({ _id: 'rs0', members: [{ _id: 0,
+                  host: 'mongo-0.mongo.naukri-suvidha.svc.cluster.local:27017' }] }).ok }"
             initialDelaySeconds: 10
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            timeoutSeconds: 10
+            failureThreshold: 12
           livenessProbe:
             # TCP, not a ping. A mongod busy enough to be slow to answer a
             # command is not a mongod that should be killed and restarted.
