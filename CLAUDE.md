@@ -465,11 +465,12 @@ record.
 
 Retargeted and trustworthy: §1 existing system, §2 problems, §4 services,
 §6 Redis, §8 data, §9 résumé/AI, §10 workflows, §12 security, §17 diagrams,
-§20 decisions, §22 monolith-vs-microservices, §23 summary, README.
+§18 sequence diagrams, §20 decisions, §22 monolith-vs-microservices, §23
+summary, README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
 keys, service names that do not exist here: §3, §5, §7, §11, §13, §14, §15,
-§16, §18, §19, §21.
+§16, §19, §21.
 
 Three document-wide errors are fixed and worth not reintroducing:
 
