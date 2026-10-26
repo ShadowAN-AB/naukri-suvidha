@@ -22,7 +22,13 @@ const jobSchema = new mongoose.Schema(
       enum: JOB_STATUS_VALUES,
       default: JOB_STATUS.PENDING,
     },
-    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    /*
+     * No `ref` on this id, deliberately. It names a user in the auth service's
+     * database, which this process has no connection to - so a `.populate()` on
+     * it throws MissingSchemaError at runtime rather than failing to compile.
+     * That is exactly how the admin audit screen broke after the extraction.
+     */
+    approvedBy: { type: mongoose.Schema.Types.ObjectId },
     approvedAt: { type: Date },
     rejectionReason: { type: String },
   },

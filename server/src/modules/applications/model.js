@@ -5,7 +5,13 @@ import { APPLICATION_STATUS, APPLICATION_STATUS_VALUES } from '../../lib/constan
 const timelineEntrySchema = new mongoose.Schema(
   {
     status: { type: String, enum: APPLICATION_STATUS_VALUES, required: true },
-    byUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /*
+     * No `ref` on this id, deliberately. It names a user in the auth service's
+     * database, which this process has no connection to - so a `.populate()` on
+     * it throws MissingSchemaError at runtime rather than failing to compile.
+     * That is exactly how the admin audit screen broke after the extraction.
+     */
+    byUserId: { type: mongoose.Schema.Types.ObjectId, required: true },
     at: { type: Date, default: Date.now },
     note: { type: String, trim: true },
   },

@@ -101,6 +101,9 @@ router.post('/profiles', validate(internalProfileSchema), async (req, res, next)
  */
 const internalAuditSchema = z.object({
   actorId: z.string().regex(/^[0-9a-f]{24}$/).optional(),
+  // Denormalised by the caller, because this service cannot join to `users`.
+  actorEmail: z.string().max(320).optional(),
+  actorRole: z.string().max(32).optional(),
   action: z.string().min(1).max(64),
   entity: z.string().min(1).max(64),
   entityId: z.string().regex(/^[0-9a-f]{24}$/).optional(),

@@ -3,7 +3,13 @@ import { PLACEMENT_STATUS, PLACEMENT_STATUS_VALUES } from '../../lib/constants.j
 
 const studentSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /*
+     * No `ref` on this id, deliberately. It names a user in the auth service's
+     * database, which this process has no connection to - so a `.populate()` on
+     * it throws MissingSchemaError at runtime rather than failing to compile.
+     * That is exactly how the admin audit screen broke after the extraction.
+     */
+    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
     name: { type: String, required: true, trim: true },
     phone: { type: String, trim: true },
     rollNo: { type: String, required: true, uppercase: true, trim: true },
@@ -29,7 +35,7 @@ studentSchema.index({ branch: 1, batchYear: 1 });
 
 const companySchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
     name: { type: String, required: true, trim: true },
     website: { type: String, trim: true },
     industry: { type: String, trim: true },

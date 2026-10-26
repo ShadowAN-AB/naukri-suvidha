@@ -3,7 +3,13 @@ import { NOTIFICATION_TYPE_VALUES } from '../../lib/constants.js';
 
 const notificationSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /*
+     * No `ref` on this id, deliberately. It names a user in the auth service's
+     * database, which this process has no connection to - so a `.populate()` on
+     * it throws MissingSchemaError at runtime rather than failing to compile.
+     * That is exactly how the admin audit screen broke after the extraction.
+     */
+    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
     type: { type: String, enum: NOTIFICATION_TYPE_VALUES, required: true },
     title: { type: String, required: true },
     body: { type: String },

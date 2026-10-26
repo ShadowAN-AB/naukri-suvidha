@@ -43,8 +43,26 @@ function publicUser(user) {
  * the request it is describing - so it is still fire-and-forget, and the
  * swallowing of failures moved into apiClient.appendAudit with it.
  */
-function audit(actorId, action, entity, entityId, ip, meta, requestId) {
-  appendAudit({ actorId, action, entity, entityId, ip, meta }, { requestId });
+/** The actor fields an audit row stores, read off a user document. */
+const actorOf = (user) => ({ id: user._id, email: user.email, role: user.role });
+
+function audit(actor, action, entity, entityId, ip, meta, requestId) {
+  appendAudit(
+    {
+      actorId: actor?.id ? String(actor.id) : undefined,
+      // This service holds the user record, so it is the one place that can
+      // supply these first-hand rather than from a forwarded header. The API
+      // cannot join to them - see the comment on actorId in its admin model.
+      actorEmail: actor?.email,
+      actorRole: actor?.role,
+      action,
+      entity,
+      entityId,
+      ip,
+      meta,
+    },
+    { requestId },
+  );
 }
 
 /**
@@ -89,7 +107,7 @@ export async function register(input, ip, requestId) {
      */
     const profile = await createProfile(input, { userId: String(user._id), requestId });
 
-    audit(user._id, 'auth.register', 'User', user._id, ip, { role: user.role }, requestId);
+    audit(actorOf(user), 'auth.register', 'User', user._id, ip, { role: user.role }, requestId);
 
     return {
       user: publicUser(user),
@@ -141,7 +159,12 @@ export async function login({ email, password }, ip, requestId) {
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
 
   if (!user || !ok) {
-    audit(user?._id, 'auth.login_failed', 'User', user?._id, ip, { email }, requestId);
+    /*
+       * A failed login has no confirmed actor, so only the attempted email is
+       * recorded - and `user` is deliberately not passed even when the email
+       * resolved, because nothing was proved about who sent the request.
+       */
+      audit({ id: user?._id, role: user?.role }, 'auth.login_failed', 'User', user?._id, ip, { email }, requestId);
     throw AppError.unauthorized('Email or password is incorrect');
   }
   if (user.status !== USER_STATUS.ACTIVE) {
@@ -150,7 +173,7 @@ export async function login({ email, password }, ip, requestId) {
 
   user.lastLoginAt = new Date();
   await user.save();
-  audit(user._id, 'auth.login', 'User', user._id, ip, { role: user.role }, requestId);
+  audit(actorOf(user), 'auth.login', 'User', user._id, ip, { role: user.role }, requestId);
 
   return {
     user: publicUser(user),

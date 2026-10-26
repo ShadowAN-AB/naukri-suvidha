@@ -23,7 +23,13 @@ const interviewSchema = new mongoose.Schema(
       enum: INTERVIEW_STATUS_VALUES,
       default: INTERVIEW_STATUS.SCHEDULED,
     },
-    scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /*
+     * No `ref` on this id, deliberately. It names a user in the auth service's
+     * database, which this process has no connection to - so a `.populate()` on
+     * it throws MissingSchemaError at runtime rather than failing to compile.
+     * That is exactly how the admin audit screen broke after the extraction.
+     */
+    scheduledBy: { type: mongoose.Schema.Types.ObjectId, required: true },
     notes: { type: String },
   },
   { timestamps: true },
