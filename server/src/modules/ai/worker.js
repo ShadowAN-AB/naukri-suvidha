@@ -170,12 +170,23 @@ class AiWorker {
         }
       }
 
+      /*
+       * The student's user id travels with the event. The notifications
+       * service has no students collection to look it up in - that is the
+       * point of its own database - so the event carries it.
+       */
+      const owner = await Student.findById(resume.studentId)
+        .select('userId')
+        .session(session ?? null)
+        .lean();
+
       await eventBus.publish(
         EVENTS.RESUME_PROCESSED,
         {
           resumeId: String(resume._id),
           studentId: String(resume.studentId),
           fallback,
+          studentUserId: owner?.userId ? String(owner.userId) : null,
         },
         { session },
       );

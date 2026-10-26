@@ -91,6 +91,10 @@ export async function apply(user, jobId, ip) {
     ],
   };
 
+  // The recruiter to tell, resolved in the service that owns companies.
+  const company = await Company.findById(job.companyId).select('userId').lean();
+  const recruiterUserId = company?.userId ?? null;
+
   let application;
   try {
     /*
@@ -107,6 +111,11 @@ export async function apply(user, jobId, ip) {
           applicationId: String(created._id),
           jobId: String(job._id),
           studentId: String(student._id),
+          // What the notification needs to be written without reading this
+          // service's collections - see the note in jobs.approveJob.
+          jobTitle: job.title,
+          studentName: student.name,
+          recruiterUserId: recruiterUserId ? String(recruiterUserId) : null,
         },
         { session },
       );
@@ -207,6 +216,14 @@ export async function changeStatus(user, id, { status, note }, ip) {
   application.status = status;
   application.timeline.push({ status, byUserId: user.id, at: new Date(), note: note || undefined });
 
+  // The student to tell, and the job's title for the message. Read before the
+  // transaction, in the service that owns both.
+  const [studentDoc, job] = await Promise.all([
+    Student.findById(application.studentId).select('userId').lean(),
+    Job.findById(application.jobId).select('title').lean(),
+  ]);
+  const studentUserId = studentDoc?.userId ?? null;
+
   await withTransaction(async (session) => {
     await application.save({ session });
 
@@ -228,6 +245,8 @@ export async function changeStatus(user, id, { status, note }, ip) {
         studentId: String(application.studentId),
         jobId: String(application.jobId),
         status,
+        jobTitle: job?.title ?? null,
+        studentUserId: studentUserId ? String(studentUserId) : null,
       },
       { session },
     );

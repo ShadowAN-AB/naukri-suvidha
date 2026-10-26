@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import mongoose from 'mongoose';
+
+import { api, auth, makeJob, makeUser } from './helpers.js';
+import { EVENTS, JOB_STATUS, ROLES } from '../src/lib/constants.js';
 import { eventBus } from '../src/infra/events/eventBus.js';
 import { eventRetryWorker } from '../src/infra/events/retryWorker.js';
 import { EventDelivery } from '../src/infra/events/model.js';
@@ -182,5 +186,92 @@ describe('transport selection', () => {
     listen('test.lookup', 'test:lookup', handler);
     expect(eventBus.handlerFor('test:lookup')).toBe(handler);
     expect(eventBus.handlerFor('test:nothing-registered')).toBeUndefined();
+  });
+});
+
+/*
+ * The property that lets notifications become its own service.
+ *
+ * Its handlers used to look up the student, the company and the job to find
+ * out who to tell and what to call it, which worked only because they shared a
+ * process and a database with those collections. A consumer with its own
+ * database cannot do that, so the publishers resolve the audience and the
+ * payload carries it.
+ *
+ * These tests watch the bus rather than the consumer, because what has to hold
+ * is a property of the *event*: everything a handler needs is on it. If a
+ * field here goes missing, a notification silently addressed to `null` is the
+ * symptom, which is the kind of bug nobody notices until someone asks why they
+ * never got told.
+ */
+describe('events carry what their consumers need', () => {
+  /** Resolves with the first payload published for `event`. */
+  function captured(event, name) {
+    let resolve;
+    const seen = new Promise((r) => {
+      resolve = r;
+    });
+    listen(event, name, (payload) => resolve(payload));
+    return seen;
+  }
+
+  it('job.approved names the recruiter to tell', async () => {
+    const admin = await makeUser(ROLES.ADMIN);
+    const recruiter = await makeUser(ROLES.RECRUITER);
+    const job = await makeJob(recruiter.profile, { status: JOB_STATUS.PENDING });
+
+    const seen = captured(EVENTS.JOB_APPROVED, 'test:job-approved-audience');
+    await api().post(`/api/jobs/${job._id}/approve`).set(auth(admin.token)).expect(200);
+
+    const payload = await seen;
+    expect(payload.recruiterUserId).toBe(String(recruiter.user._id));
+    expect(payload.title).toBe(job.title);
+  });
+
+  it('application.submitted names the recruiter, the job and the student', async () => {
+    const recruiter = await makeUser(ROLES.RECRUITER);
+    // Applying requires a resume on file, so the id is seeded directly.
+    const student = await makeUser(ROLES.STUDENT, {
+      currentResumeId: new mongoose.Types.ObjectId(),
+    });
+    const job = await makeJob(recruiter.profile);
+
+    const seen = captured(EVENTS.APPLICATION_SUBMITTED, 'test:application-submitted-audience');
+    await api()
+      .post('/api/applications')
+      .set(auth(student.token))
+      .send({ jobId: String(job._id) })
+      .expect(201);
+
+    const payload = await seen;
+    expect(payload.recruiterUserId).toBe(String(recruiter.user._id));
+    expect(payload.jobTitle).toBe(job.title);
+    expect(payload.studentName).toBe(student.profile.name);
+  });
+
+  it('application.status_changed names the student and the job', async () => {
+    const recruiter = await makeUser(ROLES.RECRUITER);
+    const student = await makeUser(ROLES.STUDENT, {
+      currentResumeId: new mongoose.Types.ObjectId(),
+    });
+    const job = await makeJob(recruiter.profile);
+
+    const applied = await api()
+      .post('/api/applications')
+      .set(auth(student.token))
+      .send({ jobId: String(job._id) })
+      .expect(201);
+
+    const seen = captured(EVENTS.APPLICATION_STATUS_CHANGED, 'test:status-changed-audience');
+    await api()
+      .patch(`/api/applications/${applied.body._id}/status`)
+      .set(auth(recruiter.token))
+      .send({ status: 'shortlisted' })
+      .expect(200);
+
+    const payload = await seen;
+    expect(payload.studentUserId).toBe(String(student.user._id));
+    expect(payload.jobTitle).toBe(job.title);
+    expect(payload.status).toBe('shortlisted');
   });
 });

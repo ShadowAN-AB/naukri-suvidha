@@ -240,11 +240,27 @@ export async function approveJob(user, id, ip) {
   job.approvedAt = new Date();
   job.rejectionReason = undefined;
 
+  /*
+   * Who should be told, resolved here rather than by whoever is listening.
+   *
+   * An event carries what its consumers need to act. The alternative - a
+   * consumer that looks up the company to find the recruiter - only works
+   * while the consumer can see the companies collection, and notifications
+   * cannot: it is a separate service with its own database. Resolving it in
+   * the service that owns the data is what keeps the event self-contained.
+   */
+  const company = await Company.findById(job.companyId).select('userId').lean();
+
   await withTransaction(async (session) => {
     await job.save({ session });
     await eventBus.publish(
       EVENTS.JOB_APPROVED,
-      { jobId: String(job._id), companyId: String(job.companyId), title: job.title },
+      {
+        jobId: String(job._id),
+        companyId: String(job.companyId),
+        title: job.title,
+        recruiterUserId: company?.userId ? String(company.userId) : null,
+      },
       { session },
     );
   });
