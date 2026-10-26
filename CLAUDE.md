@@ -491,9 +491,9 @@ Still carrying the other project's inventory — endpoints, collections, Redis
 keys, service names that do not exist here: sections 3, 5, 13, 14, 15, 16,
 19 and 21.
 
-**`npm run docs:check` pins the retargeted sections to the code** — 62
-claims over routes, indexes, constants, the event topology and the
-document-wide invariants. It runs in CI. A renamed route or a dropped index fails there
+**`npm run docs:check` pins the retargeted sections to the code** — 72
+claims over routes, indexes, constants, the event topology, the counts the
+document states in prose, and the document-wide invariants. It runs in CI. A renamed route or a dropped index fails there
 and names the section whose prose has just become fiction. It does not read
 the document (it cannot — that lives in an artifact); it checks that what
 the document says is still true.
@@ -504,5 +504,10 @@ Three document-wide errors are fixed and worth not reintroducing:
   publish-side window and that a replica set is the prerequisite. §10, §18,
   §20 and §21 point at it.
 - **No "Nexus", and no `spp_` identifiers.** Same rule as the code.
+- **Counts in prose rot silently.** Nobody re-counts a collection list, so
+  the numbers the document gives are pinned: fourteen collections and
+  eleven test files. Adding either without updating §1, §2.7, §8.1, §22 and
+  §23 fails the build. The test *count* (131) is not pinned — counting it
+  needs a run — so it is still worth checking by eye.
 - **No email/SMTP channel and no "Ask Assistant".** Neither exists in this
   repo. **§4.12 is the authoritative statement**; align anything new to it.
