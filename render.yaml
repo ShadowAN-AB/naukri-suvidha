@@ -1,6 +1,19 @@
-# Render blueprint for the API. Import this from the Render dashboard, then
-# fill in the values marked sync:false - they are secrets and are deliberately
-# not in the repository.
+# Render blueprint for the two services. Import this from the Render
+# dashboard, then fill in the values marked sync:false - they are secrets and
+# are deliberately not in the repository.
+#
+# Two web services since step 5, and one thing about this deployment is worth
+# being honest about before reading further: there is **no gateway here**.
+# Vercel's rewrites do the gateway's *routing* - /api/auth to one service, the
+# rest of /api to the other - but a rewrite cannot run an authentication
+# subrequest, so the API runs IDENTITY_MODE=bearer and verifies tokens itself.
+# The cost is exact: no revocation check, so a suspended account keeps access
+# until its access token expires (15 minutes). The compose and Kubernetes
+# stacks are where the gateway actually runs, and where that window is closed.
+#
+# Closing it here would mean putting an nginx in front on Render, which is a
+# third service on a free plan that sleeps - so it is recorded rather than
+# pretended away.
 services:
   - type: web
     name: naukri-suvidha-api
@@ -20,12 +33,24 @@ services:
       # is no .env file for the local override to prefer.
       - key: MONGODB_URI
         sync: false
+
+      # Verified here rather than at an edge - see the note at the top. The
+      # two services must agree on these byte for byte, so they are generated
+      # once on the API and read from it by the auth service below rather than
+      # generated twice.
+      - key: IDENTITY_MODE
+        value: bearer
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: BCRYPT_ROUNDS
         value: 12
+
+      # The shared secret on the auth service's two calls back into this one.
+      # Generated here; the auth service reads the same value.
+      - key: AUTH_GATEWAY_SECRET
+        generateValue: true
 
       # Must match the deployed client exactly, or CORS and the refresh
       # cookie both fail.
@@ -55,3 +80,65 @@ services:
         value: claude-opus-5
       - key: AI_CONCURRENCY
         value: 2
+
+  # Authentication, as its own service - the step 5 extraction, deployed.
+  - type: web
+    name: naukri-suvidha-auth
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start --workspace=@naukri-suvidha/auth-service
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+
+      # Its own database, which is the whole point: the API has no connection
+      # that could read `users`. On Atlas this is a second database name on
+      # the same cluster - the free tier allows several.
+      - key: MONGODB_URI
+        sync: false
+
+      # Byte-identical to the API's, by reference rather than by a second
+      # generateValue - two generated values would be two different secrets,
+      # and the symptom is a sign-in that works and is then refused
+      # everywhere.
+      - key: JWT_ACCESS_SECRET
+        fromService:
+          type: web
+          name: naukri-suvidha-api
+          envVarKey: JWT_ACCESS_SECRET
+      - key: JWT_REFRESH_SECRET
+        fromService:
+          type: web
+          name: naukri-suvidha-api
+          envVarKey: JWT_REFRESH_SECRET
+      - key: AUTH_GATEWAY_SECRET
+        fromService:
+          type: web
+          name: naukri-suvidha-api
+          envVarKey: AUTH_GATEWAY_SECRET
+
+      - key: ACCESS_TOKEN_TTL
+        value: 15m
+      - key: REFRESH_TOKEN_TTL
+        value: 7d
+      - key: BCRYPT_ROUNDS
+        value: 12
+
+      # Must match the deployed client exactly, or CORS and the refresh
+      # cookie both fail.
+      - key: CLIENT_ORIGIN
+        sync: false
+
+      # Where to create the Student or Company row a new account implies.
+      # Render exposes a service's own URL, so this resolves without a
+      # hardcoded hostname.
+      - key: API_INTERNAL_URL
+        fromService:
+          type: web
+          name: naukri-suvidha-api
+          property: host

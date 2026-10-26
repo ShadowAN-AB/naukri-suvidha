@@ -308,9 +308,19 @@ any more.
 
 Then the original list:
 
-1. **Deploy** — Vercel + Render + Atlas + an S3 bucket. Configs are written;
-   see `DEPLOYMENT.md`. Needs the user's accounts. The step people miss is
-   replacing both `REPLACE-ME.onrender.com` in `vercel.json`.
+1. **Deploy** — Vercel + Render + Atlas + an S3 bucket. Configs are written for
+   **both** services; see `DEPLOYMENT.md`. Needs the user's accounts. The step
+   people miss is replacing the three placeholders in `vercel.json`, which are
+   now **two different hostnames** (`REPLACE-ME-AUTH` once, `REPLACE-ME-API`
+   twice) — getting them the wrong way round gives the same symptom as leaving
+   them, a login page that does nothing.
+
+   **This deployment has no gateway**, and the difference is worth stating
+   rather than discovering: Vercel's rewrites do the routing, but a rewrite
+   cannot run an `auth_request`, so the API runs `IDENTITY_MODE=bearer` there
+   and the revocation window is the access-token TTL. The gateway runs in the
+   two container stacks. If the gateway is part of what is being presented,
+   present it on `:8080` or `:8081`, not on the Vercel URL.
 2. **Seed production and pre-compute scores** before any demo.
 3. **Rehearse the demo twice**, once with Ollama stopped — `DEMO.md`.
 4. **20 real résumés** into `server/test/fixtures/`, then `npm run resumes:check`.
