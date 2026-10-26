@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { studentProfileUpdateSchema, companyProfileUpdateSchema, ROLES } from '@naukri-suvidha/shared';
+import { validate } from '@naukri-suvidha/service-kit';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../middleware/error.js';
 
 const router = Router();

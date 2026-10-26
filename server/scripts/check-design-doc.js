@@ -47,6 +47,7 @@ const RES = 'server/src/modules/resumes';
 const NOT = 'server/src/modules/notifications';
 const AUTH = 'server/src/modules/auth';
 const EV = 'server/src/infra/events';
+const KIT = 'service-kit/src';
 
 const claims = [
   // ---- document-wide invariants -------------------------------------------
@@ -134,8 +135,11 @@ const claims = [
     () => !/lock:(apply|schedule|analyze|rollup)/.test(
       read('server/src/modules/applications/service.js') + read('server/src/modules/interviews/service.js'))],
   ['§6', 'the refresh token is an httpOnly cookie, not a Redis key',
-    () => has('server/src/lib/tokens.js', 'httpOnly: true')
-       && has('server/src/lib/tokens.js', "REFRESH_COOKIE = 'naukri_suvidha_rt'")],
+    // In service-kit since the auth service was extracted: it mints these and
+    // the API verifies them, so one definition of a session is the point. The
+    // claim the document makes is unchanged - only where it is true moved.
+    () => has(`${KIT}/tokens.js`, 'httpOnly: true')
+       && has(`${KIT}/tokens.js`, "REFRESH_COOKIE = 'naukri_suvidha_rt'")],
   ['§6', 'duplicate applies are stopped by a unique index',
     () => has('server/src/modules/applications/model.js', 'jobId: 1, studentId: 1 }, { unique: true')],
 

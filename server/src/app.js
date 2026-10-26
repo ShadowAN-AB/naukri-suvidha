@@ -7,10 +7,12 @@ import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
 import cookieParser from 'cookie-parser';
 
+import { requestId } from '@naukri-suvidha/service-kit';
+
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { dbIsUp } from './config/db.js';
-import { requestId } from './middleware/requestId.js';
+
 import { notFound, errorHandler } from './middleware/error.js';
 import authRoutes from './modules/auth/routes.js';
 import adminRoutes from './modules/admin/routes.js';

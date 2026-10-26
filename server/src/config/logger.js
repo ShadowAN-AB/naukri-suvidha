@@ -1,29 +1,7 @@
-import pino from 'pino';
+import { createLogger } from '@naukri-suvidha/service-kit';
 import { env, isDev } from './env.js';
 
-export const logger = pino({
-  level: env.LOG_LEVEL,
-  ...(isDev
-    ? {
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'HH:MM:ss',
-            ignore: 'pid,hostname,req,res,responseTime,reqId',
-            singleLine: true,
-          },
-        },
-      }
-    : {}),
-  redact: {
-    paths: [
-      'req.headers.authorization',
-      'req.headers.cookie',
-      'res.headers["set-cookie"]',
-      '*.password',
-      '*.passwordHash',
-    ],
-    remove: true,
-  },
-});
+// The configuration - levels, pretty printing, and above all the redaction
+// list - is shared with every other service, so a credential cannot end up in
+// one service's logs because its own copy of this file fell behind.
+export const logger = createLogger({ level: env.LOG_LEVEL, pretty: isDev });

@@ -6,7 +6,9 @@
   "description": "Naukri Suvidha - an AI-assisted campus placement portal",
   "workspaces": [
     "shared",
+    "service-kit",
     "server",
+    "services/*",
     "client"
   ],
   "scripts": {

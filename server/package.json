@@ -16,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
     "@aws-sdk/client-s3": "^3.1153.0",
+    "@naukri-suvidha/service-kit": "^0.1.0",
     "@naukri-suvidha/shared": "^0.1.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^2.4.3",

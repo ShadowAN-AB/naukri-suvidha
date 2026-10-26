@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { loginSchema, registerSchema } from '@naukri-suvidha/shared';
+import { validate } from '@naukri-suvidha/service-kit';
 
 import * as controller from './controller.js';
-import { validate } from '../../middleware/validate.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { loginLimiter, registerLimiter } from '../../middleware/rateLimit.js';
 

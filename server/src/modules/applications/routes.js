@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { applySchema, changeStatusSchema, applicationListQuerySchema } from '@naukri-suvidha/shared';
+import { validate } from '@naukri-suvidha/service-kit';
 
 import * as service from './service.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { validate } from '../../middleware/validate.js';
 import { ROLES } from '../../lib/constants.js';
 
 const router = Router();
