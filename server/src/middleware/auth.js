@@ -1,5 +1,3 @@
-import { identify } from '../infra/identity/index.js';
-
 /**
  * Attaches req.user, from whichever source IDENTITY_MODE selected.
  *
@@ -12,11 +10,4 @@ import { identify } from '../infra/identity/index.js';
  * Route guards in the client remain convenience; every rule is still enforced
  * here, on the server.
  */
-export async function requireAuth(req, _res, next) {
-  try {
-    req.user = identify(req);
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
+export { requireAuth } from '../infra/identity/index.js';

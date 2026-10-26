@@ -30,7 +30,14 @@ export { loadEnvFile, baseEnvSchema, parseEnv } from './env.js';
 export { createLogger } from './logger.js';
 export { requestId } from './requestId.js';
 export { validate } from './validate.js';
-export { USER_STATUS, USER_STATUS_VALUES, IDENTITY_HEADERS } from './constants.js';
+export {
+  USER_STATUS,
+  USER_STATUS_VALUES,
+  IDENTITY_HEADERS,
+  SOCKET_EVENTS,
+  roomForUser,
+} from './constants.js';
+export { createIdentity, requireRole } from './identity.js';
 export { createRedis } from './redis.js';
 export {
   EVENTS,

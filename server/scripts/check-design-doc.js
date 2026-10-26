@@ -321,10 +321,14 @@ const claims = [
   ['§11', 'stranded deliveries are requeued at boot',
     () => has(`${EV}/retryWorker.js`, 'requeued stranded deliveries')],
   ['§11', 'sockets join one room per user and carry three events',
-    () => has('server/src/modules/realtime/index.js', 'roomFor = (userId)')
+    // The names and the room format are in service-kit since notifications
+    // became its own service: a different process emits two of them, through
+    // the Redis adapter into rooms this gateway holds.
+    () => has(`${KIT}/constants.js`, 'roomForUser = (userId)')
+       && has('server/src/modules/realtime/index.js', 'roomFor = roomForUser')
        && ["NOTIFICATION_NEW: 'notification:new'", "APPLICATION_STATUS: 'application:status'",
            "RESUME_PROCESSED: 'resume:processed'"]
-         .every((e) => has('server/src/modules/realtime/index.js', e))],
+         .every((e) => has(`${KIT}/constants.js`, e))],
 
   // ---- §18 sequence diagrams ----------------------------------------------
   ['§18', 'A: login is rate limited and timing-safe for unknown accounts',

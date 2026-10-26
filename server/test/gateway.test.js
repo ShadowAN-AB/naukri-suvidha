@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { gatewayIdentity } from '../src/infra/identity/gateway.js';
-import { bearerIdentity } from '../src/infra/identity/bearer.js';
-import { identityMode } from '../src/infra/identity/index.js';
+import { gatewayIdentity, bearerIdentity, identityMode } from '../src/infra/identity/index.js';
 import { signAccessToken } from '../src/lib/tokens.js';
 import { ROLES } from '../src/lib/constants.js';
 
@@ -13,6 +11,10 @@ import { ROLES } from '../src/lib/constants.js';
  * security-sensitive part of step 5: the API trusts an HTTP header for the
  * caller's identity. Everything below is a way of asking "and what stops
  * someone sending that header themselves".
+ *
+ * The strategies themselves live in service-kit, because the notifications
+ * service is behind the same gateway and must read a forwarded identity the
+ * same way. These exercise the pair this service builds from its own config.
  *
  * Not through supertest, because the strategy is chosen once when
  * infra/identity is imported - the same boot-time choice infra/cache makes -
