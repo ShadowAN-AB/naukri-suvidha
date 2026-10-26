@@ -17,9 +17,28 @@ import { Student, Company } from '../profiles/model.js';
 import { FitScore } from '../ai/model.js';
 import { AuditLog } from '../admin/model.js';
 
-async function audit(actorId, action, entityId, ip, meta) {
+/*
+ * Takes the whole actor, not just an id. The audit row stores the email and
+ * role alongside the id because `users` is the auth service's now and cannot
+ * be joined to from here - see the comment on actorId in the admin model.
+ *
+ * `email` is empty in bearer mode, where the identity comes from the access
+ * token and the token deliberately does not carry a mutable field. In gateway
+ * mode - both container stacks - the edge forwards it, so the deployed
+ * system records it and the screen falls back to the id where it does not.
+ */
+async function audit(actor, action, entityId, ip, meta) {
   try {
-    await AuditLog.create({ actorId, action, entity: 'Application', entityId, ip, meta });
+    await AuditLog.create({
+      actorId: actor.id,
+      actorEmail: actor.email || undefined,
+      actorRole: actor.role,
+      action,
+      entity: 'Application',
+      entityId,
+      ip,
+      meta,
+    });
   } catch (err) {
     logger.error({ err, action }, 'audit write failed');
   }
@@ -104,7 +123,7 @@ export async function apply(user, jobId, ip) {
     }
     throw err;
   }
-  await audit(user.id, 'application.submitted', application._id, ip, { jobId: String(job._id) });
+  await audit(user, 'application.submitted', application._id, ip, { jobId: String(job._id) });
 
   return application.toObject();
 }
@@ -213,7 +232,7 @@ export async function changeStatus(user, id, { status, note }, ip) {
       { session },
     );
   });
-  await audit(user.id, 'application.status_changed', application._id, ip, { status });
+  await audit(user, 'application.status_changed', application._id, ip, { status });
 
   return application.toObject();
 }
@@ -235,7 +254,7 @@ export async function withdraw(user, id, ip) {
     note: 'Withdrawn by the student',
   });
   await application.save();
-  await audit(user.id, 'application.withdrawn', application._id, ip, {});
+  await audit(user, 'application.withdrawn', application._id, ip, {});
 
   return application.toObject();
 }

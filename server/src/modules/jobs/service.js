@@ -13,9 +13,28 @@ import { AuditLog } from '../admin/model.js';
 /** Changing any of these after approval re-opens the approval question. */
 const ELIGIBILITY_FIELDS = ['minCgpa', 'maxBacklogs', 'allowedBranches'];
 
-async function audit(actorId, action, entityId, ip, meta) {
+/*
+ * Takes the whole actor, not just an id. The audit row stores the email and
+ * role alongside the id because `users` is the auth service's now and cannot
+ * be joined to from here - see the comment on actorId in the admin model.
+ *
+ * `email` is empty in bearer mode, where the identity comes from the access
+ * token and the token deliberately does not carry a mutable field. In gateway
+ * mode - both container stacks - the edge forwards it, so the deployed
+ * system records it and the screen falls back to the id where it does not.
+ */
+async function audit(actor, action, entityId, ip, meta) {
   try {
-    await AuditLog.create({ actorId, action, entity: 'Job', entityId, ip, meta });
+    await AuditLog.create({
+      actorId: actor.id,
+      actorEmail: actor.email || undefined,
+      actorRole: actor.role,
+      action,
+      entity: 'Job',
+      entityId,
+      ip,
+      meta,
+    });
   } catch (err) {
     logger.error({ err, action }, 'audit write failed');
   }
@@ -50,7 +69,7 @@ export async function createJob(user, input, ip) {
     );
     return created;
   });
-  await audit(user.id, 'job.created', job._id, ip, { title: job.title });
+  await audit(user, 'job.created', job._id, ip, { title: job.title });
 
   return job.toObject();
 }
@@ -205,7 +224,7 @@ export async function updateJob(user, id, patch, ip) {
   }
 
   await job.save();
-  await audit(user.id, 'job.updated', job._id, ip, { requeued, fields: Object.keys(patch) });
+  await audit(user, 'job.updated', job._id, ip, { requeued, fields: Object.keys(patch) });
 
   return { job: job.toObject(), requeued };
 }
@@ -229,7 +248,7 @@ export async function approveJob(user, id, ip) {
       { session },
     );
   });
-  await audit(user.id, 'job.approved', job._id, ip, { title: job.title });
+  await audit(user, 'job.approved', job._id, ip, { title: job.title });
 
   return job.toObject();
 }
@@ -245,7 +264,7 @@ export async function rejectJob(user, id, reason, ip) {
   job.approvedAt = undefined;
   await job.save();
 
-  await audit(user.id, 'job.rejected', job._id, ip, { reason });
+  await audit(user, 'job.rejected', job._id, ip, { reason });
   return job.toObject();
 }
 
@@ -263,7 +282,7 @@ export async function closeJob(user, id, ip) {
 
   job.status = JOB_STATUS.CLOSED;
   await job.save();
-  await audit(user.id, 'job.closed', job._id, ip, { title: job.title });
+  await audit(user, 'job.closed', job._id, ip, { title: job.title });
 
   return job.toObject();
 }

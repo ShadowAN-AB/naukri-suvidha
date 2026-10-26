@@ -9,9 +9,28 @@ import { Job } from '../jobs/model.js';
 import { Student, Company } from '../profiles/model.js';
 import { AuditLog } from '../admin/model.js';
 
-async function audit(actorId, action, entityId, ip, meta) {
+/*
+ * Takes the whole actor, not just an id. The audit row stores the email and
+ * role alongside the id because `users` is the auth service's now and cannot
+ * be joined to from here - see the comment on actorId in the admin model.
+ *
+ * `email` is empty in bearer mode, where the identity comes from the access
+ * token and the token deliberately does not carry a mutable field. In gateway
+ * mode - both container stacks - the edge forwards it, so the deployed
+ * system records it and the screen falls back to the id where it does not.
+ */
+async function audit(actor, action, entityId, ip, meta) {
   try {
-    await AuditLog.create({ actorId, action, entity: 'Interview', entityId, ip, meta });
+    await AuditLog.create({
+      actorId: actor.id,
+      actorEmail: actor.email || undefined,
+      actorRole: actor.role,
+      action,
+      entity: 'Interview',
+      entityId,
+      ip,
+      meta,
+    });
   } catch (err) {
     logger.error({ err, action }, 'audit write failed');
   }
@@ -131,7 +150,7 @@ export async function schedule(user, input, ip) {
     throw err;
   }
 
-  await audit(user.id, 'interview.scheduled', interview._id, ip, { mode: interview.mode });
+  await audit(user, 'interview.scheduled', interview._id, ip, { mode: interview.mode });
 
   return interview.toObject();
 }
@@ -172,7 +191,7 @@ export async function reschedule(user, id, input, ip) {
       { session },
     );
   });
-  await audit(user.id, 'interview.rescheduled', interview._id, ip, {});
+  await audit(user, 'interview.rescheduled', interview._id, ip, {});
 
   return interview.toObject();
 }
@@ -188,7 +207,7 @@ export async function cancel(user, id, ip) {
 
   interview.status = INTERVIEW_STATUS.CANCELLED;
   await interview.save();
-  await audit(user.id, 'interview.cancelled', interview._id, ip, {});
+  await audit(user, 'interview.cancelled', interview._id, ip, {});
 
   return interview.toObject();
 }

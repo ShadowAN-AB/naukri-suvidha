@@ -126,10 +126,11 @@ export async function auditLog({ limit = 50, actorId, action } = {}) {
   if (actorId) filter.actorId = actorId;
   if (action) filter.action = action;
 
+  // No populate: the actor's email and role are on the row. See the comment
+  // on actorId in this module's model for why, and what it cost to learn.
   const items = await AuditLog.find(filter)
     .sort({ at: -1 })
     .limit(limit)
-    .populate('actorId', 'email role')
     .lean();
 
   return { items };

@@ -96,7 +96,11 @@ export default function AuditLog() {
                 })}
               </span>
               <span className="order-1 min-w-0 flex-1 sm:order-none">
-                <span className="font-medium">{a.actorId?.email ?? 'system'}</span>{' '}
+                {/* The actor is stored on the row, not joined: `users` belongs
+                    to the auth service. An older row, or one written in
+                    bearer mode where the access token carries no email,
+                    falls back to the id and then to "system". */}
+                <span className="font-medium">{a.actorEmail ?? a.actorId ?? 'system'}</span>{' '}
                 <span className="text-muted">{ACTION_LABEL[a.action] ?? a.action}</span>
               </span>
               <span className="order-3 shrink-0 text-xs text-muted sm:order-none">{a.entity}</span>
