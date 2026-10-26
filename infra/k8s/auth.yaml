@@ -1,0 +1,159 @@
+# The auth service: step 5's extracted service, as its own Deployment.
+#
+# Its own image, its own lifecycle, its own database. The thing worth noticing
+# next to api.yaml is how much shorter this is, and that is not tidying - it
+# is what a boundary buys. No Kafka gate, because it publishes no events. No
+# uploads volume, because it stores no files. No startup probe measured in
+# tens of seconds, because it does not join eight consumer groups before it
+# can listen: it connects to mongo and serves.
+#
+# It is not behind the HPA. Login is bcrypt-bound rather than throughput-bound
+# and the portal does far more of everything else than it does sign-ins, so
+# two replicas is a deliberate fixed number rather than an oversight - and
+# with Redis holding the rate-limit counters, two replicas still enforce five
+# login attempts a minute rather than ten.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth
+  ports:
+    - name: http
+      port: 5002
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Every API request runs an introspection subrequest against this
+      # service, so it is on the path of the entire portal. A rolling update
+      # that took a replica out first would make the whole thing flap.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        # See api.yaml: a mutable :dev tag means a rebuild leaves the pod
+        # template byte-identical and apply reports "unchanged" while the old
+        # build keeps serving. up.sh substitutes the built image's id here.
+        naukri-suvidha/image-id: '__AUTH_IMAGE_ID__'
+      labels:
+        app.kubernetes.io/name: auth
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: auth
+      # Two gates, not three. connectDb() gives mongo 10s and then throws, and
+      # Redis is on the rate limiter's path - but there is no Kafka here at
+      # all, which is most of why this starts so much faster than the API.
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z mongo 27017; do echo "waiting for mongo"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-redis
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z redis 6379; do echo "waiting for redis"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: auth
+          image: naukri-suvidha/auth:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5002
+          envFrom:
+            - configMapRef:
+                name: auth-config
+            - secretRef:
+                name: api-secrets
+          resources:
+            requests:
+              # Lower than the API's 200m, and for a measurable reason: an
+              # idle API pod burns ~39m just holding its eight Kafka consumer
+              # groups open, and this one holds none. Its load is bursty and
+              # bcrypt-shaped rather than steady.
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              # No CPU limit, same as the API: bcrypt is the one thing here
+              # that genuinely wants a core, and throttling it would turn a
+              # sign-in into a timeout.
+              memory: 384Mi
+          readinessProbe:
+            # Answers 503 while mongo is unreachable, so an unhealthy pod
+            # leaves the Service's endpoints and stops being sent traffic -
+            # including the edge's introspection subrequests - without being
+            # killed.
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # A TCP check, not /health, for the same reason as the API:
+            # liveness failing means "kill this container", so pointing it at
+            # a dependency would turn one mongo blip into a restart of every
+            # replica at once.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            # Far shorter than the API's 40 x 3s. There is no broker to wait
+            # for; this is mongo and an HTTP listener.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              exec:
+                # Endpoint removal and SIGTERM race - kube-proxy's rules are
+                # updated asynchronously on every node, so a pod can still be
+                # handed a connection after it has begun shutting down. It
+                # matters more here than anywhere: a dropped introspection is
+                # a 500 on somebody's ordinary request.
+                command: ['/bin/sh', '-c', 'sleep 5']

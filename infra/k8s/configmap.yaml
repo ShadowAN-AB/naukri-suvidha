@@ -32,6 +32,16 @@ data:
   # this is the transport that matches how this deployment behaves.
   KAFKA_BROKERS: kafka:9092
 
+  # The edge has already authenticated every request that reaches this
+  # service, so it verifies no token and reads no user - it reads the identity
+  # the gateway forwarded. The proof secret is in the Secret, not here.
+  IDENTITY_MODE: gateway
+  # For the socket handshake only. A Socket.IO handshake carries its token in
+  # the connection payload and /socket.io is proxied straight through, so it
+  # is the one entry point the gateway cannot authenticate and this service
+  # introspects it itself.
+  AUTH_SERVICE_URL: http://auth:5002
+
   ACCESS_TOKEN_TTL: 15m
   REFRESH_TOKEN_TTL: 7d
   BCRYPT_ROUNDS: '12'
@@ -52,3 +62,43 @@ data:
   AI_CONCURRENCY: '2'
   EMBEDDING_MODEL: nomic-embed-text
   VECTOR_INDEX: memory
+---
+# The auth service's non-secret configuration.
+#
+# A second ConfigMap rather than more keys in the first, and that separation
+# is the point of the step: the two services are configured independently, so
+# changing one cannot roll the other. The overlap is deliberate and small -
+# the mongo host, the token TTLs, the bcrypt cost - and the one value that
+# must match byte for byte, the JWT secrets, is in the shared Secret rather
+# than copied into both of these.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: naukri-suvidha
+data:
+  NODE_ENV: production
+  PORT: '5002'
+  LOG_LEVEL: info
+
+  # Its own database on the same replica set, not its own collections in the
+  # API's. The API has no connection that could read `users` even by mistake,
+  # which is ownership enforced rather than remembered.
+  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
+  # Shared with this service's own replicas, so five login attempts a minute
+  # means five rather than five per pod.
+  REDIS_URL: redis://redis:6379
+
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 7d
+  BCRYPT_ROUNDS: '12'
+  CLIENT_ORIGIN: http://localhost:8081
+
+  # Where to create the Student or Company row a new account implies. It goes
+  # to the api Service directly, not through the edge: this is a
+  # service-to-service call and has no business taking a route through the
+  # public entry point - which would also mean its own auth_request.
+  API_INTERNAL_URL: http://api:5001

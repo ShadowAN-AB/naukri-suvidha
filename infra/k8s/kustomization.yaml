@@ -16,13 +16,14 @@ resources:
   - redis.yaml
   - kafka.yaml
   - api.yaml
+  - auth.yaml
   - edge.yaml
   - hpa.yaml
 
 configMapGenerator:
   - name: edge-nginx
     files:
-      - edge-nginx.conf
+      - edge-nginx.conf.template
 
 generatorOptions:
   # No content hash in the name. A hash is usually what you want - it makes a

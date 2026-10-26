@@ -23,6 +23,7 @@ kubectl config use-context "kind-$CLUSTER" >/dev/null
 
 step "Building the images"
 docker build -t naukri-suvidha/api:dev  -f "$ROOT/server/Dockerfile" "$ROOT"
+docker build -t naukri-suvidha/auth:dev -f "$ROOT/services/auth/Dockerfile" "$ROOT"
 docker build -t naukri-suvidha/edge:dev -f "$ROOT/client/Dockerfile" "$ROOT"
 
 step "Side-loading the images into the cluster"
@@ -31,6 +32,7 @@ step "Side-loading the images into the cluster"
 # say imagePullPolicy: IfNotPresent - the default for a :dev-style tag would
 # still be IfNotPresent, but Always would make every pod fail to pull.
 kind load docker-image naukri-suvidha/api:dev  --name "$CLUSTER"
+kind load docker-image naukri-suvidha/auth:dev --name "$CLUSTER"
 kind load docker-image naukri-suvidha/edge:dev --name "$CLUSTER"
 # busybox, which the API's dependency gates use, is deliberately *not* loaded
 # this way. It is a public multi-arch image, and `docker pull` on an arm64 Mac
@@ -56,15 +58,32 @@ step "Applying the manifests"
 # 172.24.0.1 are both common). Rendering the manifests and rewriting the
 # placeholder means the value is correct from the first pod rather than
 # patched in afterwards and needing a restart.
-GATEWAY="$(docker network inspect kind --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' | tr -d '[:space:]')"
+# One line per IPAM config, then the first IPv4 one. The obvious version of
+# this - ranging over .IPAM.Config and printing .Gateway - concatenates the
+# IPv4 and IPv6 gateways into one string when the kind network has both, and
+# kind enables IPv6 by default on some Docker versions. The result was
+# "172.24.0.1fc00:f853:ccd:e793::1", which is not an address: OLLAMA_BASE_URL
+# then fails env.js's url() check and every API pod exits 1 on boot, pointing
+# at the model rather than at this line.
+GATEWAY="$(docker network inspect kind --format '{{range .IPAM.Config}}{{println .Gateway}}{{end}}' \
+  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)"
 echo "   host gateway for Ollama: ${GATEWAY:-unknown}"
 # The image ids go into the pod templates - see the annotation in api.yaml for
 # why a mutable :dev tag otherwise leaves old pods running a stale build.
 API_ID="$(docker image inspect naukri-suvidha/api:dev  --format '{{.Id}}')"
+AUTH_ID="$(docker image inspect naukri-suvidha/auth:dev --format '{{.Id}}')"
 EDGE_ID="$(docker image inspect naukri-suvidha/edge:dev --format '{{.Id}}')"
+# And the gateway config, for the same reason one layer along. The edge's
+# ConfigMap is generated without a content hash so the object keeps a readable
+# name, which means editing the nginx config changes the ConfigMap but leaves
+# the pod template identical - so apply says "unchanged" and the running edge
+# keeps the old routing. Hashing the file into the template puts the content
+# back inside the thing apply compares.
+EDGE_CONFIG_HASH="$(shasum -a 256 "$HERE/edge-nginx.conf.template" | cut -c1-16)"
 kubectl kustomize "$HERE" \
   | sed "s|http://172\.18\.0\.1:11434|http://${GATEWAY:-172.18.0.1}:11434|" \
-  | sed "s|__API_IMAGE_ID__|${API_ID}|; s|__EDGE_IMAGE_ID__|${EDGE_ID}|" \
+  | sed "s|__API_IMAGE_ID__|${API_ID}|; s|__AUTH_IMAGE_ID__|${AUTH_ID}|; s|__EDGE_IMAGE_ID__|${EDGE_ID}|" \
+  | sed "s|__EDGE_CONFIG_HASH__|${EDGE_CONFIG_HASH}|" \
   | kubectl apply -f -
 
 step "Waiting for the data services"
@@ -73,7 +92,11 @@ kubectl -n "$NS" rollout status deployment/redis --timeout=120s
 # Kafka is the slow one: a broker needs tens of seconds before it will answer.
 kubectl -n "$NS" rollout status statefulset/kafka --timeout=300s
 
-step "Waiting for the API and the edge"
+step "Waiting for the services and the edge"
+# auth first, and it is genuinely quicker: no broker to join, so it is serving
+# while the API is still reclaiming stranded aiTasks and joining eight
+# consumer groups.
+kubectl -n "$NS" rollout status deployment/auth --timeout=180s
 kubectl -n "$NS" rollout status deployment/api  --timeout=300s
 kubectl -n "$NS" rollout status deployment/edge --timeout=120s
 
