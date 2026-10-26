@@ -1,0 +1,281 @@
+# The edge: static host, reverse proxy, load balancer and API gateway in one.
+#
+# This is the CDN-and-gateway pair of the proposed architecture, collapsed to
+# the one box a laptop can actually run. Since step 5 it has a fourth job and
+# it is the interesting one: it authenticates.
+#
+# A .template, not a .conf, because the shared secret below must not be baked
+# into the image. The nginx entrypoint runs envsubst over
+# /etc/nginx/templates/*.template at start-up; NGINX_ENVSUBST_FILTER restricts
+# it to the one variable, so nginx's own $host and $remote_addr are left alone.
+
+# Docker's embedded DNS. nginx resolves an upstream once at start-up unless
+# the address is a variable, so `resolver` plus `set` is what makes scaling
+# `api` to N containers spread the load instead of pinning replica 1.
+#
+# Be precise about what this buys. Balancing happens per DNS lookup, not per
+# request, so the granularity is this TTL, and the spread is uneven because it
+# depends on the order Docker's resolver happens to return records in.
+# Measured against three replicas: 6/5/3 over fourteen requests, then 7/3 over
+# ten. Fired back to back inside one TTL window they all land on one container.
+#
+# That is real load balancing and it is honestly not a good one.
+#
+# A real deployment does not balance this way. Kubernetes gives a Service a
+# stable address and spreads connections beneath it, which is per-connection
+# rather than per-TTL - and is the reason the Service abstraction exists.
+resolver 127.0.0.11 valid=2s ipv6=off;
+
+server {
+    listen 80;
+    server_name _;
+
+    # The built SPA.
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Hashed assets never change under the same name, so they can be held
+    # for a year. index.html must not be, or a deploy is invisible.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # ---- the gateway's error shape ------------------------------------------
+    #
+    # When auth_request returns 401 or 403, nginx answers with its own HTML
+    # error page. The project has one error shape everywhere, and the whole
+    # point of a gateway is that a client cannot tell which process answered -
+    # so a refusal from the edge has to look like a refusal from a service.
+    #
+    # $request_id is nginx's own, and it is also what the edge stamps on every
+    # proxied request below, so the id in this body is the id in both
+    # services' logs.
+    error_page 401 = @unauthorized;
+    error_page 403 = @forbidden;
+
+    location @unauthorized {
+        internal;
+        default_type application/json;
+        return 401 '{"error":{"code":"UNAUTHORIZED","message":"Authentication required","requestId":"$request_id"}}';
+    }
+
+    location @forbidden {
+        internal;
+        default_type application/json;
+        return 403 '{"error":{"code":"FORBIDDEN","message":"You do not have access to this resource","requestId":"$request_id"}}';
+    }
+
+    # ---- the authentication subrequest --------------------------------------
+    #
+    # `internal` means no client can reach this path; it exists only to be
+    # called by auth_request below.
+    #
+    # The body is dropped because introspection reads the Authorization header
+    # and nothing else, and Content-Length has to be cleared with it or the
+    # upstream waits for a body that is never sent.
+    location = /_authn {
+        internal;
+
+        # The rewrite, not a path on proxy_pass, and the reason is the trap
+        # described on /api/auth/ below: a proxy_pass to a *variable* does no
+        # URI rewriting of its own, so a path written into the variable is
+        # ignored and the subrequest would arrive as /_authn.
+        # `set` before `rewrite`, and that order is load-bearing: `break` ends
+        # the rewrite module's work for this location, and `set` belongs to the
+        # same module - so a `set` written after the rewrite never runs, and
+        # proxy_pass gets an empty variable. nginx says "using uninitialized
+        # variable" and answers 500.
+        set $authn_upstream http://auth:5002;
+        rewrite ^ /internal/introspect break;
+        proxy_pass $authn_upstream;
+
+        proxy_http_version 1.1;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length   "";
+        proxy_set_header Authorization    $http_authorization;
+        proxy_set_header X-Gateway-Key    "${AUTH_GATEWAY_SECRET}";
+        proxy_set_header X-Request-ID     $request_id;
+
+        # Short on purpose. This is on the path of every API request, so a
+        # slow auth service must fail rather than hold the whole portal.
+        proxy_connect_timeout 2s;
+        proxy_read_timeout    2s;
+    }
+
+    # ---- routing ------------------------------------------------------------
+    #
+    # Longest prefix wins in nginx, and exact matches beat prefixes, so the
+    # order these are written in does not matter - but the specificity does.
+    # Each of the blocks below exists because it needs different treatment
+    # from /api/, and the differences are the gateway's whole job.
+
+    # Neither service's internal surface is reachable from outside. Both check
+    # the shared secret themselves as well; this is the outer of two locks,
+    # and 404 matches what they answer so the edge does not reveal more than
+    # they would.
+    location /api/internal/ {
+        return 404 '{"error":{"code":"NOT_FOUND","message":"Not found"}}';
+    }
+    location /api/auth/internal/ {
+        return 404 '{"error":{"code":"NOT_FOUND","message":"Not found"}}';
+    }
+
+    # Authentication, to the auth service, with the /api/auth prefix stripped.
+    #
+    # The `rewrite` is what strips it, and it has to be a rewrite. The usual
+    # way to strip a prefix is a trailing slash on proxy_pass - but that only
+    # works for a *literal* upstream. With a variable, which this stack needs
+    # so Docker's DNS is re-resolved, nginx does no URI rewriting at all and
+    # the trailing slash is silently ignored: /api/auth/login arrived at the
+    # auth service as /api/auth/login and 404'd. The failure looked like a
+    # broken service rather than a proxy that had quietly stopped rewriting.
+    #
+    # No auth_request here - these are the routes that exist to get a token,
+    # so requiring one would be circular.
+    #
+    # The identity headers are cleared rather than left alone. nginx passes
+    # through any header it does not set, so without these four lines a client
+    # could send its own x-auth-user-id and have it arrive at an upstream. The
+    # proof secret is cleared too: nothing downstream of here should see one it
+    # did not get from this file.
+    location /api/auth/ {
+        # `set` first - see /_authn above for why the order matters.
+        set $auth_upstream http://auth:5002;
+        rewrite ^/api/auth/?(.*)$ /$1 break;
+        proxy_pass $auth_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID      $request_id;
+
+        proxy_set_header X-Auth-User-Id    "";
+        proxy_set_header X-Auth-User-Role  "";
+        proxy_set_header X-Auth-User-Email "";
+        proxy_set_header X-Gateway-Key     "";
+
+        add_header X-Upstream-Addr $upstream_addr always;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    60s;
+    }
+
+    # The two health endpoints are deliberately open - whether the portal and
+    # the model are working is operational information and reveals nothing
+    # about any person. Exact matches, so they are carved out of /api/ below
+    # without opening anything else.
+    location = /api/health {
+        set $health_upstream http://api:5001;
+        proxy_pass $health_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Request-ID      $request_id;
+        proxy_set_header X-Auth-User-Id    "";
+        proxy_set_header X-Auth-User-Role  "";
+        proxy_set_header X-Auth-User-Email "";
+        proxy_set_header X-Gateway-Key     "";
+
+        add_header X-Upstream-Addr $upstream_addr always;
+    }
+
+    location = /api/ai/health {
+        set $aihealth_upstream http://api:5001;
+        proxy_pass $aihealth_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Request-ID      $request_id;
+        proxy_set_header X-Auth-User-Id    "";
+        proxy_set_header X-Auth-User-Role  "";
+        proxy_set_header X-Auth-User-Email "";
+        proxy_set_header X-Gateway-Key     "";
+    }
+
+    # Everything else under /api is the API, and every request to it is
+    # authenticated here first.
+    #
+    # This is what step 5 added. auth_request fires a subrequest to the auth
+    # service; a 2xx lets the request through and a 401 or 403 ends it with the
+    # JSON above. auth_request_set then lifts the identity out of the
+    # subrequest's *response headers* - the only part of a subrequest response
+    # nginx keeps, which is why introspection returns the identity in headers
+    # as well as in its body.
+    #
+    # The API then trusts those headers, because IDENTITY_MODE=gateway and the
+    # proof secret below says they came from here. It verifies no token and
+    # reads no user: that work happened once, in the service that owns the
+    # data, instead of in every service that needs an identity.
+    #
+    # The cost is a hop per request, and it is a real cost. It is also the
+    # thing that makes the boundary work at all - see the note in the auth
+    # service's introspect about caching it, which is not done yet.
+    location /api/ {
+        auth_request /_authn;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+
+        set $api_upstream http://api:5001;
+        proxy_pass $api_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID      $request_id;
+
+        # Always set, never passed through: whatever the client sent under
+        # these names is replaced by what the auth service said.
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+        proxy_set_header X-Gateway-Key     "${AUTH_GATEWAY_SECRET}";
+
+        # Which replica answered. The whole point of the exercise is being
+        # able to see this change between requests.
+        add_header X-Upstream-Addr $upstream_addr always;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    60s;
+    }
+
+    # Socket.IO is balanced like everything else now that the Redis adapter
+    # is in place: an emit goes out over pub/sub, so whichever replica holds
+    # a user's socket delivers it. Before the adapter this had to be pinned,
+    # because a handshake on one replica and polling on another is a realtime
+    # channel that silently never fires.
+    #
+    # No auth_request. A handshake carries its token in the Socket.IO
+    # connection payload rather than an Authorization header, and there is no
+    # subrequest to run on a websocket upgrade anyway - so this is the one
+    # entry point the gateway cannot authenticate, and the API introspects it
+    # against the auth service itself.
+    location /socket.io/ {
+        set $ws_upstream http://api:5001;
+        proxy_pass $ws_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host       $host;
+        proxy_set_header X-Request-ID $request_id;
+
+        proxy_set_header X-Auth-User-Id    "";
+        proxy_set_header X-Auth-User-Role  "";
+        proxy_set_header X-Auth-User-Email "";
+        proxy_set_header X-Gateway-Key     "";
+
+        proxy_read_timeout 3600s;
+    }
+
+    # A SPA: anything that is not a file is a route.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

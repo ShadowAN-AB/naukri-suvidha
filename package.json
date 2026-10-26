@@ -26,7 +26,7 @@
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api edge",
-    "docker:seed": "docker compose --profile tools run --rm seed",
+    "docker:seed": "docker compose --profile tools run --build --rm seed",
     "docker:scale": "docker compose up -d --no-recreate --scale api=3",
     "docker:ps": "docker compose ps",
     "k8s:up": "bash infra/k8s/up.sh",

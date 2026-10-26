@@ -14,7 +14,7 @@ import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
 import { connectDb, disconnectDb } from '../src/config/db.js';
 import * as models from '../src/models.js';
-import { userSchema, refreshTokenSchema } from '../../services/auth/src/model.js';
+import { userSchema, refreshTokenSchema } from '../../services/auth/src/schemas.js';
 const { Student, Company, Job } = models;
 
 /**
@@ -31,9 +31,13 @@ const { Student, Company, Job } = models;
  * an operational script, not a service, so it is allowed to know the shape of
  * the system. Nothing in either service's own code does this.
  *
- * The schemas come from the auth service rather than being restated here -
- * `mongoose.model` on a connection builds a model without registering it
- * globally, which is exactly what a second connection needs.
+ * The schemas come from the auth service rather than being restated here, and
+ * from schemas.js rather than model.js. That distinction is load-bearing:
+ * model.js calls mongoose.model, which registers on the *default* connection -
+ * this script's, pointing at the API's database - and registering a model
+ * builds its indexes, which creates the collection. Importing it here put
+ * empty `users` and `refreshtokens` collections into the API's database, which
+ * is precisely the thing step 5 exists to make impossible.
  */
 const AUTH_MONGODB_URI = process.env.AUTH_MONGODB_URI;
 if (!AUTH_MONGODB_URI) {

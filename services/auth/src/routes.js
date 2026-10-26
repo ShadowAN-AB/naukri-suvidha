@@ -33,4 +33,19 @@ export default router;
 export const internalRouter = Router();
 
 internalRouter.use(internalOnly);
+
+/*
+ * Both verbs, and that is not laziness.
+ *
+ * nginx's `auth_request` always issues a **GET** subrequest, whatever the
+ * method of the request that triggered it, and drops the body - so a POST-only
+ * introspection endpoint answers 404 to the gateway, which reports it as
+ * "auth request unexpected status: 404" and turns every API request into a
+ * 500. GET is the better fit anyway: introspection reads a header and changes
+ * nothing.
+ *
+ * POST stays because a service-to-service caller may reasonably prefer to send
+ * the token in a body rather than a header.
+ */
+internalRouter.get('/introspect', controller.introspect);
 internalRouter.post('/introspect', controller.introspect);

@@ -108,15 +108,17 @@ const claims = [
       const auth = countOf(`${AUTH}/model.js`, 'mongoose.model(');
       return api.length === 12 && auth === 2 && api.length + auth === 14;
     }],
-  // Twelve since step 5, not eleven: the auth service brought its own suite,
-  // and server/test/auth.test.js became access.test.js - what is left of this
-  // service's side once credentials and sessions moved.
-  ['counts', '§1 says 12 test files, across both services',
+  // Thirteen since step 5, not eleven. The auth service brought its own suite;
+  // server/test/auth.test.js became access.test.js - what is left of this
+  // service's side once credentials and sessions moved - and gateway.test.js
+  // was added for the identity strategies, which is where a forged header is
+  // refused.
+  ['counts', '§1 says 13 test files, across both services',
     () => {
       const r = spawnSync('git',
         ['ls-files', 'server/test/*.test.js', 'services/auth/test/*.test.js'],
         { cwd: root, encoding: 'utf8' });
-      return r.status === 0 && r.stdout.trim().split('\n').length === 12;
+      return r.status === 0 && r.stdout.trim().split('\n').length === 13;
     }],
 
   // ---- §6 Redis & caching --------------------------------------------------

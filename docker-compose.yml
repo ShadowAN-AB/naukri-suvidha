@@ -1,13 +1,16 @@
 # The whole portal on one machine, as containers.
 #
 # What this demonstrates, and why each piece is here rather than described:
-#   · containerisation  - the API and the client each build to an image
+#   · containerisation  - each service and the client build to an image
 #   · load balancing    - nginx spreads /api over N API replicas
 #   · horizontal scaling- `--scale api=N`, no host ports on the API at all
 #   · an edge           - one nginx doing static hosting, proxying and caching
+#   · microservices     - auth is its own image, process and database
+#   · an API gateway    - the edge routes by prefix and authenticates every
+#                         /api request against the auth service before it
+#                         reaches the API
 #
-# Redis and Kafka arrive in the next two steps; this file is the floor they
-# stand on. Everything here runs with `docker compose up --build`.
+# Everything here runs with `docker compose up --build`.
 
 name: naukri-suvidha
 
@@ -113,6 +116,17 @@ services:
       PORT: '5001'
       LOG_LEVEL: info
       MONGODB_URI: mongodb://mongo:27017/naukri_suvidha?replicaSet=rs0
+      # The edge has already authenticated every request that gets here, so
+      # this process verifies no token and reads no user - it reads the
+      # identity the gateway forwarded. The secret is what makes reaching this
+      # container insufficient to claim one.
+      IDENTITY_MODE: gateway
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      # For the socket handshake only. A Socket.IO handshake carries its token
+      # in the connection payload and /socket.io is proxied straight through,
+      # so it is the one entry point the gateway cannot authenticate and this
+      # process introspects it itself.
+      AUTH_SERVICE_URL: http://auth:5002
       # With this set, the cache, the rate limiter and the socket gateway are
       # shared between replicas. Without it each container keeps its own,
       # which is exactly the bug this step exists to fix.
@@ -155,6 +169,56 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
 
+  # Authentication, as its own service - step 5.
+  #
+  # Its own image, its own process, and above all its own *database*:
+  # `naukri_suvidha_auth` on the same mongod, so the API has no connection
+  # that could read `users` even by mistake. Ownership enforced rather than
+  # remembered.
+  #
+  # No host port, same as the API, and for the same reason: the edge is the
+  # only way in. It also has no Kafka and no uploads - authentication needs a
+  # database, two secrets and a bcrypt cost.
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '5002'
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
+      # Shared with the API's replicas, so five login attempts a minute means
+      # five - not five per container.
+      REDIS_URL: redis://redis:6379
+      # Byte-identical to the API's. This service mints the access tokens that
+      # one verifies; a mismatch is a login that appears to work and then is
+      # refused everywhere.
+      JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
+      JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      BCRYPT_ROUNDS: '12'
+      CLIENT_ORIGIN: http://localhost:8080
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      # Where to create the Student or Company row a new account implies. It
+      # goes through the API's load balancer name, not the edge: this is a
+      # service-to-service call and has no business taking a route through the
+      # public entry point.
+      API_INTERNAL_URL: http://api:5001
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:5002/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   edge:
     build:
       context: .
@@ -162,11 +226,28 @@ services:
     restart: unless-stopped
     ports:
       - '8080:80'
+    environment:
+      # The secret the edge presents with every identity it forwards, and on
+      # its introspection subrequest. envsubst puts it into the nginx config
+      # at start-up; the filter is what stops it rewriting nginx's own $host
+      # and $request_id at the same time.
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      NGINX_ENVSUBST_FILTER: AUTH_GATEWAY_SECRET
     depends_on:
       api:
         condition: service_healthy
+      auth:
+        condition: service_healthy
 
   # Not started by default. `npm run docker:seed` runs it once and exits.
+  #
+  # That script passes `--build`, and it has to. `docker compose up --build`
+  # skips services in a profile, so this image is not rebuilt with the rest of
+  # the stack - and `run` without `--build` is happy to use whatever was
+  # cached. A stale seed image wrote all 49 users into the API's database
+  # instead of the auth service's, which left a seeded portal where nobody
+  # could sign in: the students were there, their users were in the wrong
+  # place, and nothing said so. Same shape as the Kubernetes mutable-tag trap.
   seed:
     build:
       context: .
@@ -175,6 +256,10 @@ services:
     environment:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongo:27017/naukri_suvidha?replicaSet=rs0
+      # Seeding is the one thing that writes both databases: a student profile
+      # carries a userId, so the users have to exist and their ids have to
+      # match. There is no ordering of two separate scripts that does that.
+      AUTH_MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
       JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
       JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
       BCRYPT_ROUNDS: '10'
