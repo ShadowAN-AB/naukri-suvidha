@@ -1,20 +1,20 @@
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 
-import { env } from '../../config/env.js';
-import { logger } from '../../config/logger.js';
-import { AppError } from '../../middleware/error.js';
+import { AppError, USER_STATUS } from '@naukri-suvidha/service-kit';
+
+import { env } from './env.js';
+import { logger } from './logger.js';
 import {
   hashRefreshToken,
   signAccessToken,
   signRefreshToken,
   ttlSeconds,
+  verifyAccessToken,
   verifyRefreshToken,
-} from '../../lib/tokens.js';
-import { ROLES, USER_STATUS } from '../../lib/constants.js';
+} from './tokens.js';
 import { RefreshToken, User } from './model.js';
-import { Student, Company } from '../profiles/model.js';
-import { AuditLog } from '../admin/model.js';
+import { appendAudit, createProfile } from './apiClient.js';
 
 /**
  * A real bcrypt hash, computed once at start-up, compared against when the
@@ -37,16 +37,39 @@ function publicUser(user) {
   };
 }
 
-async function audit(actorId, action, entity, entityId, ip, meta) {
-  try {
-    await AuditLog.create({ actorId, action, entity, entityId, ip, meta });
-  } catch (err) {
-    // An audit write must never fail the request it is describing.
-    logger.error({ err, action }, 'audit write failed');
-  }
+/*
+ * The audit trail belongs to the API, so this is now a call rather than an
+ * insert. What it is worth has not changed - an audit write must never fail
+ * the request it is describing - so it is still fire-and-forget, and the
+ * swallowing of failures moved into apiClient.appendAudit with it.
+ */
+function audit(actorId, action, entity, entityId, ip, meta, requestId) {
+  appendAudit({ actorId, action, entity, entityId, ip, meta }, { requestId });
 }
 
-export async function register(input, ip) {
+/**
+ * Create an account, which is now a write in two services.
+ *
+ * The user row belongs here; the Student or Company row belongs to the API.
+ * There is no transaction spanning the two, and there is no honest way to get
+ * one - so this is a compensation rather than a rollback: write the user, ask
+ * the API for the profile, and delete the user if the API refuses.
+ *
+ * The shape is not new. On a standalone mongod this function already undid its
+ * own user write by hand, because there were no transactions to roll back
+ * either. Crossing a process boundary changed what can fail in the middle, not
+ * what has to be done about it.
+ *
+ * What the window costs, precisely: if this process dies between the two
+ * writes, a user exists with no profile. They can sign in and the API will
+ * answer 404 for their profile. That is recoverable by registering again
+ * against the same email - which is refused as a conflict - so it needs a real
+ * answer eventually, and the real answer is the outbox pattern this repository
+ * already uses for events: write an intent, let a worker finish it. It is not
+ * built here because the window is small and the failure is visible, and
+ * saying so is better than implying the compensation closed it.
+ */
+export async function register(input, ip, requestId) {
   const existing = await User.findOne({ email: input.email }).lean();
   if (existing) {
     throw AppError.conflict('An account with that email already exists', {
@@ -54,43 +77,19 @@ export async function register(input, ip) {
     });
   }
 
-  if (input.role === ROLES.STUDENT) {
-    const clash = await Student.findOne({ rollNo: input.rollNo }).lean();
-    if (clash) {
-      throw AppError.conflict('That roll number is already registered', {
-        rollNo: 'That roll number is already registered',
-      });
-    }
-  }
-
   const passwordHash = await bcrypt.hash(input.password, env.BCRYPT_ROUNDS);
   const user = await User.create({ email: input.email, role: input.role, passwordHash });
 
-  // The local database is a standalone mongod, which has no transactions, so
-  // a failed profile write is undone by hand rather than rolled back.
   try {
-    let profile;
-    if (input.role === ROLES.STUDENT) {
-      profile = await Student.create({
-        userId: user._id,
-        name: input.name,
-        phone: input.phone || undefined,
-        rollNo: input.rollNo,
-        branch: input.branch,
-        batchYear: input.batchYear,
-        cgpa: input.cgpa,
-        backlogs: input.backlogs ?? 0,
-      });
-    } else {
-      profile = await Company.create({
-        userId: user._id,
-        name: input.companyName,
-        website: input.website || undefined,
-        industry: input.industry || undefined,
-      });
-    }
+    /*
+     * The roll-number clash is checked there, not here. The API owns the
+     * Students collection and the unique index on it, so it is the only
+     * process that can answer without guessing - and its 409 carries the
+     * field details the registration form puts under the right input.
+     */
+    const profile = await createProfile(input, { userId: String(user._id), requestId });
 
-    await audit(user._id, 'auth.register', 'User', user._id, ip, { role: user.role });
+    audit(user._id, 'auth.register', 'User', user._id, ip, { role: user.role }, requestId);
 
     return {
       user: publicUser(user),
@@ -98,12 +97,12 @@ export async function register(input, ip) {
       ...(await issueSession(user)),
     };
   } catch (err) {
-    await User.deleteOne({ _id: user._id });
-    if (err.code === 11000) {
-      throw AppError.conflict('That roll number is already registered', {
-        rollNo: 'That roll number is already registered',
-      });
-    }
+    // Compensate. Without this a refused profile leaves an account that can
+    // sign in and has nothing to sign in to, and the email is then taken.
+    await User.deleteOne({ _id: user._id }).catch((cleanupErr) =>
+      logger.error({ err: cleanupErr, userId: String(user._id) },
+        'could not compensate a failed registration; a user row is orphaned'),
+    );
     throw err;
   }
 }
@@ -134,7 +133,7 @@ async function revokeFamily(familyId) {
   );
 }
 
-export async function login({ email, password }, ip) {
+export async function login({ email, password }, ip, requestId) {
   const user = await User.findOne({ email }).select('+passwordHash');
 
   // Always run a full comparison, even when the account is unknown, so the
@@ -142,7 +141,7 @@ export async function login({ email, password }, ip) {
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
 
   if (!user || !ok) {
-    await audit(user?._id, 'auth.login_failed', 'User', user?._id, ip, { email });
+    audit(user?._id, 'auth.login_failed', 'User', user?._id, ip, { email }, requestId);
     throw AppError.unauthorized('Email or password is incorrect');
   }
   if (user.status !== USER_STATUS.ACTIVE) {
@@ -151,7 +150,7 @@ export async function login({ email, password }, ip) {
 
   user.lastLoginAt = new Date();
   await user.save();
-  await audit(user._id, 'auth.login', 'User', user._id, ip, { role: user.role });
+  audit(user._id, 'auth.login', 'User', user._id, ip, { role: user.role }, requestId);
 
   return {
     user: publicUser(user),
@@ -220,13 +219,46 @@ export async function logout(token) {
   }
 }
 
-export async function me(userId) {
-  const user = await User.findById(userId).lean();
+/**
+ * Turn a bearer token into an identity, or refuse it.
+ *
+ * This is the endpoint the whole extraction turns on. The edge calls it once
+ * per request - nginx `auth_request` - and forwards what comes back to the
+ * API, which is why the API no longer verifies a token or reads a user.
+ *
+ * It does exactly what the API's requireAuth used to do, in the process that
+ * owns the data: verify the signature, then check the row, because a token
+ * that has not expired is not the same as a session that is still allowed.
+ * Both of the checks after the lookup are the reason this cannot be a pure
+ * signature check anywhere else - a suspended account and a signed-out one
+ * both still hold a valid token.
+ *
+ * Note what this costs: one indexed lookup per request, same as before. The
+ * database hit did not disappear with the extraction, it moved - and it is
+ * now on a hop that every request to every endpoint makes. Caching it in
+ * Redis under the token's jti, for the access token's own lifetime, is the
+ * obvious next move and is not made here; measuring first is cheaper than
+ * guessing, and a cache over a revocation check needs its invalidation
+ * thought about rather than assumed.
+ */
+export async function introspect(token) {
+  if (!token) throw AppError.unauthorized('Missing access token');
+
+  let claims;
+  try {
+    claims = verifyAccessToken(token);
+  } catch (err) {
+    throw AppError.unauthorized(
+      err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid access token',
+    );
+  }
+
+  const user = await User.findById(claims.sub).lean();
   if (!user) throw AppError.unauthorized('Account no longer exists');
+  if (user.status !== USER_STATUS.ACTIVE) throw AppError.forbidden('This account is suspended');
+  if ((user.tokenVersion ?? 0) !== (claims.v ?? 0)) {
+    throw AppError.unauthorized('Session ended, sign in again');
+  }
 
-  let profile = null;
-  if (user.role === ROLES.STUDENT) profile = await Student.findOne({ userId }).lean();
-  if (user.role === ROLES.RECRUITER) profile = await Company.findOne({ userId }).lean();
-
-  return { user: publicUser(user), profile };
+  return { id: String(user._id), email: user.email, role: user.role };
 }

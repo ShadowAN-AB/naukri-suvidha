@@ -1,38 +1,20 @@
-import { AppError } from './error.js';
-import { verifyAccessToken } from '../lib/tokens.js';
-import { User } from '../modules/auth/model.js';
-import { USER_STATUS } from '../lib/constants.js';
+import { identify } from '../infra/identity/index.js';
 
 /**
- * Verifies the access token and attaches req.user. The token's version is
- * checked against the database so a logged-out or suspended user cannot keep
- * using a token that has not expired yet.
+ * Attaches req.user, from whichever source IDENTITY_MODE selected.
+ *
+ * This used to verify the token and then re-read the user from the database to
+ * check the account was still active. Both halves moved: the verifying to the
+ * edge, and the re-reading to the auth service, which is the only process that
+ * can still do it. What is left is the part that was always this service's
+ * job - deciding that a request has an identity before a route runs.
+ *
+ * Route guards in the client remain convenience; every rule is still enforced
+ * here, on the server.
  */
 export async function requireAuth(req, _res, next) {
   try {
-    const header = req.get('authorization') ?? '';
-    const [scheme, token] = header.split(' ');
-    if (scheme !== 'Bearer' || !token) {
-      throw AppError.unauthorized('Missing access token');
-    }
-
-    let claims;
-    try {
-      claims = verifyAccessToken(token);
-    } catch (err) {
-      throw AppError.unauthorized(
-        err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid access token',
-      );
-    }
-
-    const user = await User.findById(claims.sub).lean();
-    if (!user) throw AppError.unauthorized('Account no longer exists');
-    if (user.status !== USER_STATUS.ACTIVE) throw AppError.forbidden('This account is suspended');
-    if ((user.tokenVersion ?? 0) !== (claims.v ?? 0)) {
-      throw AppError.unauthorized('Session ended, sign in again');
-    }
-
-    req.user = { id: String(user._id), email: user.email, role: user.role };
+    req.user = identify(req);
     next();
   } catch (err) {
     next(err);

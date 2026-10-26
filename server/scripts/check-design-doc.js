@@ -45,8 +45,9 @@ const countOf = (rel, needle) => read(rel).split(needle).length - 1;
 const AI = 'server/src/modules/ai';
 const RES = 'server/src/modules/resumes';
 const NOT = 'server/src/modules/notifications';
-const AUTH = 'server/src/modules/auth';
+const AUTH = 'services/auth/src';
 const EV = 'server/src/infra/events';
+const KIT = 'service-kit/src';
 
 const claims = [
   // ---- document-wide invariants -------------------------------------------
@@ -89,18 +90,35 @@ const claims = [
   // quietly - nobody re-counts a collection list - so the numbers the
   // document gives are pinned here, and adding one without updating §1, §2.7,
   // §8.1, §22 and §23 fails the build.
-  ['counts', '§1 and §8 say fourteen collections',
+  // Counted across both services since step 5. `users` and `refreshTokens`
+  // moved to the auth service's own database, so the API's barrel holds
+  // twelve - but the *system* still has fourteen, which is what the document
+  // says. Counting only the API's would have silently "lost" two.
+  ['counts', '§1 and §8 say fourteen collections, across both services',
     () => {
-      const exported = (read('server/src/models.js').match(/^export \{([^}]*)\}/gm) || [])
-        .join(',').replace(/export \{|\}/g, '')
-        .split(',').map((x) => x.trim()).filter(Boolean);
-      return exported.length === 14;
+      const names = (rel) =>
+        (read(rel).match(/^export \{([^}]*)\}/gm) || [])
+          .join(',').replace(/export \{|\}/g, '')
+          .split(',').map((x) => x.trim()).filter(Boolean);
+      const api = names('server/src/models.js');
+      // The auth service registers its two directly rather than re-exporting
+      // them, so they are counted by their mongoose.model calls. Its barrel
+      // also exports the two schemas, for the seed script - those are not
+      // collections and must not be counted.
+      const auth = countOf(`${AUTH}/model.js`, 'mongoose.model(');
+      return api.length === 12 && auth === 2 && api.length + auth === 14;
     }],
-  ['counts', '§1 says 11 test files',
+  // Thirteen since step 5, not eleven. The auth service brought its own suite;
+  // server/test/auth.test.js became access.test.js - what is left of this
+  // service's side once credentials and sessions moved - and gateway.test.js
+  // was added for the identity strategies, which is where a forged header is
+  // refused.
+  ['counts', '§1 says 13 test files, across both services',
     () => {
-      const r = spawnSync('git', ['ls-files', 'server/test/*.test.js'],
+      const r = spawnSync('git',
+        ['ls-files', 'server/test/*.test.js', 'services/auth/test/*.test.js'],
         { cwd: root, encoding: 'utf8' });
-      return r.status === 0 && r.stdout.trim().split('\n').length === 11;
+      return r.status === 0 && r.stdout.trim().split('\n').length === 13;
     }],
 
   // ---- §6 Redis & caching --------------------------------------------------
@@ -117,25 +135,37 @@ const claims = [
        && !/redis\.(flushdb|flushall)\s*\(/i.test(read('server/src/infra/cache/redis.js'))],
   ['§6', 'the global /api limit is 300 per minute',
     () => has('server/src/app.js', 'limit: 300')],
+  // In the auth service since step 5, along with login itself. The store they
+  // are built from is service-kit's, so both services share the one that is
+  // shared across replicas.
   ['§6', 'login is 5 per minute and counts failures only',
-    () => has('server/src/middleware/rateLimit.js', 'limit: 5')
-       && has('server/src/middleware/rateLimit.js', 'skipSuccessfulRequests: true')],
+    () => has(`${AUTH}/rateLimit.js`, 'limit: 5')
+       && has(`${AUTH}/rateLimit.js`, 'skipSuccessfulRequests: true')],
   ['§6', 'registration is 40 per hour and skips failures',
-    () => has('server/src/middleware/rateLimit.js', 'limit: 40')
-       && has('server/src/middleware/rateLimit.js', 'skipFailedRequests: true')],
+    () => has(`${AUTH}/rateLimit.js`, 'limit: 40')
+       && has(`${AUTH}/rateLimit.js`, 'skipFailedRequests: true')],
   ['§6', 'there is no forgot-password route to rate limit',
     () => lacks(`${AUTH}/routes.js`, 'forgot-password')],
+  // Both in service-kit since step 5: the auth service shares the login rate
+  // limit across its own replicas, so it needs this connection too, and these
+  // two bounds are each a crash that a second copy would reintroduce. Pinned
+  // against the kit rather than the thin per-service constructor, because a
+  // file that no longer holds the flag would pass `lacks` vacuously.
   ['§6', 'the ioredis offline queue is left enabled',
-    () => lacks('server/src/infra/redis/index.js', 'enableOfflineQueue: false')],
+    () => lacks(`${KIT}/redis.js`, 'enableOfflineQueue: false')
+       && has(`${KIT}/redis.js`, 'maxRetriesPerRequest: 2')],
   ['§6', 'the pub/sub pair is unbounded, unlike the main connection',
-    () => has('server/src/infra/redis/index.js', 'duplicate({ maxRetriesPerRequest: null })')
-       && has('server/src/infra/redis/index.js', 'maxRetriesPerRequest: 2')],
+    () => has(`${KIT}/redis.js`, 'duplicate({ maxRetriesPerRequest: null })')
+       && has(`${KIT}/redis.js`, 'maxRetriesPerRequest: 2')],
   ['§6', 'no distributed locks are used',
     () => !/lock:(apply|schedule|analyze|rollup)/.test(
       read('server/src/modules/applications/service.js') + read('server/src/modules/interviews/service.js'))],
   ['§6', 'the refresh token is an httpOnly cookie, not a Redis key',
-    () => has('server/src/lib/tokens.js', 'httpOnly: true')
-       && has('server/src/lib/tokens.js', "REFRESH_COOKIE = 'naukri_suvidha_rt'")],
+    // In service-kit since the auth service was extracted: it mints these and
+    // the API verifies them, so one definition of a session is the point. The
+    // claim the document makes is unchanged - only where it is true moved.
+    () => has(`${KIT}/tokens.js`, 'httpOnly: true')
+       && has(`${KIT}/tokens.js`, "REFRESH_COOKIE = 'naukri_suvidha_rt'")],
   ['§6', 'duplicate applies are stopped by a unique index',
     () => has('server/src/modules/applications/model.js', 'jobId: 1, studentId: 1 }, { unique: true')],
 

@@ -1,8 +1,14 @@
 /**
- * Barrel for the fourteen collections. Importing this registers every schema
- * with mongoose, which is what the seed script and the index sync rely on.
+ * Barrel for the twelve collections this service owns. Importing it registers
+ * every schema with mongoose, which is what the seed script and the index sync
+ * rely on.
+ *
+ * `users` and `refreshTokens` are not here and cannot be: they belong to the
+ * auth service, in its own database, and this process has no connection that
+ * can reach them. The system still has fourteen collections - two of them are
+ * simply somewhere else now, which is the point of step 5 rather than an
+ * omission. See services/auth/src/model.js.
  */
-export { User, RefreshToken } from './modules/auth/model.js';
 export { Student, Company } from './modules/profiles/model.js';
 export { Job } from './modules/jobs/model.js';
 export { Application } from './modules/applications/model.js';

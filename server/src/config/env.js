@@ -1,49 +1,71 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import dotenv from 'dotenv';
 import { z } from 'zod';
+import { baseEnvSchema, loadEnvFile, parseEnv } from '@naukri-suvidha/service-kit';
 
 // Resolve .env against the server package, not the shell's cwd, so the
 // process behaves the same whether it is started from the repo root, from
 // server/, or by a process manager.
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// Which file to read. Tests get their own, and never fall back to .env:
-// the suite wipes every collection between tests, so pointing it at a
-// developer's real database destroys their data. It did exactly that once.
-const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
-
-// override: a local env file wins over whatever is already in the environment.
-// Without this, a PORT exported by a parent process - a dev runner starting
-// the client and the server together, or a shell that happens to have PORT
-// set - silently steals the port. In production there is no env file, so the
-// platform's own PORT is still the one that applies.
-dotenv.config({ path: path.join(packageRoot, envFile), override: true });
+// The dotenv rules - which file, and that it overrides the ambient
+// environment - live in service-kit, because both this service and the auth
+// service depend on them and the `.env.test` guard is the thing that stops a
+// test run from dropping a developer's database.
+loadEnvFile(packageRoot);
 
 export const paths = { packageRoot };
 
-const schema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+/**
+ * The base schema holds what every service reads: the JWT configuration, the
+ * mongo URI, logging, Redis. Everything below it is this service's own.
+ */
+const schema = baseEnvSchema.extend({
   PORT: z.coerce.number().int().positive().default(5001),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
-  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+  /**
+   * Where identity comes from, and the reason this service no longer owns the
+   * users collection.
+   *
+   * `bearer`  - verify the access token here, from its signature, and trust
+   *             its claims. No database lookup, because the users collection
+   *             belongs to the auth service now. This is what `npm run dev`
+   *             and the test suite use: one process, no gateway, nothing else
+   *             to start. The cost is exact and worth stating - there is no
+   *             revocation check, so a suspended account keeps access until
+   *             its access token expires, which is ACCESS_TOKEN_TTL.
+   *
+   * `gateway` - the edge has already authenticated the request and forwarded
+   *             the identity, so this service reads it from the headers and
+   *             verifies nothing. The revocation check is not skipped here,
+   *             it is *moved*: the auth service does it, against its own
+   *             database, once per request at the edge. Compose and
+   *             Kubernetes both run this mode.
+   *
+   * The default is `bearer` for the same reason REDIS_URL and KAFKA_BROKERS
+   * are optional: a developer with mongo running should be able to start this
+   * and have it work.
+   */
+  IDENTITY_MODE: z.enum(['bearer', 'gateway']).default('bearer'),
 
-  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
-  ACCESS_TOKEN_TTL: z.string().default('15m'),
-  REFRESH_TOKEN_TTL: z.string().default('7d'),
-  BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+  /**
+   * The shared secret the edge presents with a forwarded identity. Required
+   * in gateway mode - see the refinement below, which is what stops a
+   * misconfigured deployment from accepting any identity any caller claims.
+   */
+  AUTH_GATEWAY_SECRET: z.string().min(16).optional(),
 
-  // Optional. Set it and the cache, the rate limiter and the socket gateway
-  // all become shared between replicas; leave it unset and each process keeps
-  // its own, which is correct for one instance and wrong for two.
-  REDIS_URL: z.string().url().optional(),
+  /**
+   * The auth service, for the two calls that cross the boundary in this
+   * direction: the socket handshake (which does not pass through the edge's
+   * authentication, so it introspects here) and the admin user count.
+   *
+   * Optional, and both callers degrade rather than fail when it is unset -
+   * which is what keeps a single-process `npm run dev` working.
+   */
+  AUTH_SERVICE_URL: z.string().url().optional(),
+  AUTH_SERVICE_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
 
-  // Optional. Comma-separated list, e.g. "kafka:9092". Set it and domain
-  // events travel through a broker and survive the process; leave it unset
-  // and they are delivered in-process, which is lost on restart.
   KAFKA_BROKERS: z.string().optional(),
   KAFKA_CLIENT_ID: z.string().default('naukri-suvidha-api'),
 
@@ -75,18 +97,23 @@ const schema = z.object({
   VECTOR_INDEX: z.enum(['memory', 'atlas']).default('memory'),
   AI_TASK_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+}).superRefine((value, ctx) => {
+  /*
+   * Gateway mode without a secret would accept whatever identity a caller
+   * put in a header, which is a complete authentication bypass and would
+   * start without complaint. It is caught here rather than at the first
+   * request because an authorization hole that only shows up under traffic
+   * is one that reaches production.
+   */
+  if (value.IDENTITY_MODE === 'gateway' && !value.AUTH_GATEWAY_SECRET) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['AUTH_GATEWAY_SECRET'],
+      message: 'is required when IDENTITY_MODE=gateway, or any caller could forge an identity',
+    });
+  }
 });
 
-const parsed = schema.safeParse(process.env);
-
-if (!parsed.success) {
-  const issues = parsed.error.issues
-    .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
-    .join('\n');
-  console.error(`Invalid environment configuration:\n${issues}\n\nCopy .env.example to .env and fill it in.`);
-  process.exit(1);
-}
-
-export const env = parsed.data;
+export const env = parseEnv(schema);
 export const isProd = env.NODE_ENV === 'production';
 export const isDev = env.NODE_ENV === 'development';

@@ -14,7 +14,47 @@ import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
 import { connectDb, disconnectDb } from '../src/config/db.js';
 import * as models from '../src/models.js';
-const { User, Student, Company, Job } = models;
+import { userSchema, refreshTokenSchema } from '../../services/auth/src/schemas.js';
+const { Student, Company, Job } = models;
+
+/**
+ * The one thing in this repository that writes both databases.
+ *
+ * It has to. A Student carries a `userId` and a Company carries a `userId`,
+ * and those ids have to name users that actually exist in the auth service's
+ * database - so seeding cannot be done one side at a time, and there is no
+ * ordering of two separate scripts that produces matching ids.
+ *
+ * A second mongoose connection rather than an HTTP call to the auth service,
+ * for two reasons: registration refuses to create admin accounts on purpose,
+ * so the three seeded admins could not be made that way at all; and this is
+ * an operational script, not a service, so it is allowed to know the shape of
+ * the system. Nothing in either service's own code does this.
+ *
+ * The schemas come from the auth service rather than being restated here, and
+ * from schemas.js rather than model.js. That distinction is load-bearing:
+ * model.js calls mongoose.model, which registers on the *default* connection -
+ * this script's, pointing at the API's database - and registering a model
+ * builds its indexes, which creates the collection. Importing it here put
+ * empty `users` and `refreshtokens` collections into the API's database, which
+ * is precisely the thing step 5 exists to make impossible.
+ */
+const AUTH_MONGODB_URI = process.env.AUTH_MONGODB_URI;
+if (!AUTH_MONGODB_URI) {
+  console.error(
+    'AUTH_MONGODB_URI is not set.\n' +
+    'Seeding writes the auth service\u2019s database as well as this one, because a\n' +
+    'student profile has to name a user that exists. Point it at the same\n' +
+    'mongod, e.g. mongodb://127.0.0.1:27017/naukri_suvidha_auth',
+  );
+  process.exit(1);
+}
+
+const authConn = mongoose.createConnection(AUTH_MONGODB_URI, {
+  serverSelectionTimeoutMS: 10_000,
+});
+const User = authConn.model('User', userSchema);
+const RefreshToken = authConn.model('RefreshToken', refreshTokenSchema);
 import { JOB_STATUS, PLACEMENT_STATUS, ROLES } from '../src/lib/constants.js';
 
 /** Every seeded account shares this password. Development data only. */
@@ -73,13 +113,16 @@ const JOB_TEMPLATES = [
 /** Only these are generated. */
 const SEEDED_MODELS = [User, Student, Company, Job];
 
+/** The auth service's two, wiped together with this service's by --fresh. */
+const AUTH_MODELS = [User, RefreshToken];
+
 /**
  * --fresh clears everything, not just what it generates. Wiping users but
  * leaving applications and resumes behind would leave rows pointing at
  * students who no longer exist, which looks like corruption the first time
  * you hit it.
  */
-const ALL_MODELS = Object.values(models);
+const ALL_MODELS = [...Object.values(models), ...AUTH_MODELS];
 
 async function makeUser(email, role, passwordHash) {
   return User.create({ email, role, passwordHash });
@@ -88,6 +131,7 @@ async function makeUser(email, role, passwordHash) {
 async function main() {
   const fresh = process.argv.includes('--fresh');
   await connectDb();
+  await authConn.asPromise();
 
   // Make sure unique indexes exist before inserting, or duplicates slip in.
   await Promise.all(SEEDED_MODELS.map((M) => M.syncIndexes()));
@@ -98,6 +142,7 @@ async function main() {
       `Refusing to seed: ${existing} users already exist.\n` +
       `Run "npm run seed -- --fresh" to wipe the seeded collections first.`,
     );
+    await authConn.close();
     await disconnectDb();
     process.exit(1);
   }
@@ -202,6 +247,7 @@ async function main() {
   console.log(`  recruiter  ${(await User.findById(companies[0].userId)).email}`);
   console.log(`  student    ${(await User.findById(students[0].userId)).email}\n`);
 
+  await authConn.close();
   await disconnectDb();
   process.exit(0);
 }
@@ -209,6 +255,7 @@ async function main() {
 main().catch(async (err) => {
   console.error('seed failed:', err.message);
   if (err.code === 11000) console.error('duplicate key:', JSON.stringify(err.keyValue));
+  await authConn.close().catch(() => {});
   await mongoose.connection.close().catch(() => {});
   process.exit(1);
 });

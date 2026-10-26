@@ -7,13 +7,15 @@ import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
 import cookieParser from 'cookie-parser';
 
+import { requestId } from '@naukri-suvidha/service-kit';
+
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { dbIsUp } from './config/db.js';
-import { requestId } from './middleware/requestId.js';
+
 import { notFound, errorHandler } from './middleware/error.js';
-import authRoutes from './modules/auth/routes.js';
 import adminRoutes from './modules/admin/routes.js';
+import internalRoutes from './modules/internal/routes.js';
 import profileRoutes from './modules/profiles/routes.js';
 import jobRoutes from './modules/jobs/routes.js';
 import resumeRoutes from './modules/resumes/routes.js';
@@ -107,7 +109,16 @@ export function createApp() {
     });
   });
 
-  app.use('/api/auth', authRoutes);
+  /*
+   * No /api/auth. Registering, signing in, refreshing and signing out are the
+   * auth service's, and the edge routes that prefix to it - so a client sees
+   * the same URLs it always did while a different process answers them.
+   *
+   * /api/internal is this service's service-to-service surface, for the auth
+   * service's two calls back across the boundary. The edge refuses it from
+   * outside; the router checks the shared secret as well.
+   */
+  app.use('/api/internal', internalRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/profiles', profileRoutes);
   app.use('/api/jobs', jobRoutes);
@@ -116,9 +127,6 @@ export function createApp() {
   app.use('/api/ai', aiRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/interviews', interviewRoutes);
-
-  // Module routers mount here as each phase lands:
-  //   Phase 6  /api/notifications  /api/interviews  /api/admin
 
   app.use(notFound);
   app.use(errorHandler);

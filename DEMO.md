@@ -1,6 +1,7 @@
 # Demo script
 
-Roughly eight minutes, end to end. Rehearse it twice: once normally, and once
+Roughly nine minutes, end to end - eight for the product, one for the
+architecture beat at the end. Rehearse it twice: once normally, and once
 with the model stopped, because that second run is the one that proves the
 system degrades honestly instead of falling over.
 
@@ -12,7 +13,14 @@ The shared seed password is in `server/scripts/seed.js`.
 
 ## Before you start
 
+- [ ] Decide **where** you are demonstrating. For the application itself,
+      anything works. For the infrastructure — the gateway, the two services,
+      load balancing, the autoscaler — use a container stack:
+      `npm run docker:up` (`:8080`) or `npm run k8s:up` (`:8081`). The Vercel
+      deployment has no gateway, so the step 5 beats below do not exist there.
 - [ ] Wake the API — open `/api/health`, wait for `ok`
+- [ ] Wake the **auth service** too. On Render they sleep independently and the
+      auth one is what a login hits first, so a cold sign-in looks broken.
 - [ ] `/api/ai/health` says `ok`
 - [ ] Seeded, and scores already computed
 - [ ] Three browser profiles or windows, one signed in as each role
@@ -103,11 +111,59 @@ ranking degrades to skill matching and tells the user it has.
 
 ---
 
+## 10. One service, and the gateway in front of it (1 minute)
+
+Only worth doing on a container stack, and worth doing *last* because it is the
+one beat that is about the architecture rather than the product.
+
+**Say first:** every request so far went through an API gateway, and the sign-in
+was answered by a different process from everything else. Nothing on screen
+said so, which is the test of whether the gateway works.
+
+Then show three things, in this order:
+
+```bash
+# 1. Two services. Note the auth service has no host port: the edge is the
+#    only way in, which is what makes the next command mean something.
+docker compose ps
+
+# 2. The gateway refuses an unauthenticated request itself, in the project's
+#    own error shape - the client cannot tell that nginx answered, not Node.
+curl -s http://localhost:8080/api/admin/overview
+
+# 3. Sending the identity yourself does nothing. The edge overwrites all four
+#    headers on every proxied request, and the API wants a shared secret.
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/admin/overview \
+  -H 'x-auth-user-id: 507f1f77bcf86cd799439011' -H 'x-auth-user-role: admin'
+```
+
+**The beat that lands**, if there is time for one more: sign in as the student
+in a browser, confirm a page loads, then suspend that account directly in the
+auth service's own database —
+
+```bash
+docker compose exec mongo mongosh --quiet naukri_suvidha_auth --eval \
+  'db.users.updateOne({email:"aarav.kaur1@naukrisuvidha.edu"},{$set:{status:"suspended"}})'
+```
+
+— and reload. The *same unexpired token* is refused. **Say this:** the API
+could not do that any more; it has no users collection. The auth service does
+it, once, at the edge, on every request. That is what the gateway is for.
+
+Put it back afterwards with `status:"active"`.
+
+---
+
 ## Questions to expect
 
 | They ask | The answer |
 |---|---|
-| Why not microservices, when your diagram had ten? | The ten service boundaries are real — ten modules, their own collections, their own events, on an in-process bus. They are module boundaries, not network ones, because one person cannot operate ten deployments in sixteen weeks. Splitting one out means replacing one `eventBus.publish` with a queue. |
+| Why not microservices, when your diagram had ten? | **One of them is.** Auth runs as its own service, own image, own database, behind an API gateway — `services/auth/`. The other nine are modules with their own collections and their own events on the bus, because one person cannot operate ten deployments in sixteen weeks. The useful part is that the extraction is no longer hypothetical: the cost of that one boundary is measured — an introspection hop on every request, a two-service write that needs a compensation instead of a transaction, two databases to seed in step — and *that* is the argument for not paying it nine more times. |
+| Which one did you extract, and why that one? | Auth. It gives the gateway a real job, and it exercises the one inter-service style nothing else here does: synchronous RPC, with its failure mode. Kafka already demonstrates the asynchronous style, so extracting the AI layer — the other candidate — would mostly have re-demonstrated that. |
+| Does the auth service share the database? | No. It owns `naukri_suvidha_auth`, so the API has no connection that could read `users` even by mistake — ownership enforced rather than remembered. A shared database is the textbook way to end up with two services that cannot deploy separately. |
+| How does the API know who the caller is, if it never sees the token? | The edge ran an nginx `auth_request` against the auth service and forwarded the identity in headers. Two things stop a client forging them: nginx sets all four on *every* proxied request, so a client's values are always overwritten, and the API additionally requires a shared secret. Be straight about the limit if pushed — that secret is a bearer secret, not a per-request signature, so a signed assertion like Envoy's `ext_authz` is the upgrade path. |
+| What happens if the auth service goes down? | Nobody can sign in, and existing sessions stop too, because introspection is on every request. That is the honest cost of a synchronous boundary and the reason it is two replicas with `maxUnavailable: 0` — measured at 200 consecutive requests with zero failures through a rolling restart. The reverse is less severe: with the API down, a login still returns 200, because the audit write that crosses back is fire-and-forget. |
+| What if registration half-fails across the two services? | There is no transaction spanning them, so it compensates: write the user, ask the API for the profile, delete the user if the API refuses. Verified by stopping the API — 503, and zero orphaned user rows. The remaining window is this process dying between the two writes, and the real fix is the outbox pattern already used for events. |
 | What stops a recruiter approving their own job? | Role check on the route; the recruiter gets a 403. And the status field isn't in the create schema, so Zod strips it. |
 | What if the LLM returns nonsense? | Zod validates it; on a violation the model gets one repair attempt showing its own output; a second failure falls back to pattern matching, capped and flagged. |
 | What if two people click apply at once? | A unique `(jobId, studentId)` index. One gets 201, the other 409. There's a test that fires both simultaneously. |

@@ -1,7 +1,11 @@
 # Naukri Suvidha — working notes for Claude
 
 AI-assisted campus placement portal. Final-year project, built solo over seven
-phases. **Phases 1–6 complete and tagged; Phase 7 is ~5/8 done.**
+phases. **Phases 1–6 complete and tagged; Phase 7 is ~6/8 done.**
+
+**All nine required infrastructure concepts now run** — the last two,
+microservices and an API gateway, landed with step 5. What remains in Phase 7
+is deployment, the demo rehearsal and real résumés, not infrastructure.
 
 Read this before changing anything. The decisions below were argued out once
 and should not be re-litigated without a reason.
@@ -11,15 +15,19 @@ and should not be re-litigated without a reason.
 ## Commands
 
 ```bash
-npm run dev            # client :5173, API :5001  (needs mongod + ollama)
-npm test               # 131 tests, Vitest + Supertest, needs a local mongod
-                       # (a standalone mongod exercises the no-transaction
-                       #  path; CI's replica set exercises the outbox)
+npm run dev            # client :5173, API :5001, auth :5002 (mongod + ollama)
+npm test               # 157 tests over two suites, needs a local mongod
+                       # (= test:api 129 + test:auth 28; a standalone mongod
+                       #  exercises the no-transaction path, CI's replica set
+                       #  exercises the outbox)
+npm run test:api          # the API's suite alone
+npm run test:auth         # the auth service's alone
 npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
+                          # writes BOTH databases - see AUTH_MONGODB_URI
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
-npm run docs:check        # 46 claims the design doc makes about this repo
+npm run docs:check        # 72 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -36,20 +44,36 @@ npm run k8s:logs          # tail every API pod at once
 npm run k8s:down          # delete the cluster, volumes and all
 ```
 
-Health: `/api/health` (db state, plus `instance` — which replica answered) and
-`/api/ai/health` (provider, queue, degraded behaviour).
+Health: `/api/health` (db state, plus `instance` — which replica answered),
+`/api/ai/health` (provider, queue, degraded behaviour) and the auth service's
+own `/health` on :5002, which is in-cluster only in both container stacks.
 
 ---
 
 ## The decisions that matter
 
-**Modular monolith, not microservices.** The original design had ten services,
-Kafka, Redis and Kubernetes. What exists is ten *modules* in one Express
-process, keeping every service boundary and domain event. The reason is
-operational — one person cannot run ten deployments alongside coursework. The
-seam is real: modules never import each other's services, they publish events,
-so extraction later is a change of transport. **If asked "why not microservices",
-that is the answer.**
+**A modular monolith with one service extracted, not ten microservices.** The
+original design had ten services, Kafka, Redis and Kubernetes. What exists is
+nine *modules* in one Express process plus **auth as a real separate service**,
+keeping every service boundary and domain event. The reason the other nine stay
+together is operational — one person cannot run ten deployments alongside
+coursework. The seam is real, and it has now been proved by using it: modules
+never import each other's services, they publish events, and auth came out
+without the other nine changing shape.
+
+**If asked "why not microservices", the answer is no longer hypothetical.** One
+service is out, the cost of the boundary is measured rather than guessed — an
+introspection hop on every request, a two-service write that needs a
+compensation instead of a transaction, two databases to seed in step — and that
+cost is the argument for not paying it nine more times. Point at
+`services/auth/` and at the three crossings in this file; the extraction is the
+evidence, not a promise.
+
+**Auth was the right one to extract first**, and not because it was easiest.
+It gives the gateway a real job, and it exercises the one inter-service style
+nothing else here does: synchronous RPC, with its failure mode. Kafka already
+demonstrates the asynchronous style, so extracting `ai` — the other candidate —
+would mostly have re-demonstrated that.
 
 **The model never runs inside a request.** Résumé extraction and fit scoring
 write a row to `aiTasks`; a `p-queue` worker at concurrency 2 handles them. The
@@ -87,10 +111,10 @@ screen size where people browse most. Both read one `NAV` table in
 
 **The infrastructure concepts are built, not described.** The course requires
 load balancing, Redis, Kafka, Kubernetes, an API gateway, microservices, CDN
-and Docker. The system design document designs all of them; `docker-compose.yml` and
-`infra/k8s/` are where they actually run. **Steps 1–4 are done** — see
-"Running it as containers" and "Running it on Kubernetes" below. Step 5 is in
-"What's left".
+and Docker. The system design document designs all of them; `docker-compose.yml`,
+`services/auth/` and `infra/k8s/` are where they actually run. **All five steps
+are done** — see "Running it as containers" and "Running it on Kubernetes"
+below for how to show each of them.
 
 Both stacks are real and both are kept working, because they demonstrate
 different things and disagree in a way that is worth being able to show: the
@@ -118,6 +142,65 @@ happens after the database write rather than with it. That needs a
 transactional outbox, which needs transactions, which need a replica set —
 and development runs on a standalone mongod. Say that plainly rather than
 claiming §2.2 is closed.
+
+**The auth service owns its data in its own database, not its own
+collections.** `users` and `refreshTokens` live in `naukri_suvidha_auth`, so
+the API has no connection that could read them even by mistake — ownership
+enforced rather than remembered. A shared database would have been far less
+work and is the textbook way to end up with two services that cannot deploy
+separately.
+
+Exactly **three crossings** exist, and the list is the whole price of the
+boundary. Adding a fourth needs the same test the first three passed: a
+specific piece of data lives on the other side and the caller has no way to
+reach it.
+
+| | | |
+| --- | --- | --- |
+| `auth → API` | `POST /api/internal/profiles` | synchronous. A Student or Company is the API's, so registration is a write in two services with no transaction spanning them — write the user, ask for the profile, **delete the user if the API refuses**. A compensation, not a rollback. |
+| `auth → API` | `POST /api/internal/audit` | fire-and-forget. A sign-in still belongs in the placement office's trail. Crossing a boundary did not change what the write is worth, so a failure is logged and swallowed exactly as it was. |
+| `API → auth` | `POST /internal/introspect` | the socket handshake only. It carries its token in the Socket.IO connection payload and `/socket.io` is proxied straight through, so it is the one entry point no gateway can authenticate. |
+
+A fourth was written and then deleted: the admin dashboard's `users` count. The
+figure was computed and never rendered — the dashboard shows four tiles and
+that was not one of them. **A crossing added for a number nobody displays is a
+dependency bought for nothing.**
+
+**The gateway authenticates; the API does not.** `IDENTITY_MODE` picks one of
+two strategies behind one interface, the same shape as `infra/cache`:
+
+- `gateway` — the edge ran nginx `auth_request` against the auth service and
+  forwarded the identity in headers. The API verifies no token and reads no
+  user. **Both container stacks run this.**
+- `bearer` — verify the access token here and trust its claims. No database
+  lookup, because the users collection is not the API's. This is what
+  `npm run dev` and the test suite use, and the cost is exact: **no revocation
+  check**, so a suspended account keeps access until its access token expires.
+
+So the gateway is not decoration — it buys back the revocation check the API
+can no longer perform. Suspend an account and its unexpired token is refused on
+its next request; verified on both stacks.
+
+**Trusting a header is the sharp edge, so it has two locks.** nginx sets all
+four identity headers on *every* proxied request, including empty on the
+unauthenticated ones, so a client's own values are always overwritten — and the
+API additionally requires a shared secret, so reaching the port is not enough.
+Be precise about the limit: that secret is a bearer secret shared by three
+processes, **not a per-request proof**, so anything holding it and a route to
+the API can mint any identity. A short-lived signed assertion (Envoy's
+`ext_authz`, ALB's `X-Amzn-Oidc-Data`) removes that and is the upgrade path.
+`server/test/gateway.test.js` tests the strategies directly.
+
+**service-kit holds only what two services having their own copy would make a
+*bug*.** Not what is merely convenient to share — that test is what stops a
+shared library from growing until the two services cannot deploy
+independently. Today: the token functions (auth mints, the API verifies, so two
+copies are two definitions of a session), the one error shape, the dotenv rules
+including the `.env.test` guard, the Redis connection with its two boot-crash
+fixes, and `USER_STATUS`. Tokens, errors and Redis are **factories**, not
+modules that read `env` — two services resolve their environment at different
+moments, and a module-level `import { env }` would let import order decide
+whether the secrets were loaded.
 
 **Route guards in React are convenience, not security.** Every rule is enforced
 again on the server.
@@ -166,6 +249,13 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **A rebuilt image under an unchanged tag does not roll** | `naukri-suvidha/api:dev` is mutable, so rebuilding changes what it points at without changing the pod template. `kubectl apply` says `unchanged`, `kind load` says it loaded, and the pods keep serving the previous build — the fix is applied everywhere except where it runs. `up.sh` substitutes the built image's id into a pod-template annotation, which puts the content back inside the thing apply compares. A rebuild that changed nothing is then still correctly a no-op. |
 | **`kind load docker-image` and multi-arch public images** | It imports `--all-platforms`, but `docker pull busybox:1.37` on an arm64 Mac leaves a manifest list whose other platforms' layers are absent, so the import dies with `content digest … not found` — and `set -e` then aborts the rest of the script. Only side-load the two images that have no registry behind them; let the nodes pull anything public themselves. |
 | **A listening Kafka port is not a Kafka that has your topics** | `nc -z kafka 9092` succeeds the moment the broker binds, which on a cold cluster is well before any topic exists. A consumer subscribing then gets `KafkaJSProtocolError: This server does not host this topic-partition` from its metadata request, `startTransport` throws, and `main()` exits 1 — one restart, only ever on a genuinely cold broker, which is why compose never showed it. The irony is that the failing metadata request is itself what triggers auto-creation, so the retry always worked. kafkajs marks the error `retriable: true`; the fix is to not be in the race — `ensureTopics` creates every registered event's topic with `waitForLeaders: true` before any consumer subscribes. Topic names come from the handlers, so there is no second list of events to keep in step. |
+| **`proxy_pass` to a *variable* does no URI rewriting** | The usual way to strip a prefix is a trailing slash — `proxy_pass http://auth:5002/`. That works only for a *literal* upstream. The compose edge needs a variable so Docker's DNS is re-resolved, and with a variable nginx silently ignores the trailing slash and passes the URI through unchanged: `/api/auth/login` arrived at the auth service as `/api/auth/login` and 404'd, which reads as a broken service rather than a proxy that stopped rewriting. Use an explicit `rewrite`. The Kubernetes edge has a stable ClusterIP, so its literal `proxy_pass` strips the prefix correctly and needs no rewrite — the two configs differ here for the same reason they differ about `resolver`. |
+| **`rewrite ... break` stops the `set` after it from running** | `break` ends the rewrite module's processing for that location, and `set` is a rewrite-module directive — so a `set` written *after* the rewrite never executes, `proxy_pass` gets an empty variable, and nginx logs "using uninitialized variable" and answers 500. The `set` goes first. |
+| **`auth_request` always issues a GET** | Whatever the original request's method, and the body is dropped. A POST-only introspection endpoint therefore answered 404 to the gateway, which reported `auth request unexpected status: 404` and turned *every* API request into a 500 — the error names the status, not the method, so it looks like a routing problem. Introspect takes both verbs now, and GET is the better fit for something that reads a header and changes nothing. `auth_request` also keeps only the subrequest's **response headers** (via `auth_request_set`) and discards its body, which is why introspection returns the identity in headers as well as JSON. |
+| **`docker compose up --build` skips services in a profile** | So the `seed` image is never rebuilt with the rest of the stack, and `docker compose run seed` will happily use a cached one. A stale seed image wrote all 49 users into the API's database instead of the auth service's, leaving a seeded portal where nobody could sign in — the students were there, their users were in the wrong place, and nothing said so. `docker:seed` passes `--build`. Same shape as the mutable-tag row above. |
+| **Importing a model to get its schema creates its collections** | `mongoose.model()` registers on the **default** connection, and registering a model builds its indexes, which creates the collection. The seed script needs the auth service's schemas on a *second* connection, and importing `model.js` to get them quietly created empty `users` and `refreshtokens` collections in the **API's** database — nothing failed, there was simply a users collection where the whole point of step 5 is that there is not one. The schemas live in a side-effect-free `services/auth/src/schemas.js`; import that, never `model.js`. |
+| **`{{range .IPAM.Config}}{{.Gateway}}{{end}}` concatenates IPv4 and IPv6** | kind enables IPv6 on its Docker network on some versions, so the obvious template yields `172.24.0.1fc00:f853:ccd:e793::1`. That is not an address: `OLLAMA_BASE_URL` then fails `env.js`'s `url()` check and **every API pod exits 1 on boot**, with a message that points at the model rather than at `up.sh`. Print one gateway per line and take the first IPv4 one. |
+| **A rolling update of auth is a rolling update of everything** | Every API request runs an introspection subrequest against it, so `maxUnavailable: 0` and the 5s `preStop` matter more here than anywhere else — a dropped introspection is a 500 on somebody's ordinary request. Measured: `kubectl rollout restart deployment/auth` while hammering an authenticated route served **200 consecutive requests with 0 non-200s**. |
 | **nginx `$upstream_addr` stops meaning anything under a Service** | It reports the ClusterIP on every request, never a pod, because kube-proxy chooses the pod in the kernel and never tells nginx. Do not read a single repeated value there as "the balancing is broken". `/api/health` returns `instance` for that. |
 
 ---
@@ -203,14 +293,34 @@ next begins, and this list is the record of where it got to.**
    healthcheck in compose and the readiness probe in Kubernetes double as
    the initiator, which is idempotent by construction and needs no one-shot
    Job ordered against a node that may not be listening yet.
-5. **Extract a service** — auth or ai first; they are the cleanest seams.
-   An API gateway in front of it.
+5. ~~**Extract a service, behind an API gateway**~~ — **done**: `services/auth/`
+   is its own workspace, image, process and **database**, and the edge is now
+   an API gateway that routes by prefix and authenticates every `/api` request
+   against it with nginx `auth_request`. That closes the last two of the nine
+   required concepts — microservices and an API gateway. See "The decisions
+   that matter" for the three crossings and the identity modes, and
+   "Running it as containers" / "Running it on Kubernetes" for how to show it.
+
+**All nine infrastructure concepts now run.** Load balancing, Redis, Kafka,
+Kubernetes, an API gateway, microservices, Docker, a CDN (the edge, standing in
+for one) and horizontal scaling. Nothing on this list is designed-but-absent
+any more.
 
 Then the original list:
 
-1. **Deploy** — Vercel + Render + Atlas + an S3 bucket. Configs are written;
-   see `DEPLOYMENT.md`. Needs the user's accounts. The step people miss is
-   replacing both `REPLACE-ME.onrender.com` in `vercel.json`.
+1. **Deploy** — Vercel + Render + Atlas + an S3 bucket. Configs are written for
+   **both** services; see `DEPLOYMENT.md`. Needs the user's accounts. The step
+   people miss is replacing the three placeholders in `vercel.json`, which are
+   now **two different hostnames** (`REPLACE-ME-AUTH` once, `REPLACE-ME-API`
+   twice) — getting them the wrong way round gives the same symptom as leaving
+   them, a login page that does nothing.
+
+   **This deployment has no gateway**, and the difference is worth stating
+   rather than discovering: Vercel's rewrites do the routing, but a rewrite
+   cannot run an `auth_request`, so the API runs `IDENTITY_MODE=bearer` there
+   and the revocation window is the access-token TTL. The gateway runs in the
+   two container stacks. If the gateway is part of what is being presented,
+   present it on `:8080` or `:8081`, not on the Vercel URL.
 2. **Seed production and pre-compute scores** before any demo.
 3. **Rehearse the demo twice**, once with Ollama stopped — `DEMO.md`.
 4. **20 real résumés** into `server/test/fixtures/`, then `npm run resumes:check`.
@@ -222,22 +332,24 @@ Then the original list:
 
 ## Running it as containers
 
-`npm run docker:up` builds two images and starts four containers on
-**http://localhost:8080**. `npm run docker:seed` fills the containerised
-database; the host's own mongod and dev server are untouched.
+`npm run docker:up` builds three images and starts five containers on
+**http://localhost:8080**. `npm run docker:seed` fills **both** containerised
+databases; the host's own mongod and dev server are untouched.
 
 | Container | What it is | Reachable at |
 | --- | --- | --- |
-| `edge` | nginx: serves the built client, proxies `/api`, balances it | `localhost:8080` |
-| `api` ×2 | the Express server | **nowhere from the host, on purpose** |
+| `edge` | nginx: serves the client, routes `/api`, balances it, **and authenticates every request** | `localhost:8080` |
+| `api` ×2 | the Express server, nine modules | **nowhere from the host, on purpose** |
+| `auth` | the extracted auth service, own image and own database | **nowhere from the host, on purpose** |
 | `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
 | `redis` | cache, rate-limit counters, socket pub/sub | `localhost:6380` (6379 left for the host's own) |
 | `kafka` | the domain event log, KRaft mode, no ZooKeeper | `localhost:9094` from the host, `kafka:9092` inside |
 
-**The API publishes no host port.** That is deliberate: the only way in is
-through the load balancer, which is also what lets it scale past one replica
-without a port collision. `npm run docker:scale` takes it to three while it
-is running.
+**Neither service publishes a host port.** That is deliberate: the only way in
+is through the edge, which is also what lets the API scale past one replica
+without a port collision — and what makes "the edge authenticated this" a
+statement about the only path that exists. `npm run docker:scale` takes the API
+to three while it is running.
 
 To see the balancing rather than take it on trust, nginx returns the replica
 that answered:
@@ -250,9 +362,49 @@ done
 ```
 
 **What this demonstrates today:** containerisation, horizontal scaling, load
-balancing, an edge that is simultaneously static host, reverse proxy and
-cache, Redis doing the three jobs a second replica makes necessary, and Kafka
-carrying the domain events between them.
+balancing, an edge that is simultaneously static host, reverse proxy, cache
+**and API gateway**, a **second service with its own database behind it**,
+Redis doing the three jobs a second replica makes necessary, and Kafka carrying
+the domain events between them.
+
+The gateway, proved rather than asserted — each of these was run:
+
+```bash
+# Login is routed to the auth service; the API never sees the password.
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"tpo@naukrisuvidha.edu","password":"Passw0rd!seed"}' \
+  | sed 's/.*"accessToken":"\([^"]*\)".*/\1/')
+
+# The API answers without ever verifying that token: the edge did, once.
+curl -s http://localhost:8080/api/admin/overview -H "Authorization: Bearer $TOKEN"
+
+# No token: 401 from nginx, in the project's own error shape - which is the
+# test of a gateway, because the client cannot tell who refused it.
+curl -s http://localhost:8080/api/admin/overview
+
+# Sending the identity headers yourself does nothing: nginx overwrites all
+# four on every proxied request, and the API wants a shared secret besides.
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/admin/overview \
+  -H 'x-auth-user-id: 507f1f77bcf86cd799439011' -H 'x-auth-user-role: admin'
+
+# Neither service's internal surface is reachable from outside. 404, not 403.
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/api/internal/profiles
+```
+
+Measured on this stack: login `200` with an `httpOnly` cookie scoped to
+`/api/auth`; the authenticated call `200`; no token `401` as JSON; forged
+headers `401`; a forged `x-auth-user-role` left the real role untouched; a
+student on an admin route `403`; both internal prefixes `404`; balancing
+`5 / 5` over two replicas; and the login rate limit `401`×5 then `429`.
+
+**The one demonstration worth rehearsing** is revocation, because it is what
+the gateway buys back. Sign in, confirm a request works, then suspend the
+account directly in the auth service's database — `docker compose exec mongo
+mongosh naukri_suvidha_auth --eval 'db.users.updateOne({email:"..."},
+{$set:{status:"suspended"}})'` — and the *same unexpired token* is refused on
+its next request. The API could not do that any more; it has no users
+collection. The auth service does it, once, at the edge.
 
 Three one-liners that prove Redis rather than asserting it:
 
@@ -291,19 +443,20 @@ built to degrade without it anyway.
 ## Running it on Kubernetes
 
 `npm run k8s:up` creates a kind cluster, installs metrics-server, builds and
-side-loads the two images and applies `infra/k8s/`. The portal is on
+side-loads the three images and applies `infra/k8s/`. The portal is on
 **http://localhost:8081** — 8081 and not 8080, so the compose stack can run at
 the same time and the two can be compared. `npm run k8s:seed` fills the
 clustered database.
 
 Three nodes, because a one-node cluster cannot show a Service balancing across
-machines. The API publishes no host port here either; the only way in is the
-edge.
+machines. Neither service publishes a host port here either; the only way in is
+the edge.
 
 | Object | What it is | Reachable at |
 | --- | --- | --- |
-| `edge` | Deployment + **NodePort** 30080 → host 8081 | `localhost:8081` |
+| `edge` | Deployment + **NodePort** 30080 → host 8081; the API gateway | `localhost:8081` |
 | `api` | Deployment, 2–6 replicas, **owned by the HPA** | `api:5001`, in-cluster only |
+| `auth` | Deployment, 2 replicas, **fixed on purpose** — login is bcrypt-bound, not throughput-bound | `auth:5002`, in-cluster only |
 | `mongo` | StatefulSet + headless Service + PVC | `mongo:27017`, in-cluster only |
 | `redis` | Deployment + Service, no volume | `redis:6379`, in-cluster only |
 | `kafka` | StatefulSet + headless Service, KRaft | `kafka:9092`, in-cluster only |
@@ -420,7 +573,15 @@ binds, but the topics do not exist yet, so the first consumer to subscribe
 used to take the process down — see the Kafka topics row in the gotchas.
 `ensureTopics` now runs before any consumer starts. **A cold
 `npm run k8s:down && npm run k8s:up` reaches a serving portal with 0
-restarts**, which is the only version of this claim worth making.
+restarts**, which is the only version of this claim worth making — re-checked
+with the auth service added: all eight pods ready, **0 restarts on every one**,
+balancing 10/10 over twenty back-to-back requests, and a login through the
+gateway serving on the first attempt.
+
+On that cold run the `topologySpreadConstraint` **did** hold — api and auth
+each landed one pod per worker — where on a re-roll earlier the same day all
+four went to one node. It is `ScheduleAnyway`, a preference, so both outcomes
+are correct behaviour and the honest claim is "check it", not "it spreads".
 
 ### Proving it rather than asserting it
 
@@ -446,6 +607,25 @@ for i in $(seq 1 7); do curl -s -o /dev/null -w '%{http_code}\n' \
 # Kafka, inside the cluster - no host listener here, unlike compose.
 kubectl -n naukri-suvidha exec kafka-0 -- /opt/kafka/bin/kafka-consumer-groups.sh \
   --bootstrap-server localhost:9092 --describe --group notifications.job-approved
+
+# The gateway, same four checks as the compose stack - identical behaviour
+# through a completely different upstream strategy, which is the point of
+# keeping one nginx image and two configs.
+TOKEN=$(curl -s -X POST http://localhost:8081/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"tpo@naukrisuvidha.edu","password":"Passw0rd!seed"}' \
+  | sed 's/.*"accessToken":"\([^"]*\)".*/\1/')
+curl -s http://localhost:8081/api/admin/overview -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8081/api/admin/overview            # 401, as JSON
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8081/api/internal/profiles
+
+# Revocation at the edge - the thing the gateway buys back. 200, then 403 on
+# the same unexpired token.
+kubectl -n naukri-suvidha exec mongo-0 -- mongosh --quiet naukri_suvidha_auth \
+  --eval 'db.users.updateOne({email:"aarav.kaur1@naukrisuvidha.edu"},{$set:{status:"suspended"}})'
+
+# Both auth pods are in the Service, so the edge's subrequests are balanced too.
+kubectl -n naukri-suvidha get endpointslices -l kubernetes.io/service-name=auth
 ```
 
 **What this demonstrates that step 1 could not:** per-connection load
@@ -453,6 +633,56 @@ balancing, readiness as a routing decision, autoscaling from a metric rather
 than a typed number, rolling updates with `maxUnavailable: 0`, declarative
 config and secrets separated from the image, and a StatefulSet binding a
 database to its own volume.
+
+### What step 5 added here
+
+**Two Deployments configured independently.** `api-config` and `auth-config`
+are separate ConfigMaps, so changing one cannot roll the other — that
+separation *is* the step. The `api-secrets` Secret stays shared, deliberately
+and for one reason: the auth service mints the access tokens the API verifies,
+so a mismatch there is a sign-in that appears to work and is then refused
+everywhere. One object, no copy to drift. `AUTH_GATEWAY_SECRET` lives there
+too and has three consumers — the edge reads it as an env var for `envsubst`,
+the two services as configuration.
+
+**The edge's config became a template.** It has to carry a secret now, and a
+secret must not be baked into an image, so `edge-nginx.conf.template` arrives
+as a ConfigMap and nginx's entrypoint runs `envsubst` over it at start-up.
+`NGINX_ENVSUBST_FILTER` restricts that to the one variable — without it
+`envsubst` would also eat nginx's own `$host`, `$remote_addr` and
+`$request_id` and produce a config that starts and is quietly wrong.
+
+That ConfigMap is generated **without** a content hash, so editing the gateway
+config leaves the pod template identical and `apply` reports "unchanged" while
+the running edge keeps the old routing. `up.sh` hashes the file into a pod
+annotation, which is the mutable-tag trap wearing a different hat and the same
+fix.
+
+**auth is not behind the HPA, and that is a decision.** Login is bcrypt-bound
+rather than throughput-bound, and the portal does far more of everything else
+than it does sign-ins. Two replicas is a fixed number on purpose — and with
+Redis holding the counters, two replicas still enforce five login attempts a
+minute rather than ten. Its CPU request is 100m against the API's 200m, for a
+measured reason: an idle API pod burns ~39m just holding its eight Kafka
+consumer groups open, and this service holds none.
+
+**Its probes are shorter for a visible reason.** The startup probe is 30×2s
+against the API's 40×3s, and there are two dependency gates rather than three.
+No broker to join, so it is serving while the API is still reclaiming stranded
+`aiTasks` and joining eight consumer groups. That difference is the clearest
+single thing the extraction bought.
+
+**A rolling update of auth is a rolling update of everything**, because every
+API request runs an introspection subrequest against it — so `maxUnavailable:
+0` and the 5s `preStop` matter more here than anywhere else. Measured:
+`kubectl rollout restart deployment/auth` while hammering an authenticated
+route served **200 consecutive requests with 0 non-200s**.
+
+One thing worth not asserting: the `topologySpreadConstraint` is
+`ScheduleAnyway`, a preference rather than a rule. On a cold bring-up it held
+— api and auth each one pod per worker — and on a re-roll an hour earlier all
+four landed on the same worker. Both are correct behaviour for a preference,
+so check it rather than claiming it.
 
 **What it still does not fix.** Uploads are `STORAGE_PROVIDER=local` on an
 `emptyDir`, so a file lives only on the pod that received it and leaves with
@@ -485,11 +715,30 @@ record.
 Retargeted and trustworthy — sections 1 existing system, 2 problems,
 4 services, 6 Redis, 7 message broker, 8 data, 9 résumé/AI, 10 workflows,
 11 notifications, 12 security, 17 diagrams, 18 sequence diagrams,
-20 decisions, 22 monolith-vs-microservices, 23 summary, and the README.
+20 decisions, 23 summary, and the README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
 keys, service names that do not exist here: sections 3, 5, 13, 14, 15, 16,
 19 and 21.
+
+**Step 5 changed what several sections have to say, so they need a pass:**
+
+- **22 monolith-vs-microservices was trustworthy and is now wrong.** It argued
+  for a modular monolith with the extraction hypothetical. One service is out,
+  so the argument has to become the stronger one: the seam was used, the cost
+  of crossing it is measured rather than guessed, and *that* is the reason not
+  to pay it nine more times. This is the section most likely to be asked about
+  in a viva — it should not still say the extraction is future work.
+- **5, 13, 14 and 16 describe the target architecture**, which is why they
+  were worth doing after this step rather than before. Two services, two
+  databases, a gateway doing `auth_request`, and the three crossings in this
+  file are the inventory they need.
+- **12 security** is retargeted but gains a subject: authentication now happens
+  at the edge, and the forwarded-identity trust model — two locks, and a shared
+  bearer secret that is explicitly *not* a per-request proof — belongs there
+  stated as plainly as it is in this file.
+- **4 services** should name the two that actually exist and say which nine
+  modules are still in the one process.
 
 **`npm run docs:check` pins the retargeted sections to the code** — 72
 claims over routes, indexes, constants, the event topology, the counts the
@@ -500,14 +749,20 @@ the document says is still true.
 
 Three document-wide errors are fixed and worth not reintroducing:
 
-- **No section may claim a transactional outbox exists.** §7.7 states the
-  publish-side window and that a replica set is the prerequisite. §10, §18,
-  §20 and §21 point at it.
+- **The transactional outbox exists, and no section may still describe the
+  publish-side window as open.** This bullet used to say the opposite, and it
+  was left behind when step 4b landed — which is precisely the rot this list
+  exists to catch, in the list itself. `docs:check` asserts the outbox is
+  there and that all eight publish sites use it. §2.2 and §7.7 are the
+  sections that described the gap; §10, §18, §20 and §21 point at it.
 - **No "Nexus", and no `spp_` identifiers.** Same rule as the code.
 - **Counts in prose rot silently.** Nobody re-counts a collection list, so
-  the numbers the document gives are pinned: fourteen collections and
-  eleven test files. Adding either without updating §1, §2.7, §8.1, §22 and
-  §23 fails the build. The test *count* (131) is not pinned — counting it
-  needs a run — so it is still worth checking by eye.
+  the numbers the document gives are pinned: **fourteen collections** and
+  **thirteen test files**. Adding either without updating §1, §2.7, §8.1, §22
+  and §23 fails the build. Both are now counted **across both services**,
+  which matters: the API's barrel holds twelve collections and the auth
+  service's two, and counting only the API's would silently "lose" two that
+  simply moved. The test *count* (157 = 129 API + 28 auth) is not pinned —
+  counting it needs a run — so it is still worth checking by eye.
 - **No email/SMTP channel and no "Ask Assistant".** Neither exists in this
   repo. **§4.12 is the authoritative statement**; align anything new to it.

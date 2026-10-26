@@ -46,6 +46,12 @@ spec:
             - secretRef:
                 name: api-secrets
           env:
+            # Seeding is the one thing that writes both databases: a student
+            # profile carries a userId, so the users have to exist in the auth
+            # service's database and their ids have to match. There is no
+            # ordering of two separate jobs that produces that.
+            - name: AUTH_MONGODB_URI
+              value: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
             # Cheaper hashing for 40 seeded students. The API keeps 12; this
             # is a one-shot script and bcrypt at 12 x 49 accounts is most of
             # the job's runtime.

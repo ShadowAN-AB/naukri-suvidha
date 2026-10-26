@@ -7,11 +7,14 @@ export const ROLES = Object.freeze({
 });
 export const ROLE_VALUES = Object.values(ROLES);
 
-export const USER_STATUS = Object.freeze({
-  ACTIVE: 'active',
-  SUSPENDED: 'suspended',
-});
-export const USER_STATUS_VALUES = Object.values(USER_STATUS);
+/*
+ * Re-exported, not redefined. Both this service and the auth service branch
+ * on a user's status, and the auth service is the one that writes it - so two
+ * copies of these strings would be two opinions about what "suspended" is
+ * spelt like, and the disagreement would show up as a suspended account that
+ * one service still lets in.
+ */
+export { USER_STATUS, USER_STATUS_VALUES } from '@naukri-suvidha/service-kit';
 
 export const PLACEMENT_STATUS = Object.freeze({
   UNPLACED: 'unplaced',

@@ -1,4 +1,4 @@
-import { AppError } from './error.js';
+import { AppError } from './errors.js';
 
 /**
  * Parses req[source] with a Zod schema and replaces it with the parsed value,
