@@ -85,6 +85,24 @@ const claims = [
       return total === 8 && has(`${EV}/transactions.js`, 'withTransaction');
     }],
 
+  // Counts the document states in prose. These are the claims that rot most
+  // quietly - nobody re-counts a collection list - so the numbers the
+  // document gives are pinned here, and adding one without updating §1, §2.7,
+  // §8.1, §22 and §23 fails the build.
+  ['counts', '§1 and §8 say fourteen collections',
+    () => {
+      const exported = (read('server/src/models.js').match(/^export \{([^}]*)\}/gm) || [])
+        .join(',').replace(/export \{|\}/g, '')
+        .split(',').map((x) => x.trim()).filter(Boolean);
+      return exported.length === 14;
+    }],
+  ['counts', '§1 says 11 test files',
+    () => {
+      const r = spawnSync('git', ['ls-files', 'server/test/*.test.js'],
+        { cwd: root, encoding: 'utf8' });
+      return r.status === 0 && r.stdout.trim().split('\n').length === 11;
+    }],
+
   // ---- §6 Redis & caching --------------------------------------------------
   ['§6', 'the cache picks redis or memory behind one interface',
     () => has('server/src/infra/cache/index.js', 'redisEnabled() ? new RedisCache() : new MemoryCache()')],
