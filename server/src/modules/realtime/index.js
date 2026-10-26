@@ -4,8 +4,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { verifyAccessToken } from '../../lib/tokens.js';
-import { User } from '../auth/model.js';
-import { USER_STATUS } from '../../lib/constants.js';
+import { introspectToken } from '../../infra/identity/authClient.js';
 import { duplicateRedis, redisEnabled } from '../../infra/redis/index.js';
 
 /** The three events the client listens for, all scoped to one user's room. */
@@ -23,11 +22,16 @@ const roomFor = (userId) => `user:${userId}`;
  * Socket.IO rides on the same HTTP server as the API, so there is one process
  * and one port to deploy.
  *
- * A socket is authenticated the same way a request is: the access token is
- * verified and the user re-checked against the database, so a suspended
- * account or an ended session cannot hold an open channel. Each connection
- * joins exactly one room - its own - which is what keeps one student from
- * subscribing to another's events.
+ * A socket is authenticated the same way a request is, but it cannot be
+ * authenticated in the same *place*. A Socket.IO handshake carries its token
+ * in the connection payload rather than an Authorization header, and the edge
+ * proxies /socket.io straight through - there is no `auth_request` on a
+ * websocket upgrade. So this is the one entry point in the system that the
+ * gateway cannot cover, and it introspects against the auth service itself to
+ * get the same answer the edge would have got.
+ *
+ * Each connection joins exactly one room - its own - which is what keeps one
+ * student from subscribing to another's events.
  */
 export function initRealtime(httpServer) {
   io = new Server(httpServer, {
@@ -55,16 +59,29 @@ export function initRealtime(httpServer) {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error('Missing access token'));
 
-      const claims = verifyAccessToken(token);
-      const user = await User.findById(claims.sub).lean();
-      if (!user) return next(new Error('Account no longer exists'));
-      if (user.status !== USER_STATUS.ACTIVE) return next(new Error('Account is suspended'));
-      if ((user.tokenVersion ?? 0) !== (claims.v ?? 0)) return next(new Error('Session ended'));
+      /*
+       * The auth service checks the signature *and* the row, so a suspended
+       * account or an ended session cannot hold an open channel - which
+       * matters more here than on a request, because a socket outlives the
+       * moment it was opened.
+       *
+       * It returns null only when there is no auth service configured, which
+       * is bearer mode: a single-process development run, where verifying the
+       * signature here is all that can be done and all that was ever done.
+       */
+      let user = await introspectToken(token);
+      if (!user) {
+        const claims = verifyAccessToken(token);
+        user = { id: String(claims.sub), role: claims.role };
+      }
 
-      socket.data.userId = String(user._id);
+      socket.data.userId = user.id;
       socket.data.role = user.role;
       next();
     } catch (err) {
+      // AppError from the auth service carries a usable message; a jwt error
+      // does not, so it is translated the way it always was.
+      if (err.name === 'AppError') return next(new Error(err.message));
       next(new Error(err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token'));
     }
   });

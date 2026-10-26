@@ -1,26 +1,35 @@
 import request from 'supertest';
+import mongoose from 'mongoose';
 
 import { createApp } from '../src/app.js';
-import { User } from '../src/modules/auth/model.js';
 import { Student, Company } from '../src/modules/profiles/model.js';
 import { Job } from '../src/modules/jobs/model.js';
 import { ROLES, JOB_STATUS } from '../src/lib/constants.js';
 import { signAccessToken } from '../src/lib/tokens.js';
-import bcrypt from 'bcryptjs';
 
 export const app = createApp();
 export const api = () => request(app);
 
-const PASSWORD = 'Passw0rd1';
-
-/** A user plus whichever profile their role implies, and a usable token. */
+/**
+ * A profile, and a token that will be accepted for it.
+ *
+ * No user row, because there is nowhere to put one: `users` belongs to the
+ * auth service and lives in a different database. What a user *is*, to this
+ * service, is now exactly an id and a role - so that is what this makes, and
+ * the suite is more honest for it.
+ *
+ * The suite runs in bearer mode (IDENTITY_MODE defaults to it), so a signed
+ * access token is all that is needed. The token's own tests live with the
+ * service that mints it, in services/auth.
+ */
 export async function makeUser(role, overrides = {}) {
   const suffix = Math.random().toString(36).slice(2, 8);
-  const user = await User.create({
+  const user = {
+    _id: new mongoose.Types.ObjectId(),
     email: overrides.email ?? `${role}-${suffix}@naukrisuvidha.test`,
     role,
-    passwordHash: await bcrypt.hash(PASSWORD, 10),
-  });
+    tokenVersion: 0,
+  };
 
   let profile = null;
   if (role === ROLES.STUDENT) {
@@ -42,7 +51,7 @@ export async function makeUser(role, overrides = {}) {
     });
   }
 
-  return { user, profile, token: signAccessToken(user), password: PASSWORD };
+  return { user, profile, token: signAccessToken(user) };
 }
 
 export async function makeJob(company, overrides = {}) {

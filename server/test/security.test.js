@@ -45,15 +45,9 @@ describe('security headers', () => {
   });
 });
 
-describe('rate limiting', () => {
-  it('cuts off repeated failed logins', async () => {
-    const attempts = [];
-    for (let i = 0; i < 8; i++) {
-      const res = await api()
-        .post('/api/auth/login')
-        .send({ email: 'nobody@naukrisuvidha.test', password: 'WrongPass1' });
-      attempts.push(res.status);
-    }
-    expect(attempts).toContain(429);
-  });
-});
+/*
+ * The login rate limit moved with login, to
+ * services/auth/test/auth.test.js. The limiter itself is built from
+ * service-kit's store, so both services share the one that is shared across
+ * replicas - see the kit for the two boot crashes that cost.
+ */

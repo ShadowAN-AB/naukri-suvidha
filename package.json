@@ -12,13 +12,13 @@
     "client"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "concurrently -n api,auth,client -c cyan,yellow,magenta \"npm:dev:server\" \"npm:dev:auth\" \"npm:dev:client\"",
     "dev:server": "npm run dev --workspace=server",
     "dev:client": "npm run dev --workspace=client",
-    "seed": "node server/scripts/seed.js",
+    "seed": "AUTH_MONGODB_URI=${AUTH_MONGODB_URI:-mongodb://127.0.0.1:27017/naukri_suvidha_auth} node server/scripts/seed.js",
     "lint": "eslint .",
-    "test": "npm run test --workspace=server",
-    "seed:fresh": "node server/scripts/seed.js --fresh",
+    "test": "npm run test:api && npm run test:auth",
+    "seed:fresh": "npm run seed -- --fresh",
     "resumes:check": "node server/scripts/check-resumes.js",
     "lint:fix": "eslint . --fix",
     "start": "npm start --workspace=server",
@@ -36,7 +36,10 @@
     "k8s:logs": "kubectl -n naukri-suvidha logs -l app.kubernetes.io/name=api --tail=50 -f --max-log-requests=8",
     "k8s:hpa": "kubectl -n naukri-suvidha get hpa api --watch",
     "k8s:load": "bash infra/k8s/load.sh",
-    "docs:check": "node server/scripts/check-design-doc.js"
+    "docs:check": "node server/scripts/check-design-doc.js",
+    "dev:auth": "npm run dev --workspace=@naukri-suvidha/auth-service",
+    "test:api": "npm run test --workspace=server",
+    "test:auth": "npm run test --workspace=@naukri-suvidha/auth-service"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

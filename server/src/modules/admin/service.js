@@ -4,7 +4,6 @@ import { Job } from '../jobs/model.js';
 import { Application } from '../applications/model.js';
 import { Interview } from '../interviews/model.js';
 import { AuditLog } from './model.js';
-import { User } from '../auth/model.js';
 import { getCache } from '../../infra/cache/index.js';
 
 const WEEKS = 8;
@@ -39,15 +38,20 @@ function median(values) {
     : Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2));
 }
 
+/*
+ * `users` used to be a fifth figure here, counted from the users collection.
+ * It left with the auth service, and rather than fetch it over HTTP it was
+ * dropped: the dashboard renders four tiles and never showed it. A crossing
+ * added for a number nobody displays is a dependency bought for nothing.
+ */
 export async function overview() {
-  const [students, companies, jobsPending, jobsApproved, users] = await Promise.all([
+  const [students, companies, jobsPending, jobsApproved] = await Promise.all([
     Student.countDocuments(),
     Company.countDocuments(),
     Job.countDocuments({ status: JOB_STATUS.PENDING }),
     Job.countDocuments({ status: JOB_STATUS.APPROVED }),
-    User.countDocuments(),
   ]);
-  return { students, companies, jobsPending, jobsApproved, users };
+  return { students, companies, jobsPending, jobsApproved };
 }
 
 export async function analytics() {
