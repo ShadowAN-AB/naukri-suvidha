@@ -12,7 +12,9 @@ and should not be re-litigated without a reason.
 
 ```bash
 npm run dev            # client :5173, API :5001  (needs mongod + ollama)
-npm test               # 123 tests, Vitest + Supertest, needs a local mongod
+npm test               # 131 tests, Vitest + Supertest, needs a local mongod
+                       # (a standalone mongod exercises the no-transaction
+                       #  path; CI's replica set exercises the outbox)
 npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
@@ -152,6 +154,7 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **`limit` caps differ** | Jobs max **50**, applications max **100** (`shared/src/validation/`). Over the cap is a `400`, not a clamp, and the list just renders empty — which is how the applicants filter sat broken. |
 | **Unlayered CSS beats utilities** | Tailwind 4 puts utilities in `@layer utilities`, and *any* unlayered rule wins over a layered one whatever the specificity. A bare `:focus-visible` in `index.css` could not be switched off by `focus-visible:outline-none`, so inputs drew two focus rings. Base rules belong in `@layer base`. |
 | **The name is Naukri Suvidha** | Never "Nexus". The npm scope is `@naukri-suvidha/*`, the refresh cookie is `naukri_suvidha_rt`, the theme key is `naukri-suvidha-theme`, seeded accounts are `@naukrisuvidha.edu`. The old name is gone from the repository; keep it that way. |
+| **An outbox row that fails to publish must not be re-claimed by its own tick** | The worker loops claiming due rows until there are none. A failed publish that goes straight back to `pending` is therefore claimed again immediately, forever — `running` never clears, and every later tick returns early, so the whole outbox silently stops. A test caught it. The fix is the same shape as the retry worker's: a `nextAttemptAt` the claim filters on, with a floor. The outbox's backoff is 2s–60s rather than the retry worker's 10s–10min, because this is the fast path for every event and not a long-stop for failures. |
 | **A replica set advertises its members, so the member host matters** | A client connects to the seed address, is told the member list, and then connects to *those* names. So the host in `rs.initiate` has to be an address the clients can resolve: `mongo:27017` in compose, the pod's own `mongo-0.mongo.<ns>.svc.cluster.local` in Kubernetes (not the headless Service, which answers with whatever pod it likes), and `127.0.0.1:27017` in CI. Get it wrong and the driver connects, discovers a member it cannot reach, and hangs in server selection rather than failing clearly. Reaching the compose mongo from the **host** now needs `directConnection=true`, because `mongo:27017` resolves only inside that network. |
 | **`?replicaSet=rs0` is not optional in the URI** | A single seed host with no `replicaSet` parameter is treated as a direct connection, and `withTransaction` is refused on a direct connection even when the node *is* a replica set member. The replica set without the URI parameter buys nothing. |
 | **A CI service container cannot be given a command** | The `services:` syntax takes an image, env, ports and docker-create options — there is no way to pass `--replSet`. mongod is therefore started as a **step** in `ci.yml`, with its own wait-and-initiate loop. Worth knowing before trying to put it back as a service: a standalone CI would pass while never once exercising the transactional path. |
@@ -187,6 +190,13 @@ next begins, and this list is the record of where it got to.**
    balances per connection, measured 10/10 over 20 back-to-back requests
    where compose managed 6/5/3 with 2.5s between them. See "Running it on
    Kubernetes" below.
+4b. ~~**Transactional outbox**~~ — **done**: `publish(event, payload,
+   { session })` writes the event inside the transaction that wrote the
+   record, and `outboxWorker` publishes it after the commit. All eight call
+   sites converted. Without a replica set there is no session to pass and
+   publishing stays immediate, so a standalone mongod still works — the
+   window simply stays open, as it always did. §2.2 and §7.7 of the design
+   document are the places that describe the gap this closed.
 4a. ~~**Single-node replica set**~~ — **done**: both mongods run
    `--replSet rs0`, so `session.withTransaction` is legal where it was
    refused. One node, no redundancy — that is not what it is for. The

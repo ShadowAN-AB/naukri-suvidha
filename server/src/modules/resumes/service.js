@@ -2,6 +2,7 @@ import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';
 import { getStorage } from '../../infra/storage/index.js';
 import { eventBus } from '../../infra/events/eventBus.js';
+import { withTransaction } from '../../infra/events/transactions.js';
 import { EVENTS, PARSE_STATUS, ROLES } from '../../lib/constants.js';
 import { sniffFileType } from '../../lib/fileType.js';
 import { extractText } from './extract.js';
@@ -62,15 +63,31 @@ export async function uploadResume(user, file, _ip) {
     throw err;
   }
 
-  await Student.updateOne({ _id: student._id }, { $set: { currentResumeId: resume._id } });
+  /*
+   * The pointer and the event commit together. Storing the bytes cannot join
+   * a transaction - it is an external service - which is why the orphan-file
+   * cleanup above still exists and still has to. What a transaction does
+   * close is the gap between "this resume is now the student's current one"
+   * and "something was told to go and parse it".
+   */
+  await withTransaction(async (session) => {
+    await Student.updateOne(
+      { _id: student._id },
+      { $set: { currentResumeId: resume._id } },
+      { session },
+    );
 
-  if (extraction.ok) {
-    // Phase 5's worker consumes this to build a structured profile.
-    eventBus.publish(EVENTS.RESUME_UPLOADED, {
-      resumeId: String(resume._id),
-      studentId: String(student._id),
-    });
-  } else {
+    if (extraction.ok) {
+      // The AI worker consumes this to build a structured profile.
+      await eventBus.publish(
+        EVENTS.RESUME_UPLOADED,
+        { resumeId: String(resume._id), studentId: String(student._id) },
+        { session },
+      );
+    }
+  });
+
+  if (!extraction.ok) {
     logger.warn({ resumeId: String(resume._id), reason: extraction.error }, 'resume stored but unreadable');
   }
 

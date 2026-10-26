@@ -68,6 +68,15 @@ const outboxEventSchema = new mongoose.Schema(
       default: OUTBOX_STATUS.PENDING,
     },
     attempts: { type: Number, default: 0 },
+    /*
+     * When this row may next be attempted. Now, for a fresh one - the outbox
+     * is the fast path and must not add a delay of its own.
+     *
+     * It exists for the failure case, and it is not optional: without it a
+     * row whose delivery throws goes straight back to `pending` and is
+     * re-claimed by the same tick, forever. A test caught exactly that.
+     */
+    nextAttemptAt: { type: Date, default: Date.now },
     publishedAt: { type: Date },
     lastError: { type: String },
   },
@@ -75,11 +84,11 @@ const outboxEventSchema = new mongoose.Schema(
 );
 
 /*
- * The worker's only query, and the order matters: oldest first, so events
- * about one record reach the bus in the order they were committed. Without
- * the sort a notification could describe a status change that, to any
- * consumer, had not happened yet.
+ * The worker's only query: what is pending and due. The sort is by
+ * `createdAt`, and the order matters - events about one record have to reach
+ * the bus in the order they were committed, or a notification describes a
+ * status change that, to any consumer, has not happened yet.
  */
-outboxEventSchema.index({ status: 1, createdAt: 1 });
+outboxEventSchema.index({ status: 1, nextAttemptAt: 1, createdAt: 1 });
 
 export const OutboxEvent = mongoose.model('OutboxEvent', outboxEventSchema);

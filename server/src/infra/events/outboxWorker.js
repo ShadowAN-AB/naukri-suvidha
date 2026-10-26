@@ -6,6 +6,16 @@ const TICK_MS = 1_000;
 const MAX_PUBLISH_ATTEMPTS = 10;
 
 /**
+ * Backoff after a failed publish: 2s, 4s, 8s … capped at a minute.
+ *
+ * Much shorter than the retry worker's ten-minute ceiling, because this is
+ * the fast path for every event rather than a long-stop for failures - a
+ * broker that blinks should cost a couple of seconds, not ten minutes. The
+ * floor is what stops a failing row being re-claimed by its own tick.
+ */
+const backoffFrom = (attempts) => new Date(Date.now() + Math.min(1_000 * 2 ** attempts, 60_000));
+
+/**
  * Turns committed intents into published events.
  *
  * The outbox row is written inside the transaction that wrote the business
@@ -57,7 +67,8 @@ class OutboxWorker {
   async recover() {
     const stranded = await OutboxEvent.updateMany(
       { status: OUTBOX_STATUS.PUBLISHING },
-      { $set: { status: OUTBOX_STATUS.PENDING } },
+      // Due immediately: a stranded row is not a failed one.
+      { $set: { status: OUTBOX_STATUS.PENDING, nextAttemptAt: new Date() } },
     );
     if (stranded.modifiedCount) {
       logger.info({ stranded: stranded.modifiedCount }, 'requeued stranded outbox events');
@@ -87,7 +98,7 @@ class OutboxWorker {
    */
   #claim() {
     return OutboxEvent.findOneAndUpdate(
-      { status: OUTBOX_STATUS.PENDING },
+      { status: OUTBOX_STATUS.PENDING, nextAttemptAt: { $lte: new Date() } },
       { $set: { status: OUTBOX_STATUS.PUBLISHING }, $inc: { attempts: 1 } },
       { new: true, sort: { createdAt: 1 } },
     );
@@ -107,6 +118,7 @@ class OutboxWorker {
       // and loud instead, because the right response is to fix the bus, not
       // to drop the event.
       row.status = OUTBOX_STATUS.PENDING;
+      row.nextAttemptAt = backoffFrom(row.attempts);
       row.lastError = String(err?.message ?? err).slice(0, 500);
       await row.save();
 
