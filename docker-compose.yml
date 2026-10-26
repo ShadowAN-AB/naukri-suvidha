@@ -12,20 +12,42 @@
 name: naukri-suvidha
 
 services:
+  # A single-node replica set, not a standalone.
+  #
+  # One node gives no redundancy and that is not why it is here: MongoDB
+  # offers multi-document transactions only on a replica set, and without
+  # transactions there can be no transactional outbox - so the publish-side
+  # window in the event bus cannot be closed. One node is the smallest thing
+  # that makes `session.withTransaction` legal.
   mongo:
     image: mongo:7
     restart: unless-stopped
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
     volumes:
       - mongo-data:/data/db
     # 27018 on the host: a local mongod on the default port is normal on a
     # development machine and this must not fight it.
+    #
+    # Reaching it from the host now needs `directConnection=true`, because the
+    # replica set advertises its member as `mongo:27017` - a name that resolves
+    # inside this network and nowhere else. Everything in the stack connects by
+    # that name, so only host-side debugging is affected.
     ports:
       - '27018:27017'
+    # The healthcheck doubles as the initiator. A separate one-shot service
+    # would have to be ordered against this one and would run before the node
+    # is listening; doing it here is idempotent by construction - `rs.status()`
+    # succeeds forever after the first `rs.initiate()`, and a node that somehow
+    # lost its config initiates again rather than staying unhealthy.
     healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.runCommand({ping:1}).ok"]
+      test:
+        - 'CMD-SHELL'
+        - >-
+          mongosh --quiet --eval "try { rs.status().ok } catch (e) {
+          rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"
       interval: 10s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 15
       start_period: 20s
 
   redis:
@@ -90,7 +112,7 @@ services:
       NODE_ENV: production
       PORT: '5001'
       LOG_LEVEL: info
-      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha?replicaSet=rs0
       # With this set, the cache, the rate limiter and the socket gateway are
       # shared between replicas. Without it each container keeps its own,
       # which is exactly the bug this step exists to fix.
@@ -152,7 +174,7 @@ services:
     profiles: ['tools']
     environment:
       NODE_ENV: production
-      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha?replicaSet=rs0
       JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
       JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
       BCRYPT_ROUNDS: '10'

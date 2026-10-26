@@ -72,8 +72,18 @@ const claims = [
        && !/nodemailer/i.test(read('server/package.json'))],
   ['invariant', 'no conversational assistant route exists (§4.12)',
     () => lacks(`${AI}/routes.js`, "'/ask'") && lacks(`${AI}/routes.js`, 'ChatMessage')],
-  ['invariant', 'no transactional outbox exists, so §7.7 must stay honest',
-    () => !existsSync(path.join(root, `${EV}/outbox.js`))],
+  ['invariant', 'the transactional outbox exists and every publish site uses it',
+    () => {
+      // §7.7 claims all eight sites are converted, so a bare publish with no
+      // session would make that false - and would silently reopen the window
+      // for whichever event it was.
+      const r = spawnSync('git', ['grep', '-c', 'eventBus.publish(', '--',
+        'server/src/modules'], { cwd: root, encoding: 'utf8' });
+      if (r.status !== 0) return false;
+      const total = r.stdout.trim().split('\n')
+        .reduce((n, line) => n + Number(line.split(':').pop()), 0);
+      return total === 8 && has(`${EV}/transactions.js`, 'withTransaction');
+    }],
 
   // ---- §6 Redis & caching --------------------------------------------------
   ['§6', 'the cache picks redis or memory behind one interface',
@@ -166,8 +176,26 @@ const claims = [
     () => has('server/src/server.js', 'registerNotificationConsumers()')
        && read('server/src/server.js').indexOf('registerNotificationConsumers()')
           < read('server/src/server.js').indexOf('eventBus.startTransport()')],
-  ['§7', 'produce is fire-and-forget, logged not thrown',
-    () => has(`${EV}/kafka.js`, 'kafka produce failed')],
+  ['§7', 'produceAndWait throws, so the outbox worker can retry',
+    () => has(`${EV}/kafka.js`, 'export async function produceAndWait')
+       && !has(`${EV}/kafka.js`, 'export function produce(')],
+  ['§7', 'a direct publish still only logs, and says the event was lost',
+    () => has(`${EV}/eventBus.js`, 'publish failed outside a transaction; event lost')],
+  ['§7', 'publish writes an outbox row when given a session',
+    () => has(`${EV}/eventBus.js`, "OutboxEvent.create([{ event, payload }], { session })")],
+  ['§7', 'transaction support is detected from the server, not the URI',
+    () => has(`${EV}/transactions.js`, 'command({ hello: 1 })')],
+  ['§7', 'withTransaction runs the body with no session when there are none',
+    () => has(`${EV}/transactions.js`, 'if (!transactionsAvailable()) return fn(null)')],
+  ['§7', 'the outbox claims oldest-first, preserving commit order',
+    () => has(`${EV}/outboxWorker.js`, 'sort: { createdAt: 1 }')],
+  ['§7', 'the outbox claim is gated on a due time, or a failed row hot-loops',
+    () => has(`${EV}/outboxWorker.js`, 'nextAttemptAt: { $lte: new Date() }')],
+  ['§7', 'there is no dead status on an outbox row',
+    () => !/OUTBOX_STATUS\.DEAD/.test(read(`${EV}/outboxWorker.js`))
+       && !has('server/src/lib/constants.js', "DEAD: 'dead',\n  PUBLISH")],
+  ['§7', 'stranded publishing rows are requeued at boot',
+    () => has(`${EV}/outboxWorker.js`, 'requeued stranded outbox events')],
   ['§7', 'retry is 5 attempts with the stated backoff, ending dead',
     () => has(`${EV}/retry.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
        && has(`${EV}/retry.js`, '10s, 20s, 40s, 80s, 160s')],

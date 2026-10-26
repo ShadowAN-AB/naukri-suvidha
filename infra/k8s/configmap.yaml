@@ -19,7 +19,10 @@ data:
   PORT: '5001'
   LOG_LEVEL: info
 
-  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha
+  # ?replicaSet=rs0 so the driver runs discovery and offers transactions.
+  # Without it a single seed host is treated as a direct connection and
+  # `withTransaction` is refused, which is the whole point of the replica set.
+  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha?replicaSet=rs0
   # Set, so the cache, the rate-limit counters and the socket adapter are
   # shared. With an HPA deciding how many replicas exist, "correct without
   # Redis" stops being a position anyone can hold.

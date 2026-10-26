@@ -3,6 +3,7 @@ import PQueue from 'p-queue';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { eventBus } from '../../infra/events/eventBus.js';
+import { withTransaction } from '../../infra/events/transactions.js';
 import {
   AI_TASK_STATUS,
   AI_TASK_TYPE,
@@ -143,23 +144,41 @@ class AiWorker {
     resume.parsedByModel = model;
     resume.parsedAt = new Date();
     resume.parseError = note;
-    await resume.save();
 
-    // The student's own skill list is what eligibility and the fallback use,
-    // so fill in anything the resume knew that the profile did not.
-    if (profile.skills?.length) {
-      const student = await Student.findById(resume.studentId);
-      if (student) {
-        const merged = new Set([...(student.skills ?? []), ...profile.skills]);
-        student.skills = [...merged].slice(0, 40);
-        await student.save();
+    /*
+     * The parsed profile, the merged skills and the event all commit
+     * together. That matters more here than anywhere else: eligibility is
+     * computed from the student's skill list, so a committed profile whose
+     * skills never merged would quietly change which jobs the student is
+     * eligible for - and the event announcing the parse would already have
+     * gone out saying it was done.
+     *
+     * The model call is deliberately outside: it is slow, external, and
+     * `withTransaction` may run this body again on a transient error.
+     */
+    await withTransaction(async (session) => {
+      await resume.save({ session });
+
+      // The student's own skill list is what eligibility and the fallback
+      // use, so fill in anything the resume knew that the profile did not.
+      if (profile.skills?.length) {
+        const student = await Student.findById(resume.studentId).session(session ?? null);
+        if (student) {
+          const merged = new Set([...(student.skills ?? []), ...profile.skills]);
+          student.skills = [...merged].slice(0, 40);
+          await student.save({ session });
+        }
       }
-    }
 
-    eventBus.publish(EVENTS.RESUME_PROCESSED, {
-      resumeId: String(resume._id),
-      studentId: String(resume.studentId),
-      fallback,
+      await eventBus.publish(
+        EVENTS.RESUME_PROCESSED,
+        {
+          resumeId: String(resume._id),
+          studentId: String(resume.studentId),
+          fallback,
+        },
+        { session },
+      );
     });
   }
 

@@ -3,6 +3,7 @@ import { checkEligibility, canTransition } from '@naukri-suvidha/shared';
 import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';
 import { eventBus } from '../../infra/events/eventBus.js';
+import { withTransaction } from '../../infra/events/transactions.js';
 import {
   APPLICATION_STATUS,
   EVENTS,
@@ -73,21 +74,36 @@ export async function apply(user, jobId, ip) {
 
   let application;
   try {
-    application = await Application.create(doc);
+    /*
+     * The row and its event commit together, so there is no instant in which
+     * an application exists and nothing has been told about it. Where there
+     * is no replica set `session` is null and the publish happens straight
+     * after the write, as it used to.
+     */
+    application = await withTransaction(async (session) => {
+      const [created] = await Application.create([doc], { session });
+      await eventBus.publish(
+        EVENTS.APPLICATION_SUBMITTED,
+        {
+          applicationId: String(created._id),
+          jobId: String(job._id),
+          studentId: String(student._id),
+        },
+        { session },
+      );
+      return created;
+    });
   } catch (err) {
     // Deduplication is the unique (jobId, studentId) index, not a prior read:
-    // two simultaneous clicks cannot both pass a check-then-write.
+    // two simultaneous clicks cannot both pass a check-then-write. Inside a
+    // transaction the duplicate aborts it, so the event is rolled back with
+    // the row it described - which is the behaviour we want and a thing the
+    // old publish-after-write could not do.
     if (err.code === 11000) {
       throw AppError.conflict('You have already applied to this job');
     }
     throw err;
   }
-
-  eventBus.publish(EVENTS.APPLICATION_SUBMITTED, {
-    applicationId: String(application._id),
-    jobId: String(job._id),
-    studentId: String(student._id),
-  });
   await audit(user.id, 'application.submitted', application._id, ip, { jobId: String(job._id) });
 
   return application.toObject();
@@ -171,21 +187,31 @@ export async function changeStatus(user, id, { status, note }, ip) {
 
   application.status = status;
   application.timeline.push({ status, byUserId: user.id, at: new Date(), note: note || undefined });
-  await application.save();
 
-  // An offer is what the placement numbers are counted from.
-  if (status === APPLICATION_STATUS.OFFERED) {
-    await Student.updateOne(
-      { _id: application.studentId },
-      { $set: { placementStatus: PLACEMENT_STATUS.PLACED } },
+  await withTransaction(async (session) => {
+    await application.save({ session });
+
+    // An offer is what the placement numbers are counted from, so it belongs
+    // in the same commit: a student marked placed without the event, or the
+    // event without the flag, would show different numbers on two screens.
+    if (status === APPLICATION_STATUS.OFFERED) {
+      await Student.updateOne(
+        { _id: application.studentId },
+        { $set: { placementStatus: PLACEMENT_STATUS.PLACED } },
+        { session },
+      );
+    }
+
+    await eventBus.publish(
+      EVENTS.APPLICATION_STATUS_CHANGED,
+      {
+        applicationId: String(application._id),
+        studentId: String(application.studentId),
+        jobId: String(application.jobId),
+        status,
+      },
+      { session },
     );
-  }
-
-  eventBus.publish(EVENTS.APPLICATION_STATUS_CHANGED, {
-    applicationId: String(application._id),
-    studentId: String(application.studentId),
-    jobId: String(application.jobId),
-    status,
   });
   await audit(user.id, 'application.status_changed', application._id, ip, { status });
 

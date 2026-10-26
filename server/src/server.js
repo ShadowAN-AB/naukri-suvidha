@@ -4,6 +4,8 @@ import { logger } from './config/logger.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import { aiWorker } from './modules/ai/worker.js';
 import { eventRetryWorker } from './infra/events/retryWorker.js';
+import { outboxWorker } from './infra/events/outboxWorker.js';
+import { detectTransactionSupport } from './infra/events/transactions.js';
 import { closeRedis } from './infra/redis/index.js';
 import { eventBus } from './infra/events/eventBus.js';
 import { closeKafka } from './infra/events/kafka.js';
@@ -12,6 +14,11 @@ import { registerNotificationConsumers } from './modules/notifications/consumers
 
 async function main() {
   await connectDb();
+
+  // Asks the server whether it is a replica set member, which decides whether
+  // publishes join their write's transaction or go out immediately. Must run
+  // before anything can publish.
+  await detectTransactionSupport();
 
   // Subscribes to the domain events and picks up anything the last process
   // left unfinished. Started before listening so no event is missed.
@@ -22,6 +29,12 @@ async function main() {
   await eventBus.startTransport();
   // Started after the consumers, so a retry has handlers to find.
   await eventRetryWorker.start();
+
+  // Started after the transport, because shipping an outbox row means
+  // publishing it, and there has to be something to publish onto. It is given
+  // the bus's publish-now function rather than importing the bus, so the bus
+  // can own the worker without a circular import.
+  await outboxWorker.start((event, payload) => eventBus.publishNow(event, payload));
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
@@ -35,6 +48,7 @@ async function main() {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
       eventRetryWorker.stop();
+      outboxWorker.stop();
       await closeKafka();
       await closeRealtime();
       await closeRedis();

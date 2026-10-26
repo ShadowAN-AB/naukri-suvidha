@@ -1,6 +1,7 @@
 import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';
 import { eventBus } from '../../infra/events/eventBus.js';
+import { withTransaction } from '../../infra/events/transactions.js';
 import { EVENTS, INTERVIEW_STATUS, ROLES } from '../../lib/constants.js';
 import { Interview } from './model.js';
 import { Application } from '../applications/model.js';
@@ -93,15 +94,33 @@ export async function schedule(user, input, ip) {
 
   let interview;
   try {
-    interview = await Interview.create({
-      applicationId: application._id,
-      scheduledAt: input.scheduledAt,
-      durationMinutes: input.durationMinutes,
-      mode: input.mode,
-      meetingLink: input.meetingLink || undefined,
-      location: input.location || undefined,
-      notes: input.notes || undefined,
-      scheduledBy: user.id,
+    interview = await withTransaction(async (session) => {
+      const [created] = await Interview.create(
+        [
+          {
+            applicationId: application._id,
+            scheduledAt: input.scheduledAt,
+            durationMinutes: input.durationMinutes,
+            mode: input.mode,
+            meetingLink: input.meetingLink || undefined,
+            location: input.location || undefined,
+            notes: input.notes || undefined,
+            scheduledBy: user.id,
+          },
+        ],
+        { session },
+      );
+      await eventBus.publish(
+        EVENTS.INTERVIEW_SCHEDULED,
+        {
+          interviewId: String(created._id),
+          applicationId: String(application._id),
+          scheduledAt: created.scheduledAt,
+          mode: created.mode,
+        },
+        { session },
+      );
+      return created;
     });
   } catch (err) {
     // The partial unique index, hit by a second booking for the same
@@ -112,12 +131,6 @@ export async function schedule(user, input, ip) {
     throw err;
   }
 
-  eventBus.publish(EVENTS.INTERVIEW_SCHEDULED, {
-    interviewId: String(interview._id),
-    applicationId: String(application._id),
-    scheduledAt: interview.scheduledAt,
-    mode: interview.mode,
-  });
   await audit(user.id, 'interview.scheduled', interview._id, ip, { mode: interview.mode });
 
   return interview.toObject();
@@ -142,13 +155,22 @@ export async function reschedule(user, id, input, ip) {
 
   interview.scheduledAt = input.scheduledAt;
   if (input.notes) interview.notes = input.notes;
-  await interview.save();
 
-  eventBus.publish(EVENTS.INTERVIEW_SCHEDULED, {
-    interviewId: String(interview._id),
-    applicationId: String(interview.applicationId),
-    scheduledAt: interview.scheduledAt,
-    mode: interview.mode,
+  await withTransaction(async (session) => {
+    await interview.save({ session });
+    // The same event name as scheduling, on purpose: every consumer wants the
+    // new time in both cases, and a second name would mean two handlers doing
+    // one job.
+    await eventBus.publish(
+      EVENTS.INTERVIEW_SCHEDULED,
+      {
+        interviewId: String(interview._id),
+        applicationId: String(interview.applicationId),
+        scheduledAt: interview.scheduledAt,
+        mode: interview.mode,
+      },
+      { session },
+    );
   });
   await audit(user.id, 'interview.rescheduled', interview._id, ip, {});
 

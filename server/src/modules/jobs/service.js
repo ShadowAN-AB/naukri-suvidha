@@ -3,6 +3,7 @@ import { checkEligibility, eligibilityFilter } from '@naukri-suvidha/shared';
 import { AppError } from '../../middleware/error.js';
 import { logger } from '../../config/logger.js';
 import { eventBus } from '../../infra/events/eventBus.js';
+import { withTransaction } from '../../infra/events/transactions.js';
 import { EVENTS, JOB_STATUS, ROLES } from '../../lib/constants.js';
 import { Job } from './model.js';
 import { Student, Company } from '../profiles/model.js';
@@ -37,9 +38,18 @@ export async function createJob(user, input, ip) {
 
   // Always pending. A recruiter cannot publish straight to students, which is
   // the whole point of the approval gate.
-  const job = await Job.create({ ...input, companyId: company._id, status: JOB_STATUS.PENDING });
-
-  eventBus.publish(EVENTS.JOB_CREATED, { jobId: String(job._id), companyId: String(company._id) });
+  const job = await withTransaction(async (session) => {
+    const [created] = await Job.create(
+      [{ ...input, companyId: company._id, status: JOB_STATUS.PENDING }],
+      { session },
+    );
+    await eventBus.publish(
+      EVENTS.JOB_CREATED,
+      { jobId: String(created._id), companyId: String(company._id) },
+      { session },
+    );
+    return created;
+  });
   await audit(user.id, 'job.created', job._id, ip, { title: job.title });
 
   return job.toObject();
@@ -210,12 +220,14 @@ export async function approveJob(user, id, ip) {
   job.approvedBy = user.id;
   job.approvedAt = new Date();
   job.rejectionReason = undefined;
-  await job.save();
 
-  eventBus.publish(EVENTS.JOB_APPROVED, {
-    jobId: String(job._id),
-    companyId: String(job.companyId),
-    title: job.title,
+  await withTransaction(async (session) => {
+    await job.save({ session });
+    await eventBus.publish(
+      EVENTS.JOB_APPROVED,
+      { jobId: String(job._id), companyId: String(job.companyId), title: job.title },
+      { session },
+    );
   });
   await audit(user.id, 'job.approved', job._id, ip, { title: job.title });
 
