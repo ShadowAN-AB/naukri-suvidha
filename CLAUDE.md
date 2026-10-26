@@ -563,7 +563,15 @@ binds, but the topics do not exist yet, so the first consumer to subscribe
 used to take the process down — see the Kafka topics row in the gotchas.
 `ensureTopics` now runs before any consumer starts. **A cold
 `npm run k8s:down && npm run k8s:up` reaches a serving portal with 0
-restarts**, which is the only version of this claim worth making.
+restarts**, which is the only version of this claim worth making — re-checked
+with the auth service added: all eight pods ready, **0 restarts on every one**,
+balancing 10/10 over twenty back-to-back requests, and a login through the
+gateway serving on the first attempt.
+
+On that cold run the `topologySpreadConstraint` **did** hold — api and auth
+each landed one pod per worker — where on a re-roll earlier the same day all
+four went to one node. It is `ScheduleAnyway`, a preference, so both outcomes
+are correct behaviour and the honest claim is "check it", not "it spreads".
 
 ### Proving it rather than asserting it
 
@@ -660,10 +668,11 @@ API request runs an introspection subrequest against it — so `maxUnavailable:
 `kubectl rollout restart deployment/auth` while hammering an authenticated
 route served **200 consecutive requests with 0 non-200s**.
 
-One thing that did **not** hold and is worth not asserting: the
-`topologySpreadConstraint` is `ScheduleAnyway`, a preference rather than a
-rule, and on this run all four api and auth pods landed on the same worker.
-Check it rather than claiming it.
+One thing worth not asserting: the `topologySpreadConstraint` is
+`ScheduleAnyway`, a preference rather than a rule. On a cold bring-up it held
+— api and auth each one pod per worker — and on a re-roll an hour earlier all
+four landed on the same worker. Both are correct behaviour for a preference,
+so check it rather than claiming it.
 
 **What it still does not fix.** Uploads are `STORAGE_PROVIDER=local` on an
 `emptyDir`, so a file lives only on the pod that received it and leaves with

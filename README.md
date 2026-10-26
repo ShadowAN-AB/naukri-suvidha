@@ -28,16 +28,34 @@ status pipeline that the student can watch in real time.
 
 ## Architecture in one paragraph
 
-One React SPA, one Express process, one MongoDB. Ten modules live inside that single
-process with their own routes, collections and domain events — the service boundaries
-from the design are real, but they are module boundaries, not network boundaries. The
-model never runs inside a request: résumé extraction and fit scoring are queued and
-handled by an in-process worker, so a slow LLM call can never hold a user's request open.
+One React SPA, **two Express services behind an API gateway**, and MongoDB. Nine
+modules live inside the API process with their own routes, collections and domain
+events; **authentication is a separate service** with its own image, its own
+lifecycle and its own database. The service boundaries from the design are real, and
+one of them is now a network boundary rather than a module boundary — which is what
+makes the cost of the rest of them measurable rather than theoretical.
+
+The edge is the only way in. It serves the built SPA, routes `/api/auth` to the auth
+service and the rest of `/api` to the API, and **authenticates every API request on
+the way through**: an nginx `auth_request` subrequest asks the auth service to
+introspect the bearer token, and the identity it returns is forwarded to the API. So
+the API verifies no token and reads no user — that happened once, at the edge, in the
+service that owns the data.
+
+The model never runs inside a request: résumé extraction and fit scoring are queued
+and handled by an in-process worker, so a slow LLM call can never hold a user's
+request open.
 
 ```
-React 19 SPA  ──HTTPS/wss──▶  Express 5 (10 modules + aiWorker)  ──▶  MongoDB Atlas
-                                                                 ──▶  Object store
-                                                                 ──▶  LLM provider
+                        ┌─── edge (nginx) ─ static host · router · load balancer · gateway
+React 19 SPA ─HTTPS/wss─┤
+                        │   /api/auth/* ──▶  auth service    ──▶  naukri_suvidha_auth
+                        │   /api/*      ──▶  API ×N          ──▶  naukri_suvidha
+                        │   /socket.io  ──▶  API                  ──▶  object store
+                        └                                         ──▶  LLM provider
+
+every /api/* request:   edge ──auth_request──▶ auth /internal/introspect
+                             ──X-Auth-User-{Id,Role}──▶ API
 ```
 
 Full design, data model, API surface and phase plan: **[project plan][plan]**.
@@ -53,7 +71,9 @@ The written report: **[project report][report]**.
 | Frontend | React 19, Vite, Tailwind, React Router, TanStack Query |
 | Backend | Node 22, Express 5, Mongoose 8 |
 | Database | MongoDB Atlas |
-| Auth | JWT access tokens + httpOnly refresh cookie, bcrypt |
+| Auth | A separate service: JWT access tokens + httpOnly refresh cookie, bcrypt |
+| Gateway | nginx — routing, load balancing and `auth_request` authentication |
+| Infrastructure | Docker Compose and Kubernetes (kind), Redis, Kafka — all running, not described |
 | Realtime | Socket.IO |
 | AI | Ollama (`llama3.1:8b`) in dev, Claude in production, behind one `LLMProvider` |
 | Validation | Zod, shared between client and server |
@@ -68,17 +88,30 @@ The written report: **[project report][report]**.
 | 4 | Résumés, extraction, applying | ✅ done |
 | 5 | The AI layer — provider, worker, fit scoring | ✅ done |
 | 6 | Realtime, interviews, analytics | ✅ done |
-| 7 | Harden, deploy, document | 🟡 next |
+| 7 | Harden, deploy, document | 🟡 in progress |
+
+All nine infrastructure concepts the course requires now run rather than being
+designed: load balancing, Redis, Kafka, Kubernetes, an API gateway, microservices,
+Docker, a CDN-standing-in edge, and horizontal scaling.
 
 ## Repository layout
 
 ```
 naukri-suvidha/
-  server/src/
-    modules/        one folder per domain module
-    infra/          storage, llm, events, cache - interfaces + implementations
-    middleware/     requestId, error, auth, rbac, rateLimit
+  server/src/         the API: nine domain modules in one process
+    modules/        one folder per domain module, plus internal/ for the
+                    two routes the auth service calls back on
+    infra/          storage, llm, events, cache, identity - interfaces +
+                    implementations
+    middleware/     requestId, error, auth, rbac
     config/         env loading and validation
+  services/
+    auth/           the extracted auth service: its own package, image,
+                    Dockerfile, test suite and database
+  service-kit/src/    plumbing BOTH services must agree on - the token
+                    functions, the one error shape, the dotenv rules, the
+                    Redis connection. Only things that would be a *bug* to
+                    duplicate, not merely inconvenient.
   client/src/
     pages/          auth, student, recruiter, admin
     api/            one TanStack Query hook file per module
@@ -86,21 +119,33 @@ naukri-suvidha/
     layouts/        the signed-in shell
     components/  hooks/  lib/
   shared/src/       Zod schemas and constants used by BOTH sides
+  infra/
+    nginx/          the compose edge's gateway config
+    k8s/            the Kubernetes manifests, and the edge's config for them
   docs/             notes that are not the plan
 ```
 
 ## Running the checks
 
 ```bash
-npm run lint    # eslint across both workspaces
-npm test        # 72 tests, Vitest + Supertest, against a real mongod
+npm run lint       # eslint across every workspace
+npm test           # 157 tests over two suites, against a real mongod
+npm run test:api   # the API's 129 alone
+npm run test:auth  # the auth service's 28 alone
+npm run docs:check # 72 claims the design document makes about this repo
 npm run build --workspace=client
 ```
 
-The test suite needs a local MongoDB and **refuses to run unless the database
-name contains "test"** — it deletes every collection between tests, and it
-destroyed a development database once before that guard existed. Its
-configuration is `server/.env.test`, committed on purpose so CI needs no secrets.
+Each service has its own suite and its own throwaway database, so the two can run at
+the same time without either wiping the other's rows — which is the boundary doing
+its job.
+
+Both suites need a local MongoDB and **refuse to run unless the database name
+contains "test"** — they delete every collection between tests, and one destroyed a
+development database once before that guard existed. Their configuration is
+`server/.env.test` and `services/auth/.env.test`, committed on purpose so CI needs no
+secrets. The guard itself lives in `service-kit`, so a third service cannot
+accidentally reintroduce the bug.
 
 GitHub Actions runs all three on every push, plus
 `npm audit --omit=dev --audit-level=high`.
@@ -119,18 +164,32 @@ the model switched off.
 
 ```bash
 npm install
-cp server/.env.example server/.env   # then fill in MONGODB_URI and the secrets
-npm run seed -- --fresh              # 3 admins, 6 companies, 40 students, 12 jobs
-npm run dev                          # client on :5173, server on :5001
+cp server/.env.example      server/.env        # MONGODB_URI and the secrets
+cp services/auth/.env.example services/auth/.env
+npm run seed -- --fresh     # 3 admins, 6 companies, 40 students, 12 jobs
+npm run dev                 # client :5173, API :5001, auth :5002
 ```
 
-The server listens on **5001**, not 5000: on macOS, port 5000 is held by the AirPlay
-Receiver in Control Center, which answers requests with a bare `403`. Change `PORT` in
-`server/.env` if you need a different one.
+Two env files, because there are two services. **The JWT secrets must be byte-identical
+in both** — the auth service mints the access tokens the API verifies, and a mismatch is
+a sign-in that appears to work and is then refused everywhere.
 
-`.env` is read from `server/.env` regardless of which directory you start the process
-from. If a required variable is missing the server refuses to start and prints exactly
-which ones.
+Seeding writes **both** databases in one run, and it has to: a student profile carries a
+`userId`, so the users have to exist in the auth service's database and their ids have to
+match. There is no ordering of two separate scripts that produces that. The `seed` script
+sets `AUTH_MONGODB_URI` for you; override it if your auth database is elsewhere.
+
+The API listens on **5001**, not 5000: on macOS, port 5000 is held by the AirPlay
+Receiver in Control Center, which answers requests with a bare `403`. The auth service is
+on 5002. Change `PORT` in either `.env` if you need different ones.
+
+Each service reads its `.env` from its own package directory regardless of where you
+start the process from. If a required variable is missing the service refuses to start and
+prints exactly which ones.
+
+There is no gateway in this mode — Vite's dev proxy does the routing instead, sending
+`/api/auth` to 5002 and the rest of `/api` to 5001. To see the real gateway, run one of
+the container stacks: `npm run docker:up` (`:8080`) or `npm run k8s:up` (`:8081`).
 
 ## Still to do by hand
 
@@ -294,6 +353,33 @@ than each firing their own.
 Both tokens carry a `tokenVersion`. Bumping that column on a user invalidates every token
 already issued to them, which is how suspension and "sign out everywhere" work without
 storing a session table.
+
+### Where the checking happens
+
+All of the above is the **auth service's** now, and so is the `users` collection. The API
+has no connection that can read it. That moves one question: who decides a request is
+allowed?
+
+In both container stacks, the **edge** does, once per request. nginx runs an
+`auth_request` subrequest against the auth service's introspection endpoint, which
+verifies the signature *and* re-reads the row — because a token that has not expired is
+not the same thing as a session that is still allowed. The identity comes back in
+response headers, and the edge forwards it to the API.
+
+Trusting a header is the sharp edge of that design, so it has two locks. nginx sets all
+four identity headers on **every** proxied request, including empty on the unauthenticated
+ones, so a client's own values are always overwritten; and the API additionally requires a
+shared secret, so being able to reach it is not enough. Be precise about the limit: that
+secret is a bearer secret shared between three processes, **not** a per-request proof, so
+anything holding it and a route to the API could mint any identity. A short-lived signed
+assertion — what Envoy's `ext_authz` and ALB's `X-Amzn-Oidc-Data` carry — removes that,
+and is the upgrade path rather than something already built.
+
+Running the API alone, as `npm run dev` and the test suite do, there is no edge to do any
+of this, so it verifies the token itself and trusts the claims. The cost of that mode is
+exact and worth stating: **no revocation check**, so a suspended account keeps access
+until its access token expires. That is why it is the development mode and the gateway is
+the deployed one.
 
 Route guards in React are a convenience for the person using the app, **not** a security
 boundary. Every rule they express is enforced again on the server, which is the only place
