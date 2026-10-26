@@ -13,6 +13,10 @@
  *              developer's database, and the JWT config both sides read
  *   constants  the gateway's identity header names, and the user statuses
  *              both services branch on
+ *   events     the event names (which are the Kafka topics), the consumer
+ *              group derivation, the retry backoff and the delivery schema -
+ *              a producer and a consumer in different processes disagreeing
+ *              about any of these is a silence, not an error
  *
  * Everything else - a service's own routes, models, workers, config - stays
  * in that service. This is not a place to put code that is merely convenient
@@ -28,3 +32,12 @@ export { requestId } from './requestId.js';
 export { validate } from './validate.js';
 export { USER_STATUS, USER_STATUS_VALUES, IDENTITY_HEADERS } from './constants.js';
 export { createRedis } from './redis.js';
+export {
+  EVENTS,
+  EVENT_DELIVERY_STATUS,
+  EVENT_DELIVERY_STATUS_VALUES,
+  groupIdFor,
+  MAX_DELIVERY_ATTEMPTS,
+  backoffFrom,
+  eventDeliverySchema,
+} from './events.js';

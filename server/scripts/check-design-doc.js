@@ -172,7 +172,9 @@ const claims = [
   // ---- §7 message broker --------------------------------------------------
   ['§7', 'exactly seven domain events exist',
     () => {
-      const m = read('server/src/lib/constants.js').match(/EVENTS = Object\.freeze\(\{([\s\S]*?)\}\)/);
+      // In service-kit since notifications was extracted: the event name is
+      // the Kafka topic, so it is a contract between two processes.
+      const m = read(`${KIT}/events.js`).match(/EVENTS = Object\.freeze\(\{([\s\S]*?)\}\)/);
       return m ? m[1].split('\n').filter((l) => l.includes(':')).length === 7 : false;
     }],
   ['§7', 'the seven event names are the ones the table lists',
@@ -181,7 +183,7 @@ const claims = [
            "APPLICATION_SUBMITTED: 'application.submitted'",
            "APPLICATION_STATUS_CHANGED: 'application.status_changed'",
            "INTERVIEW_SCHEDULED: 'interview.scheduled'"]
-      .every((e) => has('server/src/lib/constants.js', e))],
+      .every((e) => has(`${KIT}/events.js`, e))],
   ['§7', 'exactly eight named subscribers exist',
     () => countOf(`${AI}/worker.js`, 'eventBus.subscribe') === 3
        && countOf(`${NOT}/consumers.js`, 'eventBus.subscribe') === 5],
@@ -204,7 +206,10 @@ const claims = [
   ['§7', 'a duplicate subscriber name throws',
     () => has(`${EV}/eventBus.js`, 'Duplicate event handler name')],
   ['§7', 'the group id is the subscriber name with colons rewritten to dots',
-    () => has(`${EV}/kafka.js`, "name.replace(/:/g, '.')")],
+    // Derived in service-kit: the API's producer and the notifications
+    // service's consumer must reach the same group id for a handler name.
+    () => has(`${KIT}/events.js`, "handlerName.replace(/:/g, '.')")
+       && has(`${EV}/kafka.js`, 'groupIdFor(name)')],
   ['§7', 'no module imports another module\'s service',
     () => {
       const r = spawnSync('git', ['grep', '-l', "from '../", '--',
@@ -245,8 +250,8 @@ const claims = [
   ['§7', 'stranded publishing rows are requeued at boot',
     () => has(`${EV}/outboxWorker.js`, 'requeued stranded outbox events')],
   ['§7', 'retry is 5 attempts with the stated backoff, ending dead',
-    () => has(`${EV}/retry.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
-       && has(`${EV}/retry.js`, '10s, 20s, 40s, 80s, 160s')],
+    () => has(`${KIT}/events.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
+       && has(`${KIT}/events.js`, '10s, 20s, 40s, 80s, 160s')],
   ['§7', 'ensureTopics waits for leaders before any consumer subscribes',
     () => has(`${EV}/kafka.js`, 'waitForLeaders: true')],
 
@@ -311,8 +316,8 @@ const claims = [
   ['§11', 'read state is a nullable date, not a boolean',
     () => has(`${NOT}/model.js`, 'readAt: { type: Date, default: null }')],
   ['§11', 'retry is 5 attempts with 10s/20s/40s/80s/160s backoff',
-    () => has(`${EV}/retry.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
-       && has(`${EV}/retry.js`, '10s, 20s, 40s, 80s, 160s')],
+    () => has(`${KIT}/events.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
+       && has(`${KIT}/events.js`, '10s, 20s, 40s, 80s, 160s')],
   ['§11', 'stranded deliveries are requeued at boot',
     () => has(`${EV}/retryWorker.js`, 'requeued stranded deliveries')],
   ['§11', 'sockets join one room per user and carry three events',

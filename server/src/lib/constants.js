@@ -91,16 +91,13 @@ export const NOTIFICATION_TYPE = Object.freeze({
 });
 export const NOTIFICATION_TYPE_VALUES = Object.values(NOTIFICATION_TYPE);
 
-/** Domain events published on the in-process bus. */
-export const EVENTS = Object.freeze({
-  RESUME_UPLOADED: 'resume.uploaded',
-  RESUME_PROCESSED: 'resume.processed',
-  JOB_CREATED: 'job.created',
-  JOB_APPROVED: 'job.approved',
-  APPLICATION_SUBMITTED: 'application.submitted',
-  APPLICATION_STATUS_CHANGED: 'application.status_changed',
-  INTERVIEW_SCHEDULED: 'interview.scheduled',
-});
+/*
+ * Re-exported, not redefined. The event name is the Kafka topic, so it is a
+ * contract between this service's producer and the notifications service's
+ * consumer - two copies of these strings is a subscription to a topic nobody
+ * writes to, which fails silently.
+ */
+export { EVENTS } from '@naukri-suvidha/service-kit';
 
 export const OUTBOX_STATUS = Object.freeze({
   PENDING: 'pending',
@@ -109,11 +106,6 @@ export const OUTBOX_STATUS = Object.freeze({
 });
 export const OUTBOX_STATUS_VALUES = Object.values(OUTBOX_STATUS);
 
-export const EVENT_DELIVERY_STATUS = Object.freeze({
-  PENDING: 'pending',
-  RUNNING: 'running',
-  DONE: 'done',
-  /** Out of attempts. The dead-letter end of the queue. */
-  DEAD: 'dead',
-});
-export const EVENT_DELIVERY_STATUS_VALUES = Object.values(EVENT_DELIVERY_STATUS);
+// Shared for the same reason: both services keep their own retry queue, and
+// the same worker logic reads both.
+export { EVENT_DELIVERY_STATUS, EVENT_DELIVERY_STATUS_VALUES } from '@naukri-suvidha/service-kit';

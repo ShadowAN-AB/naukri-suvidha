@@ -1,4 +1,5 @@
 import { Kafka, logLevel } from 'kafkajs';
+import { groupIdFor } from '@naukri-suvidha/service-kit';
 
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
@@ -129,7 +130,9 @@ export async function ensureTopics(events) {
  * mechanism per failure mode, rather than two fighting.
  */
 export async function startConsumer(event, name, deliver) {
-  const groupId = name.replace(/:/g, '.');
+  // Derived in service-kit, because the notifications service has to arrive
+  // at the same group id for the same handler name or it replays on restart.
+  const groupId = groupIdFor(name);
   const consumer = client().consumer({ groupId, allowAutoTopicCreation: true });
 
   await consumer.connect();
