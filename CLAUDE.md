@@ -684,12 +684,22 @@ A port gate is necessary and not sufficient, and the cold-start path is the
 only place that shows it. `nc -z kafka 9092` passes as soon as the broker
 binds, but the topics do not exist yet, so the first consumer to subscribe
 used to take the process down — see the Kafka topics row in the gotchas.
-`ensureTopics` now runs before any consumer starts. **A cold
+`ensureTopics` now runs before any consumer starts, in **every** service, and
+waits for leaders rather than trusting `waitForLeaders` — see the gotcha, which
+cost two more restarts before it was right. **A cold
 `npm run k8s:down && npm run k8s:up` reaches a serving portal with 0
 restarts**, which is the only version of this claim worth making — re-checked
-with the auth service added: all eight pods ready, **0 restarts on every one**,
-balancing 10/10 over twenty back-to-back requests, and a login through the
-gateway serving on the first attempt.
+with both extracted services in place: **all ten pods ready, 0 restarts on
+every one**, all five of the notifications service's consumer groups joined,
+both its pods in the Service's endpoints, and the full loop working — approve a
+job through the gateway, and the row appears in
+`naukri_suvidha_notifications` with the real job title while the inbox returns
+it with `unread: 1`.
+
+Getting there took three attempts, and the two intermediate ones each cost
+restarts on a cold cluster: first both notifications pods, then an API pod.
+Both were the same race seen from different sides, and the third fix is the
+one that holds whoever wins.
 
 On that cold run the `topologySpreadConstraint` **did** hold — api and auth
 each landed one pod per worker — where on a re-roll earlier the same day all
