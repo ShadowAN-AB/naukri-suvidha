@@ -265,8 +265,15 @@ const claims = [
   ['§7', 'retry is 5 attempts with the stated backoff, ending dead',
     () => has(`${KIT}/events.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
        && has(`${KIT}/events.js`, '10s, 20s, 40s, 80s, 160s')],
-  ['§7', 'ensureTopics waits for leaders before any consumer subscribes',
-    () => has(`${EV}/kafka.js`, 'waitForLeaders: true')],
+  ['§7', 'every service waits for topic leaders before subscribing',
+    // In service-kit, and no longer `waitForLeaders: true` - that flag skips
+    // the topics it did not create, so two services racing each other both
+    // believe the topics are ready and the loser subscribes to a leaderless
+    // partition. Creation and readiness are separated now.
+    () => has(`${KIT}/kafkaTopics.js`, 'leaderlessTopics')
+       && has(`${KIT}/kafkaTopics.js`, 'fetchTopicMetadata')
+       && has(`${EV}/kafka.js`, 'ensureTopicsShared')
+       && has(`${NOT}/consumer.js`, 'ensureOwnTopics')],
 
   // ---- §9 résumé & AI ------------------------------------------------------
   ['§9', 'the five résumé endpoints exist',

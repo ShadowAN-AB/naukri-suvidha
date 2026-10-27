@@ -1,5 +1,5 @@
 import { Kafka, logLevel } from 'kafkajs';
-import { backoffFrom, groupIdFor } from '@naukri-suvidha/service-kit';
+import { backoffFrom, ensureTopics, groupIdFor } from '@naukri-suvidha/service-kit';
 
 import { env } from './env.js';
 import { logger } from './logger.js';
@@ -90,12 +90,37 @@ export const handlerFor = (name) => registered.get(name)?.handler;
  * restart the container - which starts the wait again. The API learnt this
  * with eight groups taking about forty seconds.
  *
- * No `ensureTopics` here. The API creates every registered event's topic with
- * `waitForLeaders` before any of its own consumers subscribe, and it owns the
- * producer, so by the time anything is published the topics exist. This
- * service subscribing to a topic that does not exist yet is the one case
- * kafkajs retries cleanly on its own.
+ * `ensureTopics` first, and the reasoning that said it was unnecessary here
+ * was wrong in a way worth recording.
+ *
+ * The argument was: the API creates every topic with `waitForLeaders` before
+ * it produces, so by the time there is anything to consume the topics exist.
+ * True, and irrelevant - Kubernetes starts every pod in parallel, so there is
+ * no ordering between the API's ensureTopics and this service's subscribe. On
+ * a cold cluster this one won, got
+ *
+ *     KafkaJSProtocolError: This server does not host this topic-partition
+ *
+ * from its metadata request, and `subscribe` threw out of `start()`, out of
+ * `main()`, and exited 1. Both replicas restarted once. kafkajs marks that
+ * error `retriable: true`, which is what made it look survivable; it is not,
+ * because nothing here retries at that level.
+ *
+ * So this service does not rely on being second. Creating a topic that
+ * already exists is a no-op, so both services asking for the same topics is
+ * harmless and neither has to go first. Exactly the fix the API already
+ * carries, for exactly the same failure.
  */
+/**
+ * Make the topics this service subscribes to exist and have a leader.
+ *
+ * Shared with the API, and the comment there is the one to read: both services
+ * calling this concurrently is the case it is written for, because there is no
+ * ordering between pods and `createTopics` is not the no-op it looks like.
+ */
+const ensureOwnTopics = (events) =>
+  ensureTopics({ admin: client().admin(), events, logger });
+
 export async function start() {
   if (!kafkaEnabled()) {
     logger.warn(
@@ -104,6 +129,9 @@ export async function start() {
     );
     return;
   }
+
+  // Before any subscribe. Being second is not a plan - see the kit's note.
+  await ensureOwnTopics([...new Set([...registered.values()].map((h) => h.event))]);
 
   await Promise.all(
     [...registered].map(async ([name, { event, deliver }]) => {

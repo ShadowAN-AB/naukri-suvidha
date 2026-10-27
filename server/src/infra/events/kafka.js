@@ -1,5 +1,5 @@
 import { Kafka, logLevel } from 'kafkajs';
-import { groupIdFor } from '@naukri-suvidha/service-kit';
+import { ensureTopics as ensureTopicsShared, groupIdFor } from '@naukri-suvidha/service-kit';
 
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
@@ -77,47 +77,16 @@ export async function produceAndWait(event, payload) {
 }
 
 /**
- * Create every topic the bus is about to use, and wait for leaders.
+ * Make every topic exist and have a leader before any consumer subscribes.
  *
- * `allowAutoTopicCreation` is not enough on a cold broker, and the failure is
- * an ugly one to read. A port gate - the initContainer's `nc -z kafka 9092` -
- * is satisfied the moment the broker is listening, which is well before any
- * topic exists. A consumer that subscribes then gets
- *
- *     KafkaJSProtocolError: This server does not host this topic-partition
- *
- * from the metadata request. Auto-creation *is* triggered by that very
- * request, so the topic appears a moment later and the next attempt works -
- * which is why this only ever cost one restart, on a genuinely cold cluster,
- * and why it never showed up under compose where the broker had usually been
- * running for a while.
- *
- * kafkajs marks that error `retriable: true`, so the honest response is to
- * not be in the race at all rather than to retry inside it. `waitForLeaders`
- * means this resolves when the partitions actually have a leader, so every
- * subscribe below finds a topic that is ready to serve.
- *
- * The topic names come from the registered handlers, so there is no second
- * list of events to keep in step with the first.
+ * The implementation is in service-kit, because the notifications service has
+ * to do exactly this and the three obvious versions of it are all wrong on a
+ * cold cluster - including "both services call createTopics, it is
+ * idempotent", which it is not. The history is written out there.
  */
 export async function ensureTopics(events) {
   if (!kafkaEnabled() || events.length === 0) return;
-  const admin = client().admin();
-  try {
-    await admin.connect();
-    await admin.createTopics({
-      topics: events.map((topic) => ({ topic, numPartitions: 1, replicationFactor: 1 })),
-      waitForLeaders: true,
-    });
-    logger.info({ topics: events.length }, 'kafka topics ready');
-  } catch (err) {
-    // Not fatal. If this fails the subscribe below may still succeed via
-    // auto-creation, and a broker that is genuinely unreachable is a problem
-    // the consumer start will report with a better message than this would.
-    logger.warn({ err }, 'could not pre-create kafka topics; relying on auto-creation');
-  } finally {
-    await admin.disconnect().catch(() => {});
-  }
+  await ensureTopicsShared({ admin: client().admin(), events, logger });
 }
 
 /**

@@ -49,3 +49,4 @@ export {
   eventDeliverySchema,
 } from './events.js';
 export { createEventRetryWorker } from './retryWorker.js';
+export { ensureTopics } from './kafkaTopics.js';
