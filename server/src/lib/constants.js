@@ -83,14 +83,6 @@ export const INTERVIEW_STATUS = Object.freeze({
 });
 export const INTERVIEW_STATUS_VALUES = Object.values(INTERVIEW_STATUS);
 
-export const NOTIFICATION_TYPE = Object.freeze({
-  JOB_APPROVED: 'job.approved',
-  APPLICATION_STATUS: 'application.status',
-  RESUME_PROCESSED: 'resume.processed',
-  INTERVIEW_SCHEDULED: 'interview.scheduled',
-});
-export const NOTIFICATION_TYPE_VALUES = Object.values(NOTIFICATION_TYPE);
-
 /*
  * Re-exported, not redefined. The event name is the Kafka topic, so it is a
  * contract between this service's producer and the notifications service's

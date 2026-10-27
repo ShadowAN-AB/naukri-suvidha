@@ -1,9 +1,16 @@
 import { Router } from 'express';
 
 import * as service from './service.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth } from './identity.js';
 
 const router = Router();
+
+/*
+ * The inbox. Same three routes, same shapes, same paths as before - the edge
+ * mounts this under /api/notifications, so the client cannot tell that a
+ * different process answers now. That is the test of whether the gateway is
+ * doing its job, and the client is unchanged.
+ */
 router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {

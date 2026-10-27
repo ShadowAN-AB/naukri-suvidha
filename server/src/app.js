@@ -21,7 +21,6 @@ import jobRoutes from './modules/jobs/routes.js';
 import resumeRoutes from './modules/resumes/routes.js';
 import applicationRoutes from './modules/applications/routes.js';
 import aiRoutes from './modules/ai/routes.js';
-import notificationRoutes from './modules/notifications/routes.js';
 import interviewRoutes from './modules/interviews/routes.js';
 
 export function createApp() {
@@ -110,9 +109,10 @@ export function createApp() {
   });
 
   /*
-   * No /api/auth. Registering, signing in, refreshing and signing out are the
-   * auth service's, and the edge routes that prefix to it - so a client sees
-   * the same URLs it always did while a different process answers them.
+   * No /api/auth and no /api/notifications. Sessions belong to the auth
+   * service and the inbox belongs to the notifications service, and the edge
+   * routes both prefixes to them - so a client sees the same URLs it always
+   * did while a different process answers them.
    *
    * /api/internal is this service's service-to-service surface, for the auth
    * service's two calls back across the boundary. The edge refuses it from
@@ -125,7 +125,6 @@ export function createApp() {
   app.use('/api/resumes', resumeRoutes);
   app.use('/api/applications', applicationRoutes);
   app.use('/api/ai', aiRoutes);
-  app.use('/api/notifications', notificationRoutes);
   app.use('/api/interviews', interviewRoutes);
 
   app.use(notFound);

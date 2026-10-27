@@ -1,8 +1,10 @@
-import { eventBus } from '../../infra/events/eventBus.js';
-import { logger } from '../../config/logger.js';
-import { EVENTS, NOTIFICATION_TYPE } from '../../lib/constants.js';
-import { emitToUser, SOCKET_EVENTS } from '../realtime/index.js';
+import { EVENTS } from '@naukri-suvidha/service-kit';
+
+import { logger } from './logger.js';
+import { NOTIFICATION_TYPE } from './constants.js';
+import { emitToUser, SOCKET_EVENTS } from './sockets.js';
 import { notify } from './service.js';
+import { on } from './consumer.js';
 
 /**
  * The only place that turns domain events into notifications.
@@ -11,16 +13,16 @@ import { notify } from './service.js';
  * of the bus: `applications` records a status change and is done, and the fact
  * that a student gets told about it is this module's business.
  *
- * **Every handler here reads nothing but its event.** That is deliberate and
- * recent. These handlers used to look up the student, the company and the job
- * to find out who to tell and what to call it, which worked only because they
- * happened to share a process and a database with those collections. An event
- * that cannot be acted on without reading the publisher's data is not really
- * an event - it is a trigger to go and ask.
+ * **Every handler here reads nothing but its event**, and in this service that
+ * is not a style preference - it is the only thing that works. There are no
+ * students, jobs or companies in this database. The handlers used to look all
+ * three up, which was possible only while they shared a process with them; an
+ * event that cannot be acted on without reading the publisher's data is not
+ * really an event, it is a trigger to go and ask.
  *
- * So the publishers resolve the audience now, in the services that own it, and
- * the payload carries it. The handlers below became shorter, and this module's
- * only collection is its own.
+ * So the publishers resolve the audience, in the services that own it, and the
+ * payload carries it. That change landed before this service existed, which is
+ * what made the extraction a move rather than a rewrite.
  */
 
 const STATUS_COPY = {
@@ -31,9 +33,9 @@ const STATUS_COPY = {
   withdrawn: ['Application withdrawn', 'You withdrew this application.'],
 };
 
-export function registerNotificationConsumers() {
+export function registerConsumers() {
   // A posting going live is news for the recruiter who submitted it.
-  eventBus.subscribe(EVENTS.JOB_APPROVED, 'notifications:job-approved', async ({ recruiterUserId, title }) => {
+  on(EVENTS.JOB_APPROVED, 'notifications:job-approved', async ({ recruiterUserId, title }) => {
     await notify({
       userId: recruiterUserId,
       type: NOTIFICATION_TYPE.JOB_APPROVED,
@@ -44,7 +46,7 @@ export function registerNotificationConsumers() {
   });
 
   // A new applicant is news for the recruiter.
-  eventBus.subscribe(
+  on(
     EVENTS.APPLICATION_SUBMITTED,
     'notifications:application-submitted',
     async ({ recruiterUserId, jobTitle, studentName }) => {
@@ -59,7 +61,7 @@ export function registerNotificationConsumers() {
   );
 
   // A status change is news for the student, and also a live update.
-  eventBus.subscribe(
+  on(
     EVENTS.APPLICATION_STATUS_CHANGED,
     'notifications:application-status-changed',
     async ({ applicationId, jobId, status, jobTitle, studentUserId }) => {
@@ -85,7 +87,7 @@ export function registerNotificationConsumers() {
   );
 
   // A parsed resume is news for the student, who has been waiting on it.
-  eventBus.subscribe(
+  on(
     EVENTS.RESUME_PROCESSED,
     'notifications:resume-processed',
     async ({ resumeId, fallback, studentUserId }) => {
@@ -109,7 +111,7 @@ export function registerNotificationConsumers() {
   );
 
   // A scheduled interview is news for the student.
-  eventBus.subscribe(
+  on(
     EVENTS.INTERVIEW_SCHEDULED,
     'notifications:interview-scheduled',
     async ({ scheduledAt, mode, jobTitle, studentUserId }) => {
@@ -123,5 +125,5 @@ export function registerNotificationConsumers() {
     },
   );
 
-  logger.info('notification consumers registered');
+  logger.info('notification handlers registered');
 }

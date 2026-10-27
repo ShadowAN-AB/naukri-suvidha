@@ -44,7 +44,7 @@ const countOf = (rel, needle) => read(rel).split(needle).length - 1;
 
 const AI = 'server/src/modules/ai';
 const RES = 'server/src/modules/resumes';
-const NOT = 'server/src/modules/notifications';
+const NOT = 'services/notifications/src';
 const AUTH = 'services/auth/src';
 const EV = 'server/src/infra/events';
 const KIT = 'service-kit/src';
@@ -90,35 +90,37 @@ const claims = [
   // quietly - nobody re-counts a collection list - so the numbers the
   // document gives are pinned here, and adding one without updating §1, §2.7,
   // §8.1, §22 and §23 fails the build.
-  // Counted across both services since step 5. `users` and `refreshTokens`
-  // moved to the auth service's own database, so the API's barrel holds
-  // twelve - but the *system* still has fourteen, which is what the document
-  // says. Counting only the API's would have silently "lost" two.
-  ['counts', '§1 and §8 say fourteen collections, across both services',
+  // Counted across all three services. `users` and `refreshTokens` moved to
+  // the auth service and `notifications` to the notifications service, each in
+  // its own database - so the API's barrel holds eleven while the *system*
+  // still has fourteen, which is what the document says. Counting one side
+  // would silently "lose" the three that only moved.
+  ['counts', '§1 and §8 say fourteen collections, across three services',
     () => {
       const names = (rel) =>
         (read(rel).match(/^export \{([^}]*)\}/gm) || [])
           .join(',').replace(/export \{|\}/g, '')
           .split(',').map((x) => x.trim()).filter(Boolean);
       const api = names('server/src/models.js');
-      // The auth service registers its two directly rather than re-exporting
-      // them, so they are counted by their mongoose.model calls. Its barrel
-      // also exports the two schemas, for the seed script - those are not
-      // collections and must not be counted.
+      // The two services register theirs directly rather than re-exporting,
+      // so they are counted by their mongoose.model calls. The notifications
+      // service registers EventDelivery too, which is its retry queue and not
+      // one of the fourteen, so Notification is counted on its own.
       const auth = countOf(`${AUTH}/model.js`, 'mongoose.model(');
-      return api.length === 12 && auth === 2 && api.length + auth === 14;
+      const notif = countOf(`${NOT}/model.js`, "mongoose.model('Notification'");
+      return api.length === 11 && auth === 2 && notif === 1
+          && api.length + auth + notif === 14;
     }],
-  // Thirteen since step 5, not eleven. The auth service brought its own suite;
-  // server/test/auth.test.js became access.test.js - what is left of this
-  // service's side once credentials and sessions moved - and gateway.test.js
-  // was added for the identity strategies, which is where a forged header is
-  // refused.
-  ['counts', '§1 says 13 test files, across both services',
+  // Fourteen, across three services. The glob has to name every service's
+  // test directory: it listed only two when notifications was extracted, so
+  // the count stayed at thirteen and passed while there were fourteen - the
+  // exact rot this check exists to catch, in the check itself.
+  ['counts', '§1 says 14 test files, across three services',
     () => {
       const r = spawnSync('git',
-        ['ls-files', 'server/test/*.test.js', 'services/auth/test/*.test.js'],
+        ['ls-files', 'server/test/*.test.js', 'services/*/test/*.test.js'],
         { cwd: root, encoding: 'utf8' });
-      return r.status === 0 && r.stdout.trim().split('\n').length === 13;
+      return r.status === 0 && r.stdout.trim().split('\n').length === 14;
     }],
 
   // ---- §6 Redis & caching --------------------------------------------------
@@ -184,9 +186,12 @@ const claims = [
            "APPLICATION_STATUS_CHANGED: 'application.status_changed'",
            "INTERVIEW_SCHEDULED: 'interview.scheduled'"]
       .every((e) => has(`${KIT}/events.js`, e))],
-  ['§7', 'exactly eight named subscribers exist',
+  // Eight across two services now. The API's AI worker subscribes on its own
+  // bus; the notifications service registers handlers with its consumer-only
+  // `on()`. Different call, same contract - the name becomes the group id.
+  ['§7', 'exactly eight named subscribers exist, across two services',
     () => countOf(`${AI}/worker.js`, 'eventBus.subscribe') === 3
-       && countOf(`${NOT}/consumers.js`, 'eventBus.subscribe') === 5],
+       && countOf(`${NOT}/consumers.js`, '  on(') === 5],
   ['§7', 'the subscriber names are the ones that become consumer groups',
     () => ["'ai:resume-uploaded'", "'ai:job-approved'", "'ai:resume-processed'"]
             .every((n) => has(`${AI}/worker.js`, n))
@@ -225,10 +230,18 @@ const claims = [
        && has('server/src/modules/applications/service.js', "from '../admin/model.js'")],
   ['§7', 'consumers start in parallel, not serially',
     () => has(`${EV}/eventBus.js`, 'Promise.all')],
-  ['§7', 'the transport starts after every module has subscribed',
-    () => has('server/src/server.js', 'registerNotificationConsumers()')
-       && read('server/src/server.js').indexOf('registerNotificationConsumers()')
-          < read('server/src/server.js').indexOf('eventBus.startTransport()')],
+  // Each service registers before it starts its transport, because the
+  // consumer groups are built from the registered handlers.
+  ['§7', 'each service registers its subscribers before starting its transport',
+    () => read('server/src/server.js').indexOf('aiWorker.start()')
+          < read('server/src/server.js').indexOf('eventBus.startTransport()')
+       && read(`${NOT}/server.js`).indexOf('registerConsumers()')
+          < read(`${NOT}/server.js`).indexOf('startConsumers()')],
+  ['§7', 'the producer creates every event topic, not just the ones it consumes',
+    // Derived from handlers until notifications moved out: that service
+    // subscribes to two topics nothing here listens to, so deriving would
+    // leave them uncreated and lose the cold-start race.
+    () => has(`${EV}/eventBus.js`, 'ensureTopics(Object.values(EVENTS))')],
   ['§7', 'produceAndWait throws, so the outbox worker can retry',
     () => has(`${EV}/kafka.js`, 'export async function produceAndWait')
        && !has(`${EV}/kafka.js`, 'export function produce(')],
@@ -303,13 +316,23 @@ const claims = [
     () => ["router.get('/'", "router.post('/read-all'", "router.post('/:id/read'"]
       .every((r) => has(`${NOT}/routes.js`, r))],
   ['§11', 'there are exactly five named subscribers',
-    () => countOf(`${NOT}/consumers.js`, 'eventBus.subscribe') === 5],
-  ['§11', 'notifications publishes nothing',
-    () => lacks(`${NOT}/consumers.js`, 'eventBus.publish')],
+    () => countOf(`${NOT}/consumers.js`, '  on(') === 5],
+  ['§11', 'the notifications service publishes nothing',
+    // It is a pure consumer: no producer, no outbox, nothing to commit an
+    // event with. Its consumer.js has no produce path at all.
+    () => lacks(`${NOT}/consumer.js`, '.producer(')
+       && lacks(`${NOT}/consumer.js`, 'produceAndWait')
+       && lacks(`${NOT}/consumers.js`, 'publish(')],
+  ['§11', 'its handlers read nothing but their event',
+    // The property the extraction rests on. There are no students, jobs or
+    // companies in its database, so a handler that reached for one would be a
+    // runtime error - this keeps it from being reintroduced.
+    () => lacks(`${NOT}/consumers.js`, 'findById')
+       && lacks(`${NOT}/consumers.js`, 'findOne')],
   ['§11', 'the enum holds exactly the four current types',
     () => ["JOB_APPROVED: 'job.approved'", "APPLICATION_STATUS: 'application.status'",
            "RESUME_PROCESSED: 'resume.processed'", "INTERVIEW_SCHEDULED: 'interview.scheduled'"]
-      .every((t) => has('server/src/lib/constants.js', t))],
+      .every((t) => has(`${NOT}/constants.js`, t))],
   ['§11', 'both Notification indexes exist',
     () => has(`${NOT}/model.js`, 'index({ userId: 1, createdAt: -1 })')
        && has(`${NOT}/model.js`, 'index({ userId: 1, readAt: 1 })')],
@@ -319,7 +342,9 @@ const claims = [
     () => has(`${KIT}/events.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
        && has(`${KIT}/events.js`, '10s, 20s, 40s, 80s, 160s')],
   ['§11', 'stranded deliveries are requeued at boot',
-    () => has(`${EV}/retryWorker.js`, 'requeued stranded deliveries')],
+    // The worker is in service-kit: both services keep their own retry queue
+    // in their own database and run the same logic over it.
+    () => has(`${KIT}/retryWorker.js`, 'requeued stranded deliveries')],
   ['§11', 'sockets join one room per user and carry three events',
     // The names and the room format are in service-kit since notifications
     // became its own service: a different process emits two of them, through

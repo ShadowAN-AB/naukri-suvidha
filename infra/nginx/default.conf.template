@@ -164,6 +164,63 @@ server {
         proxy_read_timeout    60s;
     }
 
+    # The inbox, to the notifications service, prefix stripped.
+    #
+    # auth_request *is* applied here, unlike /api/auth/: these routes are a
+    # student's or recruiter's own data, so they are authenticated exactly as
+    # /api/ is. The only difference is which upstream answers - which is the
+    # whole job of a gateway, and the client cannot tell.
+    location /api/notifications/ {
+        auth_request /_authn;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+
+        # `set` first - see /_authn for why the order matters.
+        set $notif_upstream http://notifications:5003;
+        rewrite ^/api/notifications/?(.*)$ /$1 break;
+        proxy_pass $notif_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID      $request_id;
+
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+        proxy_set_header X-Gateway-Key     "${AUTH_GATEWAY_SECRET}";
+
+        add_header X-Upstream-Addr $upstream_addr always;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    60s;
+    }
+
+    # The client posts to /api/notifications/read-all and /api/notifications
+    # with no trailing slash, so the bare prefix needs its own exact match or
+    # it falls through to /api/ and reaches the API, which no longer has it.
+    location = /api/notifications {
+        auth_request /_authn;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+
+        set $notif_root_upstream http://notifications:5003;
+        rewrite ^.*$ / break;
+        proxy_pass $notif_root_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Request-ID      $request_id;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+        proxy_set_header X-Gateway-Key     "${AUTH_GATEWAY_SECRET}";
+    }
+
     # The two health endpoints are deliberately open - whether the portal and
     # the model are working is operational information and reveals nothing
     # about any person. Exact matches, so they are carved out of /api/ below

@@ -48,3 +48,4 @@ export {
   backoffFrom,
   eventDeliverySchema,
 } from './events.js';
+export { createEventRetryWorker } from './retryWorker.js';
