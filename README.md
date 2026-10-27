@@ -28,12 +28,18 @@ status pipeline that the student can watch in real time.
 
 ## Architecture in one paragraph
 
-One React SPA, **two Express services behind an API gateway**, and MongoDB. Nine
+One React SPA, **three Express services behind an API gateway**, and MongoDB. Eight
 modules live inside the API process with their own routes, collections and domain
-events; **authentication is a separate service** with its own image, its own
-lifecycle and its own database. The service boundaries from the design are real, and
-one of them is now a network boundary rather than a module boundary — which is what
-makes the cost of the rest of them measurable rather than theoretical.
+events; **authentication and notifications are separate services**, each with its own
+image, its own lifecycle and its own database. The service boundaries from the design
+are real, and two of them are now network boundaries rather than module boundaries —
+which is what makes the cost of the rest of them measurable rather than theoretical.
+
+The two were chosen to demonstrate *different* things. Auth is request-driven, so its
+boundary is synchronous HTTP with a compensation where a write spans both services.
+Notifications is event-driven: it has no caller at all, consumes five domain events
+from Kafka, and pushes to sockets it does not hold through the Redis adapter. Together
+they cover both halves of what a service boundary can be.
 
 The edge is the only way in. It serves the built SPA, routes `/api/auth` to the auth
 service and the rest of `/api` to the API, and **authenticates every API request on
@@ -49,13 +55,18 @@ request open.
 ```
                         ┌─── edge (nginx) ─ static host · router · load balancer · gateway
 React 19 SPA ─HTTPS/wss─┤
-                        │   /api/auth/* ──▶  auth service    ──▶  naukri_suvidha_auth
-                        │   /api/*      ──▶  API ×N          ──▶  naukri_suvidha
-                        │   /socket.io  ──▶  API                  ──▶  object store
-                        └                                         ──▶  LLM provider
+                        │   /api/auth/*          ──▶ auth     ──▶ …_auth
+                        │   /api/notifications/* ──▶ notif    ──▶ …_notifications
+                        │   /api/*               ──▶ API ×N   ──▶ naukri_suvidha
+                        │   /socket.io           ──▶ API      ──▶ object store
+                        └                                     ──▶ LLM provider
 
 every /api/* request:   edge ──auth_request──▶ auth /internal/introspect
-                             ──X-Auth-User-{Id,Role}──▶ API
+                             ──X-Auth-User-{Id,Role}──▶ the upstream
+
+a notification:         API ──commit+outbox──▶ Kafka ──▶ notif ──▶ its own db
+                        notif ──▶ Redis adapter ──▶ whichever API pod
+                                                     holds that socket
 ```
 
 Full design, data model, API surface and phase plan: **[project plan][plan]**.
@@ -72,6 +83,7 @@ The written report: **[project report][report]**.
 | Backend | Node 22, Express 5, Mongoose 8 |
 | Database | MongoDB Atlas |
 | Auth | A separate service: JWT access tokens + httpOnly refresh cookie, bcrypt |
+| Notifications | A separate service: five Kafka consumer groups, pushes via the Redis adapter |
 | Gateway | nginx — routing, load balancing and `auth_request` authentication |
 | Infrastructure | Docker Compose and Kubernetes (kind), Redis, Kafka — all running, not described |
 | Realtime | Socket.IO |
@@ -108,6 +120,8 @@ naukri-suvidha/
   services/
     auth/           the extracted auth service: its own package, image,
                     Dockerfile, test suite and database
+    notifications/  the second extraction, same shape - and a pure consumer,
+                    so a broker it can reach is not optional for it
   service-kit/src/    plumbing BOTH services must agree on - the token
                     functions, the one error shape, the dotenv rules, the
                     Redis connection. Only things that would be a *bug* to
@@ -129,10 +143,11 @@ naukri-suvidha/
 
 ```bash
 npm run lint       # eslint across every workspace
-npm test           # 157 tests over two suites, against a real mongod
-npm run test:api   # the API's 129 alone
+npm test           # 176 tests over three suites, against a real mongod
+npm run test:api   # the API's 135 alone
 npm run test:auth  # the auth service's 28 alone
-npm run docs:check # 72 claims the design document makes about this repo
+npm run test:notifications   # the notifications service's 13 alone
+npm run docs:check # 74 claims the design document makes about this repo
 npm run build --workspace=client
 ```
 
@@ -164,10 +179,20 @@ the model switched off.
 
 ```bash
 npm install
-cp server/.env.example      server/.env        # MONGODB_URI and the secrets
-cp services/auth/.env.example services/auth/.env
-npm run seed -- --fresh     # 3 admins, 6 companies, 40 students, 12 jobs
-npm run dev                 # client :5173, API :5001, auth :5002
+cp server/.env.example               server/.env     # MONGODB_URI, secrets
+cp services/auth/.env.example          services/auth/.env
+cp services/notifications/.env.example services/notifications/.env
+npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
+npm run dev               # client :5173, API :5001, auth :5002, notif :5003
+```
+
+**Notifications need a broker, and that is not optional the way Redis and Kafka are
+for the API.** The notifications service is a pure consumer: every notification it
+creates begins with a Kafka message, so with no broker it serves its inbox and
+creates nothing. Start the two it needs before expecting one to appear:
+
+```bash
+docker compose up -d kafka redis
 ```
 
 Two env files, because there are two services. **The JWT secrets must be byte-identical

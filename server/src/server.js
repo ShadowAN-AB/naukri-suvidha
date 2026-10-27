@@ -10,7 +10,6 @@ import { closeRedis } from './infra/redis/index.js';
 import { eventBus } from './infra/events/eventBus.js';
 import { closeKafka } from './infra/events/kafka.js';
 import { initRealtime, closeRealtime } from './modules/realtime/index.js';
-import { registerNotificationConsumers } from './modules/notifications/consumers.js';
 
 async function main() {
   await connectDb();
@@ -20,9 +19,14 @@ async function main() {
   // before anything can publish.
   await detectTransactionSupport();
 
-  // Subscribes to the domain events and picks up anything the last process
-  // left unfinished. Started before listening so no event is missed.
-  registerNotificationConsumers();
+  /*
+   * Subscribes to the domain events and picks up anything the last process
+   * left unfinished. Started before listening so no event is missed.
+   *
+   * The notification consumers are not here any more - they are the
+   * notifications service's, which joins its own five consumer groups. This
+   * process keeps the AI worker's three, and produces for both.
+   */
   await aiWorker.start();
   // Every subscriber is registered by now, which is what the consumers are
   // built from, so the transport can only start here.

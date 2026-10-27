@@ -41,3 +41,20 @@ export const IDENTITY_HEADERS = Object.freeze({
   EMAIL: 'x-auth-user-email',
   PROOF: 'x-gateway-key',
 });
+
+/**
+ * The three events the client listens for, all scoped to one user's room.
+ *
+ * A contract in two directions now. The client matches these strings, and
+ * since notifications became its own service it is a *different process* that
+ * emits two of them - through the Redis adapter, into rooms the API's socket
+ * gateway holds. A rename in one place is a push that silently never arrives.
+ */
+export const SOCKET_EVENTS = Object.freeze({
+  NOTIFICATION_NEW: 'notification:new',
+  APPLICATION_STATUS: 'application:status',
+  RESUME_PROCESSED: 'resume:processed',
+});
+
+/** One Socket.IO room per user. The emitter and the gateway must agree. */
+export const roomForUser = (userId) => `user:${userId}`;

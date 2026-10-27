@@ -15,19 +15,20 @@ and should not be re-litigated without a reason.
 ## Commands
 
 ```bash
-npm run dev            # client :5173, API :5001, auth :5002 (mongod + ollama)
-npm test               # 157 tests over two suites, needs a local mongod
-                       # (= test:api 129 + test:auth 28; a standalone mongod
-                       #  exercises the no-transaction path, CI's replica set
-                       #  exercises the outbox)
+npm run dev            # client :5173, API :5001, auth :5002, notif :5003
+npm test               # 176 tests over three suites, needs a local mongod
+                       # (= api 135 + auth 28 + notifications 13; a standalone
+                       #  mongod exercises the no-transaction path, CI's
+                       #  replica set exercises the outbox)
 npm run test:api          # the API's suite alone
 npm run test:auth         # the auth service's alone
+npm run test:notifications  # the notifications service's alone
 npm run lint           # eslint, must be clean
 npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
                           # writes BOTH databases - see AUTH_MONGODB_URI
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
-npm run docs:check        # 72 claims the design doc makes about this repo
+npm run docs:check        # 74 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -52,14 +53,15 @@ own `/health` on :5002, which is in-cluster only in both container stacks.
 
 ## The decisions that matter
 
-**A modular monolith with one service extracted, not ten microservices.** The
+**A modular monolith with two services extracted, not ten microservices.** The
 original design had ten services, Kafka, Redis and Kubernetes. What exists is
-nine *modules* in one Express process plus **auth as a real separate service**,
-keeping every service boundary and domain event. The reason the other nine stay
+eight *modules* in one Express process plus **auth and notifications as real
+separate services**, each with its own image, lifecycle and database, keeping
+every service boundary and domain event. The reason the other eight stay
 together is operational — one person cannot run ten deployments alongside
-coursework. The seam is real, and it has now been proved by using it: modules
-never import each other's services, they publish events, and auth came out
-without the other nine changing shape.
+coursework. The seam is real, and it has been proved twice by using it: modules
+never import each other's services, they publish events, and both extractions
+came out without the remaining modules changing shape.
 
 **If asked "why not microservices", the answer is no longer hypothetical.** One
 service is out, the cost of the boundary is measured rather than guessed — an
@@ -71,9 +73,35 @@ evidence, not a promise.
 
 **Auth was the right one to extract first**, and not because it was easiest.
 It gives the gateway a real job, and it exercises the one inter-service style
-nothing else here does: synchronous RPC, with its failure mode. Kafka already
-demonstrates the asynchronous style, so extracting `ai` — the other candidate —
-would mostly have re-demonstrated that.
+nothing else here did: synchronous RPC, with its failure mode.
+
+**Notifications was the right second**, chosen on measured coupling rather
+than a guess — and the measurement contradicted this file's earlier guess that
+`ai` was next. `notifications` is the only module **no other module reads**,
+and it already consumed five domain events rather than being called. `ai` reads
+four other modules' collections and is read by two.
+
+| Module | reads others | read by |
+| --- | --- | --- |
+| `notifications` | 3 | **nobody** |
+| `resumes` | 3 | `ai` |
+| `interviews` | 4 | `admin` |
+| `ai` | 4 | `applications`, `jobs` |
+
+The two extractions demonstrate **different** inter-service styles, which is
+why doing both was worth it: auth is request-driven and synchronous,
+notifications is event-driven and asynchronous. Together they cover both halves
+of what a service boundary can be.
+
+**And the second one made the broker load-bearing.** auth needs mongo and a
+caller; without the caller it is idle. notifications has no caller — every
+notification begins with a Kafka message — so where the API degrades to an
+in-process bus without a broker, this service has no in-process publisher to
+listen to and would serve an inbox that never fills. Its `/health` says
+`events: no broker configured` and it warns at boot rather than looking fine.
+**`npm run dev` therefore needs `docker compose up -d kafka redis` before a
+notification will appear.** That is a real cost of extracting an event-driven
+service, and it is the honest version of the claim.
 
 **The model never runs inside a request.** Résumé extraction and fit scoring
 write a row to `aiTasks`; a `p-queue` worker at concurrency 2 handles them. The
@@ -143,12 +171,49 @@ transactional outbox, which needs transactions, which need a replica set —
 and development runs on a standalone mongod. Say that plainly rather than
 claiming §2.2 is closed.
 
-**The auth service owns its data in its own database, not its own
-collections.** `users` and `refreshTokens` live in `naukri_suvidha_auth`, so
-the API has no connection that could read them even by mistake — ownership
-enforced rather than remembered. A shared database would have been far less
-work and is the textbook way to end up with two services that cannot deploy
-separately.
+**Each service owns its data in its own database, not its own collections.**
+`users` and `refreshTokens` live in `naukri_suvidha_auth` and `notifications`
+in `naukri_suvidha_notifications`, so the API has no connection that could read
+either even by mistake — ownership enforced rather than remembered. A shared
+database would have been far less work and is the textbook way to end up with
+services that cannot deploy separately.
+
+**Database-per-service means one database per *deployable*, and that is where
+it stops.** There are three deployables and three databases. Giving each of the
+remaining eight *modules* its own would be the paperwork of the pattern without
+its benefit: they share a process, a deployment and a failure domain, so a
+database boundary buys nothing — and it would cost 28 cross-module model
+imports, seven `populate` call sites and the analytics `$lookup`, which cannot
+cross databases at all. Measured before deciding, not assumed. If a third
+database is wanted, extract a third service.
+
+**When a join crosses a boundary, denormalise.** This is not a workaround, it
+is the pattern. `auditLogs.actorId` was `ref: 'User'` with a `populate` to show
+who acted; once `users` moved, the admin screen answered 500 with
+`MissingSchemaError`, which names mongoose rather than the boundary. The row
+carries `actorEmail` and `actorRole` now, written by whoever acted — and for an
+audit log that is the *better* design, because it records the email the actor
+had at the time rather than whatever a renamed account says today. **An `id`
+that crosses a service boundary carries no `ref`**, in any model; a `ref`
+naming a model the process does not register is a loaded gun for the next
+person who reaches for populate.
+
+**An event carries what its consumers need.** The notification handlers used to
+look up the student, the company and the job to work out who to tell — possible
+only while they shared a process and a database with those collections. The
+publishers resolve the audience now, inside the services that own it, and the
+payload carries it (`recruiterUserId`, `studentUserId`, `jobTitle`,
+`studentName`). The reads did not disappear, they **moved to the service that
+owns the collection**. An event that cannot be acted on without reading the
+publisher's data is not an event, it is a trigger to go and ask — and a
+consumer with its own database cannot ask.
+
+**A service with no sockets can still push to one.** The notifications service
+holds no Socket.IO server; the client connects to `/socket.io` on the API. It
+publishes through the same Redis adapter channel, so whichever API replica
+holds that connection delivers the emit. The adapter was added in step 2 to
+stop a second API *replica* breaking realtime; it now carries an emit across a
+*service* boundary, which is the same problem one layer out.
 
 Exactly **three crossings** exist, and the list is the whole price of the
 boundary. Adding a fourth needs the same test the first three passed: a
@@ -249,6 +314,12 @@ may read a résumé — the corpus is narrowed in the DB filter *before* ranking
 | **A rebuilt image under an unchanged tag does not roll** | `naukri-suvidha/api:dev` is mutable, so rebuilding changes what it points at without changing the pod template. `kubectl apply` says `unchanged`, `kind load` says it loaded, and the pods keep serving the previous build — the fix is applied everywhere except where it runs. `up.sh` substitutes the built image's id into a pod-template annotation, which puts the content back inside the thing apply compares. A rebuild that changed nothing is then still correctly a no-op. |
 | **`kind load docker-image` and multi-arch public images** | It imports `--all-platforms`, but `docker pull busybox:1.37` on an arm64 Mac leaves a manifest list whose other platforms' layers are absent, so the import dies with `content digest … not found` — and `set -e` then aborts the rest of the script. Only side-load the two images that have no registry behind them; let the nodes pull anything public themselves. |
 | **A listening Kafka port is not a Kafka that has your topics** | `nc -z kafka 9092` succeeds the moment the broker binds, which on a cold cluster is well before any topic exists. A consumer subscribing then gets `KafkaJSProtocolError: This server does not host this topic-partition` from its metadata request, `startTransport` throws, and `main()` exits 1 — one restart, only ever on a genuinely cold broker, which is why compose never showed it. The irony is that the failing metadata request is itself what triggers auto-creation, so the retry always worked. kafkajs marks the error `retriable: true`; the fix is to not be in the race — `ensureTopics` creates every registered event's topic with `waitForLeaders: true` before any consumer subscribes. Topic names come from the handlers, so there is no second list of events to keep in step. |
+| **A `populate` cannot cross a service boundary, and mongoose blames itself** | `auditLogs.actorId` was `ref: 'User'` with a `.populate()`. Once `users` moved to the auth service's database the admin audit screen answered **500** with `MissingSchemaError: Schema hasn't been registered for model "User"` — which names mongoose, not the boundary. The route had no test, so it shipped. Denormalise instead (`actorEmail`, `actorRole` on the row), and **give an id that crosses a boundary no `ref` at all**: five other models had an inert `ref: 'User'`, each a 500 waiting for whoever reached for populate next. |
+| **`ensureTopics` built from *this* process's handlers is not enough** | It derived the topic list from the registered subscribers, which was right while one process held them all. The notifications service subscribes to `job.approved` and `interview.scheduled`, which nothing in the API listens to — so those topics stayed uncreated until the first produce. The API is the only producer, so it creates **every** event's topic now, from `EVENTS`. |
+| **`createTopics` is not the idempotent no-op it looks like** | The deepest version of the topic race, and it took three wrong fixes. (1) *Subscribe and hope* — `nc -z kafka 9092` passes before any topic exists, so the first consumer's metadata request gets `This server does not host this topic-partition` and `subscribe` throws out of boot. (2) *Let the other service create them* — written as a confident comment, wrong within the hour: Kubernetes starts pods in parallel, so **both notifications replicas restarted once** on a cold cluster. (3) *Both services call `createTopics({ waitForLeaders: true })`* — the subtle one. A topic that already exists comes back as a **per-topic error**, kafkajs logs `Topic creation errors`, the call **resolves anyway**, and it then does *not* wait for leaders on the topics it did not create. So two services racing both believe the topics are ready and the loser subscribes to a partition with no leader elected — **the API restarted once this way**. The fix separates creation from readiness: create, ignore who won, then poll `fetchTopicMetadata` until every partition reports a leader ≥ 0. That is true whoever created what, which is the only property that survives parallel starts. In `service-kit/src/kafkaTopics.js`, with the history, because two copies of this were both wrong. |
+| **A pinned count is only as good as its glob** | `docs:check` counted test files across `server/test/` and `services/auth/test/`. A third service's suite appeared and the count stayed at thirteen and **passed**, while there were fourteen — the exact rot the check exists to catch, inside the check. The glob is `services/*/test/*.test.js` now. |
+| **Extracting an event-driven service makes the broker required** | Not optional, the way it is for the API. A pure consumer has no in-process publisher to fall back to, so with no `KAFKA_BROKERS` it serves its inbox and creates nothing, forever, while looking perfectly healthy. `npm run dev` needs `docker compose up -d kafka redis` before a notification appears. The service's `/health` reports `events` and `push` separately so a degraded one is visible rather than inferred from an empty list. |
+| **Readiness must not depend on the broker** | Tempting for a consumer, and wrong: the inbox still serves from the database, which is the half that matters. A pod removed from the Service because Kafka is away would stop people *reading* notifications in order to signal that new ones are not arriving. Report it in `/health`; keep readiness about mongo. |
 | **`proxy_pass` to a *variable* does no URI rewriting** | The usual way to strip a prefix is a trailing slash — `proxy_pass http://auth:5002/`. That works only for a *literal* upstream. The compose edge needs a variable so Docker's DNS is re-resolved, and with a variable nginx silently ignores the trailing slash and passes the URI through unchanged: `/api/auth/login` arrived at the auth service as `/api/auth/login` and 404'd, which reads as a broken service rather than a proxy that stopped rewriting. Use an explicit `rewrite`. The Kubernetes edge has a stable ClusterIP, so its literal `proxy_pass` strips the prefix correctly and needs no rewrite — the two configs differ here for the same reason they differ about `resolver`. |
 | **`rewrite ... break` stops the `set` after it from running** | `break` ends the rewrite module's processing for that location, and `set` is a rewrite-module directive — so a `set` written *after* the rewrite never executes, `proxy_pass` gets an empty variable, and nginx logs "using uninitialized variable" and answers 500. The `set` goes first. |
 | **`auth_request` always issues a GET** | Whatever the original request's method, and the body is dropped. A POST-only introspection endpoint therefore answered 404 to the gateway, which reported `auth request unexpected status: 404` and turned *every* API request into a 500 — the error names the status, not the method, so it looks like a routing problem. Introspect takes both verbs now, and GET is the better fit for something that reads a header and changes nothing. `auth_request` also keeps only the subrequest's **response headers** (via `auth_request_set`) and discards its body, which is why introspection returns the identity in headers as well as JSON. |
@@ -301,10 +372,26 @@ next begins, and this list is the record of where it got to.**
    that matter" for the three crossings and the identity modes, and
    "Running it as containers" / "Running it on Kubernetes" for how to show it.
 
+5b. ~~**Extract a second service**~~ — **done**: `services/notifications/`, its
+   own image, process and database, chosen on measured coupling (it is the only
+   module nothing else reads). It demonstrates the *other* kind of boundary —
+   event-driven and asynchronous, where auth is request-driven and synchronous
+   — and it is what made the broker load-bearing. See "The decisions that
+   matter".
+
 **All nine infrastructure concepts now run.** Load balancing, Redis, Kafka,
 Kubernetes, an API gateway, microservices, Docker, a CDN (the edge, standing in
 for one) and horizontal scaling. Nothing on this list is designed-but-absent
 any more.
+
+**Do not extract a third.** The point of two was to measure the cost of a
+boundary and to cover both inter-service styles; both are done. A third would
+be the same lesson at the same price, and the remaining candidates are worse
+seams — `ai` reads four other modules' collections and is read by two. If a
+third database is ever wanted, that is a reason to extract a service, not the
+other way round: database-per-*module* inside one process is the paperwork of
+the pattern without its benefit, and it would cost 28 cross-module imports,
+seven `populate` sites and the analytics `$lookup`.
 
 Then the original list:
 
@@ -332,15 +419,16 @@ Then the original list:
 
 ## Running it as containers
 
-`npm run docker:up` builds three images and starts five containers on
-**http://localhost:8080**. `npm run docker:seed` fills **both** containerised
-databases; the host's own mongod and dev server are untouched.
+`npm run docker:up` builds four images and starts six containers on
+**http://localhost:8080**. `npm run docker:seed` fills **all three**
+containerised databases; the host's own mongod and dev server are untouched.
 
 | Container | What it is | Reachable at |
 | --- | --- | --- |
 | `edge` | nginx: serves the client, routes `/api`, balances it, **and authenticates every request** | `localhost:8080` |
-| `api` ×2 | the Express server, nine modules | **nowhere from the host, on purpose** |
+| `api` ×2 | the Express server, eight modules | **nowhere from the host, on purpose** |
 | `auth` | the extracted auth service, own image and own database | **nowhere from the host, on purpose** |
+| `notifications` | the extracted notifications service, own image and own database | **nowhere from the host, on purpose** |
 | `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
 | `redis` | cache, rate-limit counters, socket pub/sub | `localhost:6380` (6379 left for the host's own) |
 | `kafka` | the domain event log, KRaft mode, no ZooKeeper | `localhost:9094` from the host, `kafka:9092` inside |
@@ -363,9 +451,33 @@ done
 
 **What this demonstrates today:** containerisation, horizontal scaling, load
 balancing, an edge that is simultaneously static host, reverse proxy, cache
-**and API gateway**, a **second service with its own database behind it**,
-Redis doing the three jobs a second replica makes necessary, and Kafka carrying
-the domain events between them.
+**and API gateway**, **two extracted services each with its own database**,
+Redis doing the three jobs a second replica makes necessary plus carrying
+socket emits across a service boundary, and Kafka as the only thing one of
+those services hears at all.
+
+The notifications service is the one worth demonstrating, because it closes a
+loop that spans every piece of the infrastructure at once:
+
+```bash
+# Approve a pending job as the admin. The API commits the job and its event in
+# one transaction (the outbox), produces to Kafka, and is done.
+curl -s -X POST http://localhost:8080/api/jobs/<id>/approve -H "Authorization: Bearer $TOKEN"
+
+# A different process, with a different database, wrote the notification.
+docker compose exec mongo mongosh --quiet naukri_suvidha_notifications \
+  --eval 'db.notifications.find({}, {type:1, title:1, body:1}).toArray()'
+
+# And it pushed to a socket it does not hold, through the API's adapter.
+docker compose exec redis redis-cli PSUBSCRIBE 'socket.io#/#*'
+```
+
+Measured on this stack: the row appears in `naukri_suvidha_notifications` with
+the real job title; the API's database holds **11 collections and no
+`notifications`**; the inbox through the gateway returns it with `unread: 1`;
+marking it read returns `200` and another user gets `404`, not `403`; and the
+`PSUBSCRIBE` shows `notification:new` on `socket.io#/#user:<id>#` — published
+by a process with no sockets, addressed to that user's room.
 
 The gateway, proved rather than asserted — each of these was run:
 
@@ -443,7 +555,7 @@ built to degrade without it anyway.
 ## Running it on Kubernetes
 
 `npm run k8s:up` creates a kind cluster, installs metrics-server, builds and
-side-loads the three images and applies `infra/k8s/`. The portal is on
+side-loads the four images and applies `infra/k8s/`. The portal is on
 **http://localhost:8081** — 8081 and not 8080, so the compose stack can run at
 the same time and the two can be compared. `npm run k8s:seed` fills the
 clustered database.
@@ -457,6 +569,7 @@ the edge.
 | `edge` | Deployment + **NodePort** 30080 → host 8081; the API gateway | `localhost:8081` |
 | `api` | Deployment, 2–6 replicas, **owned by the HPA** | `api:5001`, in-cluster only |
 | `auth` | Deployment, 2 replicas, **fixed on purpose** — login is bcrypt-bound, not throughput-bound | `auth:5002`, in-cluster only |
+| `notifications` | Deployment, 2 replicas, **fixed by construction** — one partition per topic, so a third replica is assigned nothing | `notifications:5003`, in-cluster only |
 | `mongo` | StatefulSet + headless Service + PVC | `mongo:27017`, in-cluster only |
 | `redis` | Deployment + Service, no volume | `redis:6379`, in-cluster only |
 | `kafka` | StatefulSet + headless Service, KRaft | `kafka:9092`, in-cluster only |
@@ -571,12 +684,22 @@ A port gate is necessary and not sufficient, and the cold-start path is the
 only place that shows it. `nc -z kafka 9092` passes as soon as the broker
 binds, but the topics do not exist yet, so the first consumer to subscribe
 used to take the process down — see the Kafka topics row in the gotchas.
-`ensureTopics` now runs before any consumer starts. **A cold
+`ensureTopics` now runs before any consumer starts, in **every** service, and
+waits for leaders rather than trusting `waitForLeaders` — see the gotcha, which
+cost two more restarts before it was right. **A cold
 `npm run k8s:down && npm run k8s:up` reaches a serving portal with 0
 restarts**, which is the only version of this claim worth making — re-checked
-with the auth service added: all eight pods ready, **0 restarts on every one**,
-balancing 10/10 over twenty back-to-back requests, and a login through the
-gateway serving on the first attempt.
+with both extracted services in place: **all ten pods ready, 0 restarts on
+every one**, all five of the notifications service's consumer groups joined,
+both its pods in the Service's endpoints, and the full loop working — approve a
+job through the gateway, and the row appears in
+`naukri_suvidha_notifications` with the real job title while the inbox returns
+it with `unread: 1`.
+
+Getting there took three attempts, and the two intermediate ones each cost
+restarts on a cold cluster: first both notifications pods, then an API pod.
+Both were the same race seen from different sides, and the third fix is the
+one that holds whoever wins.
 
 On that cold run the `topologySpreadConstraint` **did** hold — api and auth
 each landed one pod per worker — where on a re-roll earlier the same day all
@@ -631,8 +754,10 @@ kubectl -n naukri-suvidha get endpointslices -l kubernetes.io/service-name=auth
 **What this demonstrates that step 1 could not:** per-connection load
 balancing, readiness as a routing decision, autoscaling from a metric rather
 than a typed number, rolling updates with `maxUnavailable: 0`, declarative
-config and secrets separated from the image, and a StatefulSet binding a
-database to its own volume.
+config and secrets separated from the image, a StatefulSet binding a database
+to its own volume, and **three services configured independently** — three
+ConfigMaps, one shared Secret, because the JWT secrets are the one value that
+must be byte-identical across all of them.
 
 ### What step 5 added here
 
@@ -671,6 +796,35 @@ against the API's 40×3s, and there are two dependency gates rather than three.
 No broker to join, so it is serving while the API is still reclaiming stranded
 `aiTasks` and joining eight consumer groups. That difference is the clearest
 single thing the extraction bought.
+
+### What the notifications service added here
+
+**Three gates, not two, and a longer grace period.** It needs the broker to do
+anything at all, so Kafka joins mongo and Redis in the initContainers. Its
+`terminationGracePeriodSeconds` is 45 against auth's 30: a SIGTERM can arrive
+mid-handler, and leaving the consumer group cleanly is what stops the surviving
+replica waiting out a session timeout before it picks up the partitions.
+
+**Two replicas, fixed by construction rather than by preference.** Each topic
+has one partition, so a third replica would join the consumer groups and be
+assigned nothing. Two is about surviving a node, not throughput — and unlike
+auth, its load is not request-shaped at all: it is however many events the
+system produces.
+
+**Readiness deliberately ignores the broker.** It would be tempting for a
+consumer to report 503 when Kafka is away, and it would be wrong: the inbox
+still serves from the database, which is the half that matters. A pod pulled
+from the Service because the broker is down would stop people *reading*
+notifications in order to signal that new ones are not arriving. `/health`
+reports `events` and `push` separately instead.
+
+**And it found the topic race a third time.** A comment in its consumer said it
+could safely skip `ensureTopics` because the API creates the topics before it
+produces. True and irrelevant: Kubernetes starts pods in parallel, so on a cold
+cluster this one subscribed first, got `This server does not host this
+topic-partition`, and **both replicas restarted once**. Every consumer
+pre-creates its own topics now; creating one that exists is a no-op, so nobody
+has to go first.
 
 **A rolling update of auth is a rolling update of everything**, because every
 API request runs an introspection subrequest against it — so `maxUnavailable:

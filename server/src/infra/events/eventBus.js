@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { EVENTS } from '@naukri-suvidha/service-kit';
+
 import { logger } from '../../config/logger.js';
 import { EventDelivery, OutboxEvent } from './model.js';
 import { backoffFrom } from './retry.js';
@@ -88,9 +90,24 @@ class EventBus {
     }
     await startProducer();
 
-    // Before any consumer subscribes - see ensureTopics for why a listening
-    // broker is not yet a broker with topics.
-    await ensureTopics([...new Set([...this.handlers.values()].map((h) => h.event))]);
+    /*
+     * Every event's topic, not just the ones this process subscribes to.
+     *
+     * This used to be derived from the registered handlers, which was right
+     * while one process held every subscriber. It stopped being right when
+     * notifications moved out: that service subscribes to `job.approved` and
+     * `interview.scheduled`, which nothing here listens to, so deriving from
+     * handlers would leave those two topics uncreated until the first produce
+     * - and a consumer that subscribes before then hits exactly the
+     * "server does not host this topic-partition" race ensureTopics exists to
+     * avoid.
+     *
+     * This process is the only producer, so it is the right one to create
+     * them all. The list is EVENTS in service-kit, which is also where the
+     * consumer gets the names from, so there is no second list to keep in
+     * step.
+     */
+    await ensureTopics(Object.values(EVENTS));
 
     /*
      * In parallel, and the difference is not cosmetic. Joining a consumer

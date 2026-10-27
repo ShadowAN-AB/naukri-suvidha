@@ -17,6 +17,7 @@ resources:
   - kafka.yaml
   - api.yaml
   - auth.yaml
+  - notifications.yaml
   - edge.yaml
   - hpa.yaml
 

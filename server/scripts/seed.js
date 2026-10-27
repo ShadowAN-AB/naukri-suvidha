@@ -55,6 +55,23 @@ const authConn = mongoose.createConnection(AUTH_MONGODB_URI, {
 });
 const User = authConn.model('User', userSchema);
 const RefreshToken = authConn.model('RefreshToken', refreshTokenSchema);
+
+/*
+ * A third connection, for wiping only.
+ *
+ * Nothing seeds notifications - they are produced by events - but --fresh has
+ * to clear them, for the same reason it clears everything rather than only
+ * what it generates: rows left pointing at students who no longer exist look
+ * like corruption the first time someone opens the bell menu after a reseed.
+ *
+ * Unset is tolerated here, unlike AUTH_MONGODB_URI. Seeding cannot proceed
+ * without the users, but it can proceed without clearing an inbox, so a
+ * missing value warns instead of exiting.
+ */
+const NOTIFICATIONS_MONGODB_URI = process.env.NOTIFICATIONS_MONGODB_URI;
+const notifConn = NOTIFICATIONS_MONGODB_URI
+  ? mongoose.createConnection(NOTIFICATIONS_MONGODB_URI, { serverSelectionTimeoutMS: 10_000 })
+  : null;
 import { JOB_STATUS, PLACEMENT_STATUS, ROLES } from '../src/lib/constants.js';
 
 /** Every seeded account shares this password. Development data only. */
@@ -132,6 +149,8 @@ async function main() {
   const fresh = process.argv.includes('--fresh');
   await connectDb();
   await authConn.asPromise();
+  if (notifConn) await notifConn.asPromise();
+  else console.warn('NOTIFICATIONS_MONGODB_URI is not set: the inbox will not be cleared.');
 
   // Make sure unique indexes exist before inserting, or duplicates slip in.
   await Promise.all(SEEDED_MODELS.map((M) => M.syncIndexes()));
@@ -143,12 +162,21 @@ async function main() {
       `Run "npm run seed -- --fresh" to wipe the seeded collections first.`,
     );
     await authConn.close();
+    if (notifConn) await notifConn.close();
     await disconnectDb();
     process.exit(1);
   }
   if (fresh) {
     await Promise.all(ALL_MODELS.map((M) => M.deleteMany({})));
-    console.log(`wiped all ${ALL_MODELS.length} collections`);
+    // By collection name rather than a model: nothing here defines the
+    // notification schema, and clearing does not need it.
+    const wipedInbox = notifConn
+      ? (await notifConn.db.collection('notifications').deleteMany({})).deletedCount
+      : 0;
+    console.log(
+      `wiped all ${ALL_MODELS.length} collections` +
+        (notifConn ? ` and ${wipedInbox} notifications` : ''),
+    );
   }
 
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, env.BCRYPT_ROUNDS);
@@ -248,6 +276,7 @@ async function main() {
   console.log(`  student    ${(await User.findById(students[0].userId)).email}\n`);
 
   await authConn.close();
+  if (notifConn) await notifConn.close();
   await disconnectDb();
   process.exit(0);
 }
@@ -256,6 +285,7 @@ main().catch(async (err) => {
   console.error('seed failed:', err.message);
   if (err.code === 11000) console.error('duplicate key:', JSON.stringify(err.keyValue));
   await authConn.close().catch(() => {});
+  await notifConn?.close().catch(() => {});
   await mongoose.connection.close().catch(() => {});
   process.exit(1);
 });

@@ -1,45 +1,15 @@
 import mongoose from 'mongoose';
-import {
-  EVENT_DELIVERY_STATUS,
-  EVENT_DELIVERY_STATUS_VALUES,
-  OUTBOX_STATUS,
-  OUTBOX_STATUS_VALUES,
-} from '../../lib/constants.js';
+import { eventDeliverySchema } from '@naukri-suvidha/service-kit';
+import { OUTBOX_STATUS, OUTBOX_STATUS_VALUES } from '../../lib/constants.js';
 
-/**
- * A handler that threw, kept so it can be tried again.
+/*
+ * The consume-side retry queue, registered on this service's connection from
+ * the schema in service-kit. The notifications service registers the same
+ * schema on its own, so each retries its own failures in its own database.
  *
- * Delivery itself stays in-process and synchronous — the fast path writes
- * nothing. A row appears only when a handler fails, which is the case that
- * used to be logged and forgotten: a student moved to `shortlisted` and never
- * told, with nothing anywhere to say the side effect had not happened.
- *
- * This is the *consume* side. The publish side is `OutboxEvent` below: the
- * two cover different failures and neither replaces the other. A row here
- * means a handler ran and threw; a row there means an event was committed and
- * has not reached the bus yet.
+ * The publish side is `OutboxEvent` below, and it stays here: nothing else
+ * publishes, so nothing else needs it.
  */
-const eventDeliverySchema = new mongoose.Schema(
-  {
-    event: { type: String, required: true },
-    /** Which subscriber failed. Names are how a retry finds it again. */
-    handler: { type: String, required: true },
-    payload: { type: mongoose.Schema.Types.Mixed },
-    attempts: { type: Number, default: 0 },
-    status: {
-      type: String,
-      enum: EVENT_DELIVERY_STATUS_VALUES,
-      default: EVENT_DELIVERY_STATUS.PENDING,
-    },
-    nextAttemptAt: { type: Date, default: Date.now },
-    lastError: { type: String },
-  },
-  { timestamps: true },
-);
-
-// The worker's only query: what is due.
-eventDeliverySchema.index({ status: 1, nextAttemptAt: 1 });
-
 export const EventDelivery = mongoose.model('EventDelivery', eventDeliverySchema);
 
 /**

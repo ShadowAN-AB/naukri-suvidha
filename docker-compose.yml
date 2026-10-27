@@ -5,7 +5,8 @@
 #   · load balancing    - nginx spreads /api over N API replicas
 #   · horizontal scaling- `--scale api=N`, no host ports on the API at all
 #   · an edge           - one nginx doing static hosting, proxying and caching
-#   · microservices     - auth is its own image, process and database
+#   · microservices     - auth and notifications are each their own image,
+#                         process and database
 #   · an API gateway    - the edge routes by prefix and authenticates every
 #                         /api request against the auth service before it
 #                         reaches the API
@@ -219,6 +220,57 @@ services:
       retries: 6
       start_period: 10s
 
+  # Notifications, as its own service - the second extraction.
+  #
+  # The contrast with `auth` above is the lesson of extracting an
+  # event-driven service rather than a request-driven one. auth needs mongo
+  # and nothing else; without a caller it is simply idle. This one has no
+  # caller at all - every notification it creates begins with a Kafka message -
+  # so **the broker is load-bearing here in a way it is not for the API**. The
+  # API degrades to an in-process bus without it; this service has no
+  # in-process publisher to listen to, and would serve an inbox that never
+  # fills. Its /health says so rather than leaving it to be inferred.
+  #
+  # Redis is how it pushes. It holds no sockets: the client connects to
+  # /socket.io on the API, and this service publishes through the same Redis
+  # adapter channel, so whichever API replica holds that connection delivers
+  # the emit. That adapter was added in step 2 to stop a second API replica
+  # breaking realtime; it now carries an emit across a service boundary, which
+  # is the same problem one layer out.
+  notifications:
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '5003'
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_notifications?replicaSet=rs0
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      IDENTITY_MODE: gateway
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
+      JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      BCRYPT_ROUNDS: '12'
+      CLIENT_ORIGIN: http://localhost:8080
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:5003/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
   edge:
     build:
       context: .
@@ -237,6 +289,8 @@ services:
       api:
         condition: service_healthy
       auth:
+        condition: service_healthy
+      notifications:
         condition: service_healthy
 
   # Not started by default. `npm run docker:seed` runs it once and exits.
@@ -260,6 +314,10 @@ services:
       # carries a userId, so the users have to exist and their ids have to
       # match. There is no ordering of two separate scripts that does that.
       AUTH_MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
+      # --fresh wipes this too. Leaving notifications behind would leave rows
+      # pointing at students who no longer exist, which looks like corruption
+      # the first time you open the bell menu after a reseed.
+      NOTIFICATIONS_MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_notifications?replicaSet=rs0
       JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
       JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
       BCRYPT_ROUNDS: '10'

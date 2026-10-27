@@ -36,6 +36,25 @@ async function audit(actor, action, entityId, ip, meta) {
   }
 }
 
+/**
+ * Who an interview event should reach, and the job's title for the message.
+ *
+ * Both are resolved here because this service owns applications, students and
+ * jobs; the notifications service owns none of them and has its own database,
+ * so an event that did not carry this would arrive unactionable. The same
+ * reasoning is written out once in jobs.approveJob.
+ */
+async function audienceFor(application) {
+  const [student, job] = await Promise.all([
+    Student.findById(application.studentId).select('userId').lean(),
+    Job.findById(application.jobId).select('title').lean(),
+  ]);
+  return {
+    studentUserId: student?.userId ? String(student.userId) : null,
+    jobTitle: job?.title ?? null,
+  };
+}
+
 /** The application, confirmed to belong to a job this recruiter owns. */
 async function applicationForRecruiter(user, applicationId) {
   const application = await Application.findById(applicationId).lean();
@@ -111,6 +130,8 @@ export async function schedule(user, input, ip) {
 
   await assertSlotIsFree(application.studentId, input.scheduledAt, input.durationMinutes);
 
+  const audience = await audienceFor(application);
+
   let interview;
   try {
     interview = await withTransaction(async (session) => {
@@ -136,6 +157,9 @@ export async function schedule(user, input, ip) {
           applicationId: String(application._id),
           scheduledAt: created.scheduledAt,
           mode: created.mode,
+          // Resolved before the transaction - see audienceFor below.
+          jobTitle: audience.jobTitle,
+          studentUserId: audience.studentUserId,
         },
         { session },
       );
@@ -175,6 +199,8 @@ export async function reschedule(user, id, input, ip) {
   interview.scheduledAt = input.scheduledAt;
   if (input.notes) interview.notes = input.notes;
 
+  const audience = await audienceFor(application);
+
   await withTransaction(async (session) => {
     await interview.save({ session });
     // The same event name as scheduling, on purpose: every consumer wants the
@@ -187,6 +213,8 @@ export async function reschedule(user, id, input, ip) {
         applicationId: String(interview.applicationId),
         scheduledAt: interview.scheduledAt,
         mode: interview.mode,
+        jobTitle: audience.jobTitle,
+        studentUserId: audience.studentUserId,
       },
       { session },
     );

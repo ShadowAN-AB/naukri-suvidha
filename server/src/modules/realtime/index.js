@@ -5,18 +5,20 @@ import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { verifyAccessToken } from '../../lib/tokens.js';
 import { introspectToken } from '../../infra/identity/authClient.js';
+import { roomForUser } from '@naukri-suvidha/service-kit';
 import { duplicateRedis, redisEnabled } from '../../infra/redis/index.js';
 
-/** The three events the client listens for, all scoped to one user's room. */
-export const SOCKET_EVENTS = Object.freeze({
-  NOTIFICATION_NEW: 'notification:new',
-  APPLICATION_STATUS: 'application:status',
-  RESUME_PROCESSED: 'resume:processed',
-});
+/*
+ * Re-exported, not redefined. The notifications service emits two of these
+ * from another process, through the Redis adapter into the rooms this gateway
+ * holds, so the names and the room format are a contract rather than a local
+ * convention.
+ */
+export { SOCKET_EVENTS } from '@naukri-suvidha/service-kit';
 
 let io = null;
 
-const roomFor = (userId) => `user:${userId}`;
+const roomFor = roomForUser;
 
 /**
  * Socket.IO rides on the same HTTP server as the API, so there is one process

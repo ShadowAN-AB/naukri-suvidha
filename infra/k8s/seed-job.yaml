@@ -52,6 +52,11 @@ spec:
             # ordering of two separate jobs that produces that.
             - name: AUTH_MONGODB_URI
               value: mongodb://mongo:27017/naukri_suvidha_auth?replicaSet=rs0
+            # --fresh clears the inbox too. Rows left pointing at students who
+            # no longer exist look like corruption the first time anyone opens
+            # the bell menu after a reseed.
+            - name: NOTIFICATIONS_MONGODB_URI
+              value: mongodb://mongo:27017/naukri_suvidha_notifications?replicaSet=rs0
             # Cheaper hashing for 40 seeded students. The API keeps 12; this
             # is a one-shot script and bcrypt at 12 x 49 accounts is most of
             # the job's runtime.

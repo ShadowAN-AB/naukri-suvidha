@@ -1,0 +1,158 @@
+# The notifications service: the second extraction, as its own Deployment.
+#
+# Read it next to auth.yaml. The auth service gates on mongo and Redis and
+# serves requests; this one gates on Kafka as well, because it is a pure
+# consumer and a broker it cannot reach means an inbox that never fills. That
+# difference is the whole character of an event-driven service.
+#
+# Not behind the HPA either, and for a different reason from auth's. Its load
+# is not request-shaped at all - it is however many events the system
+# produces, which is bounded by what the API does, not by who is looking at a
+# screen. Two replicas is about surviving a node, not about throughput; adding
+# more would only split the same five consumer groups' partitions, and each
+# topic has one partition, so a third replica would sit idle by construction.
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: notifications
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: notifications
+  ports:
+    - name: http
+      port: 5003
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: notifications
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  # Two, fixed. See the note above: one partition per topic means a third
+  # replica joins the group and is assigned nothing.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notifications
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # The inbox is on the request path through the edge, so it gets the same
+      # treatment as everything else. The consume side tolerates a gap - Kafka
+      # holds the offset - but a 502 on the bell menu is still a 502.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        naukri-suvidha/image-id: '__NOTIFICATIONS_IMAGE_ID__'
+      labels:
+        app.kubernetes.io/name: notifications
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      # Longer than auth's 30s. A SIGTERM here can arrive mid-handler, and
+      # leaving the group cleanly is what stops the surviving replica waiting
+      # out a session timeout before it picks up the partitions.
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifications
+      # Three gates, like the API and unlike auth: this service needs the
+      # broker to do anything at all. A port gate is necessary and not
+      # sufficient - `nc -z kafka 9092` passes before any topic exists - but
+      # the API creates every topic with waitForLeaders before it produces, and
+      # kafkajs retries a metadata miss cleanly, so this is the one consumer
+      # that can safely be in that race.
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z mongo 27017; do echo "waiting for mongo"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-redis
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z redis 6379; do echo "waiting for redis"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-kafka
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo "waiting for kafka"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: notifications
+          image: naukri-suvidha/notifications:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5003
+          envFrom:
+            - configMapRef:
+                name: notifications-config
+            - secretRef:
+                name: api-secrets
+          resources:
+            requests:
+              # Between auth's 100m and the API's 200m, and measured the same
+              # way: five consumer groups held open cost roughly five eighths
+              # of the API's eight, and there is no model, no uploads and no
+              # socket server on top of them.
+              cpu: 150m
+              memory: 160Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            # 200 while mongo is reachable. Deliberately *not* 503 when the
+            # broker is away: the inbox still serves from the database, which
+            # is the half that matters, and taking the pod out of the Service
+            # would break reading notifications to signal that new ones are
+            # not arriving. /health reports the broker separately.
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # TCP, not /health, for the reason the other two services give: a
+            # liveness failure kills the container, so pointing it at a
+            # dependency turns one mongo blip into a restart of every replica.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            # Longer than auth's: five consumer groups have to join first, and
+            # a group join is a rebalance round trip. They start in parallel,
+            # which is what keeps this seconds rather than tens of seconds.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              exec:
+                # Endpoint removal and SIGTERM race, same as everywhere.
+                command: ['/bin/sh', '-c', 'sleep 5']

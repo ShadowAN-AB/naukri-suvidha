@@ -102,3 +102,42 @@ data:
   # service-to-service call and has no business taking a route through the
   # public entry point - which would also mean its own auth_request.
   API_INTERNAL_URL: http://api:5001
+---
+# The notifications service's non-secret configuration.
+#
+# A third ConfigMap, for the reason there is a second: the three services are
+# configured independently, so changing one cannot roll the others.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notifications-config
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: notifications
+    app.kubernetes.io/part-of: naukri-suvidha
+data:
+  NODE_ENV: production
+  PORT: '5003'
+  LOG_LEVEL: info
+
+  # Its own database. The API cannot read the inbox, and this service cannot
+  # read applications, jobs or students - which is why the events it consumes
+  # carry their audience with them.
+  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_notifications?replicaSet=rs0
+
+  # Not optional here the way it is for the API. This service is a pure
+  # consumer: with no broker it serves the inbox and creates nothing, ever.
+  KAFKA_BROKERS: kafka:9092
+
+  # How it pushes. It holds no sockets - the client connects to /socket.io on
+  # the API - so it publishes through the same Redis adapter channel and
+  # whichever API pod holds that connection delivers the emit.
+  REDIS_URL: redis://redis:6379
+
+  # The edge has already authenticated every request that reaches the inbox.
+  IDENTITY_MODE: gateway
+
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 7d
+  BCRYPT_ROUNDS: '12'
+  CLIENT_ORIGIN: http://localhost:8081
