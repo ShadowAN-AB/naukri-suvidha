@@ -17,7 +17,8 @@
  *   npm run docs:check
  *
  * Sections covered: §6 Redis, §9 résumé/AI, §11 notifications,
- * §18 sequence diagrams, plus the three document-wide invariants.
+ * §15 observability, §18 sequence diagrams, plus the document-wide
+ * invariants.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -361,6 +362,60 @@ const claims = [
        && ["NOTIFICATION_NEW: 'notification:new'", "APPLICATION_STATUS: 'application:status'",
            "RESUME_PROCESSED: 'resume:processed'"]
          .every((e) => has(`${KIT}/constants.js`, e))],
+
+  // ---- §15 observability --------------------------------------------------
+  // Retargeted 29 Oct 2026. It was the last section describing a stack that is
+  // not installed - Prometheus, Grafana, Loki, OpenTelemetry, Tempo, Sentry,
+  // alerting - and it stayed wrong precisely because nothing here checked it.
+  // The absence claims matter more than the presence ones: a dependency added
+  // later makes the section's "what is not built" table a lie, and that is the
+  // kind of lie a reader with the repository open finds first.
+  ['§15', 'no metrics, tracing or error-tracking tooling is installed',
+    () => {
+      // package.json only - the lockfile carries @opentelemetry/api
+      // transitively via vitest and the Anthropic SDK, which the section says
+      // so a grep of the lockfile is not evidence either way.
+      const r = spawnSync('git', ['grep', '-l', '-E',
+        'prom-client|@sentry/|@opentelemetry/(sdk|auto|exporter)|jaeger-client|opossum',
+        '--', 'package.json', '*/package.json', 'services/*/package.json'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false; // git missing
+      return r.status === 1;                          // no matches: clean
+    }],
+  ['§15', 'no service exposes an application /metrics route',
+    () => {
+      const r = spawnSync('git', ['grep', '-l', "'/metrics'", '--',
+        'server/src', 'services'], { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false;
+      return r.status === 1;
+    }],
+  ['§15', 'one logger, and it removes credentials rather than masking them',
+    () => has(`${KIT}/logger.js`, "'req.headers.authorization'")
+       && has(`${KIT}/logger.js`, "'*.passwordHash'")
+       && has(`${KIT}/logger.js`, 'remove: true')],
+  ['§15', 'the request id is honoured from an incoming header, not only minted',
+    // This is what makes it cross a process boundary: the edge stamps it and
+    // every service downstream keeps it.
+    () => has(`${KIT}/requestId.js`, "req.get('x-request-id')")
+       && has('infra/nginx/default.conf.template', 'X-Request-ID')
+       && has('infra/k8s/edge-nginx.conf.template', 'X-Request-ID')],
+  ['§15', 'all four health endpoints exist',
+    () => has('server/src/app.js', "app.get('/api/health'")
+       && has(`${AI}/routes.js`, "router.get('/health'")
+       && has(`${AUTH}/app.js`, "app.get('/health'")
+       && has(`${NOT}/app.js`, "app.get('/health'")],
+  ['§15', 'readiness answers 503 while mongo is unreachable, in every service',
+    () => ['server/src/app.js', `${AUTH}/app.js`, `${NOT}/app.js`]
+      .every((f) => has(f, 'res.status(db ? 200 : 503)'))],
+  ['§15', 'the notifications health endpoint reports the broker and the push path',
+    // The one service that can be completely healthy and useless, so its
+    // health endpoint has to say more than "db up".
+    () => has(`${NOT}/app.js`, "'no broker configured'")
+       && has(`${NOT}/app.js`, "'via the redis adapter'")],
+  ['§15', 'three queues keep a terminal state rather than only logging a failure',
+    () => has('server/src/lib/constants.js', "DEAD: 'dead'")
+       && has(`${KIT}/events.js`, "DEAD: 'dead'")
+       && has(`${EV}/outboxWorker.js`, 'stuck')],
 
   // ---- §18 sequence diagrams ----------------------------------------------
   ['§18', 'A: login is rate limited and timing-safe for unknown accounts',
