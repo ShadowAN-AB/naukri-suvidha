@@ -373,6 +373,79 @@ const claims = [
            "RESUME_PROCESSED: 'resume:processed'"]
          .every((e) => has(`${KIT}/constants.js`, e))],
 
+  // ---- §4 services --------------------------------------------------------
+  // Retargeted 30 Oct 2026. It described *ten* services in the subjunctive -
+  // what each "would own", which collections "would move". Three boundaries
+  // have been crossed for real, so it now describes four deployables that run
+  // and says which seven modules are still together. The absence claims
+  // matter as much as the presence ones: the section's credibility rests on
+  // not naming a service that does not exist.
+  ['§4', 'four application images exist, and no fifth',
+    () => {
+      const r = spawnSync('git', ['ls-files', 'server/Dockerfile', 'services/*/Dockerfile'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.status !== 0) return false;
+      const files = r.stdout.trim().split('\n').filter(Boolean);
+      return files.length === 4
+        && ['services/auth/Dockerfile', 'services/notifications/Dockerfile',
+            'services/realtime/Dockerfile'].every((f) => files.includes(f));
+    }],
+  ['§4', 'the seven module mounts are the ones the section tabulates',
+    () => {
+      const app = read('server/src/app.js');
+      const mounts = ['admin', 'profiles', 'jobs', 'resumes', 'applications', 'ai', 'interviews'];
+      return mounts.every((m) => app.includes(`app.use('/api/${m}'`))
+        // `internal` is the service-to-service surface, counted apart.
+        && app.includes("app.use('/api/internal'")
+        // And no /api/notifications in the API: the edge routes that prefix to
+        // the service. A route here would shadow it and nothing would fail
+        // locally, which is exactly the mistake worth pinning.
+        && !app.includes("app.use('/api/notifications'");
+    }],
+  ['§4', 'the auth service serves no /me route',
+    // The section says so explicitly, because an earlier draft listed
+    // `GET /auth/me`. The current user's profile is served by the API.
+    () => lacks(`${AUTH}/routes.js`, "'/me'")
+       && has('server/src/modules/profiles/routes.js', "'/me'")],
+  ['§4', 'the three crossings are where the section says they are',
+    () => has(`${AUTH}/apiClient.js`, '/api/internal/profiles')
+       && has(`${AUTH}/apiClient.js`, '/api/internal/audit')
+       && has(`${RT}/identity.js`, '/internal/introspect')
+       // And the fourth that was deleted stays deleted: the API calls auth
+       // not at all, which §4.6 states as a property rather than an accident.
+       && !has('server/src/config/env.js', 'AUTH_SERVICE_URL:')],
+
+  // ---- §5 API gateway -----------------------------------------------------
+  // Retargeted 30 Oct 2026. It specified eleven upstreams, URL versioning,
+  // OpenTelemetry propagation, an OpenAPI validation layer and a Redis token
+  // bucket inside the gateway. The config has four upstreams and none of the
+  // rest, so most of these claims are absences.
+  ['§5', 'the edge has exactly the four upstreams the routing table lists',
+    () => ['infra/nginx/default.conf.template', 'infra/k8s/edge-nginx.conf.template']
+      .every((f) => ['http://api:5001', 'http://auth:5002',
+                     'http://notifications:5003', 'http://realtime:5004']
+        .every((u) => has(f, u)))],
+  ['§5', 'both internal prefixes are refused at the edge with 404, not 403',
+    // 404 rather than 403 so the edge reveals no more than the services would.
+    () => ['infra/nginx/default.conf.template', 'infra/k8s/edge-nginx.conf.template']
+      .every((f) => has(f, 'location /api/internal/')
+                 && has(f, 'location /api/auth/internal/')
+                 && has(f, "return 404 '{\"error\":{\"code\":\"NOT_FOUND\""))],
+  ['§5', 'no API versioning, no trace context and no gateway metrics',
+    () => {
+      const r = spawnSync('git', ['grep', '-l', '-E', '/api/v1|traceparent|location /metrics',
+        '--', 'infra', 'server/src', 'services', 'client/src'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false;
+      return r.status === 1;
+    }],
+  ['§5', 'the gateway authenticates with auth_request and both identity modes exist',
+    () => ['infra/nginx/default.conf.template', 'infra/k8s/edge-nginx.conf.template']
+      .every((f) => has(f, 'auth_request /_authn')
+                 && has(f, 'auth_request_set $auth_user_id'))
+       && has('server/src/infra/identity/index.js', 'gateway')
+       && has('server/src/infra/identity/index.js', 'bearer')],
+
   // ---- §14 reliability & fault tolerance ----------------------------------
   // Retargeted 29 Oct 2026. This section had the most checkably wrong fact in
   // the document - it specified `/healthz` and `/readyz`, which this repository

@@ -57,12 +57,18 @@ three services' endpoints are in-cluster only in both container stacks.
 
 ## The decisions that matter
 
-**Full microservices. Decided 30 Oct 2026, and this reverses the decision that
-stood above it.** Every remaining domain module is being extracted into its own
-service, with its own image, process and database. Abdullah asked for it
-directly, was shown the measured cost below, and confirmed. It is now the
-plan of record; **do not re-argue it, and do not revert the modules that have
-already moved.**
+**Three services out, and the split is paused there.** 30 Oct 2026: Abdullah
+asked for full microservices, and the reason turned out to be a project
+evaluation within the week. Once that was clear the plan changed on purpose —
+what an evaluation needs is a microservices architecture that **runs and can be
+demonstrated**, which this already is, not a larger service count arrived at by
+dismantling a working system under deadline. `realtime` was extracted before
+that came to light and stays; `profiles` was measured and not started.
+
+So: **do not extract a fourth without being asked.** The measured order below
+is kept for whenever it resumes, and nothing about it has been invalidated.
+Equally, **do not revert the three that are out** — they are what makes the
+architecture demonstrable rather than described.
 
 What that overrode is worth keeping, because the cost it named is real and will
 be paid: the system was deliberately **eight modules in one Express process
@@ -446,10 +452,11 @@ Kubernetes, an API gateway, microservices, Docker, a CDN (the edge, standing in
 for one) and horizontal scaling. Nothing on this list is designed-but-absent
 any more.
 
-**Extract all of them, in this order.** Measured 30 Oct 2026 by counting
+**The order to extract in, if it resumes.** Measured 30 Oct 2026 by counting
 model imports in both directions, the same way `notifications` was chosen
-rather than guessed. `internal` is the service-to-service surface, not a domain
-module, and is not extracted.
+rather than guessed. Nothing here is in progress — it is a plan, not a state.
+`internal` is the service-to-service surface, not a domain module, and is not
+extracted.
 
 | module | reads | read by | owns |
 | --- | --- | --- | --- |
@@ -465,7 +472,7 @@ module, and is not extracted.
 The order follows from two findings in that table, neither of which a guess
 would have produced:
 
-1. **`realtime` first, because it costs nothing.** It owns no collection, reads
+1. ~~**`realtime` first, because it costs nothing.**~~ **Done.** It owns no collection, reads
    nothing and is read by nobody — it holds Socket.IO and that is all. It
    establishes the pattern without a single data-ownership decision, and it is
    the mirror of `notifications`: that service already pushes through the API's
@@ -1083,9 +1090,11 @@ Three document-wide errors are fixed and worth not reintroducing:
   the numbers the document gives are pinned: **fourteen collections** and
   **fourteen test files**. Adding either without updating §1, §2.7, §8.1, §22
   and §23 fails the build. Both are now counted **across all three services**,
-  which matters: the API's barrel holds twelve collections and the auth
-  service's two, and counting only the API's would silently "lose" two that
-  simply moved. The test *count* (**190** = 142 API + 28 auth + 13
+  which matters: the API's barrel holds **eleven**, the auth service two and
+  notifications one, and counting only the API's would silently "lose" three
+  that simply moved. (It said twelve until 30 Oct 2026 - correct before
+  `Notification` left the barrel with the notifications extraction, and a
+  figure nobody re-counted after.) The test *count* (**190** = 142 API + 28 auth + 13
   notifications + 7 realtime) is not pinned — counting it needs a run — so it is still
   worth checking by eye, and §1 was found carrying 131 across 11 files on
   29 Oct 2026 while §22 already said 176. A pinned file count cannot catch
