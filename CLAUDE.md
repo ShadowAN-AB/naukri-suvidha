@@ -15,9 +15,11 @@ and should not be re-litigated without a reason.
 ## Commands
 
 ```bash
-npm run dev            # client :5173, API :5001, auth :5002, notif :5003
-npm test               # 183 tests over three suites, needs a local mongod
-                       # (= api 142 + auth 28 + notifications 13; a standalone
+npm run dev            # client :5173, API :5001, auth :5002, notif :5003,
+                       # realtime :5004
+npm test               # 190 tests over four suites, needs a local mongod
+                       # (= api 142 + auth 28 + notif 13 + realtime 7, which
+                       #  needs no database at all; a standalone
                        #  mongod exercises the no-transaction path, CI's
                        #  replica set exercises the outbox)
 npm run test:api          # the API's suite alone
@@ -46,8 +48,10 @@ npm run k8s:down          # delete the cluster, volumes and all
 ```
 
 Health: `/api/health` (db state, plus `instance` — which replica answered),
-`/api/ai/health` (provider, queue, degraded behaviour) and the auth service's
-own `/health` on :5002, which is in-cluster only in both container stacks.
+`/api/ai/health` (provider, queue, degraded behaviour), the auth service's own
+`/health` on :5002, the notifications service's on :5003, and the realtime
+service's on :5004 — which reports no `db` at all, because it owns none. The
+three services' endpoints are in-cluster only in both container stacks.
 
 ---
 
@@ -252,12 +256,26 @@ owns the collection**. An event that cannot be acted on without reading the
 publisher's data is not an event, it is a trigger to go and ask — and a
 consumer with its own database cannot ask.
 
-**A service with no sockets can still push to one.** The notifications service
-holds no Socket.IO server; the client connects to `/socket.io` on the API. It
-publishes through the same Redis adapter channel, so whichever API replica
-holds that connection delivers the emit. The adapter was added in step 2 to
-stop a second API *replica* breaking realtime; it now carries an emit across a
-*service* boundary, which is the same problem one layer out.
+**One service holds every socket, and nobody who pushes holds one.** Since
+`realtime` was extracted the client connects to `/socket.io` on **that**
+service, and both the API and notifications publish through the Redis adapter's
+channel without holding a socket server at all.
+
+The adapter is why this was the cheapest extraction available. It was added in
+step 2 so a second API *replica* could not silently break realtime - one
+container held the socket, another emitted the event. The same wiring now
+carries an emit across a *service* boundary, which is the same problem one
+layer out, so moving the socket server needed no new mechanism and no
+publisher had to change. **Measured**: a push published to Redis by a process
+with no socket server arrived at a socket held by the realtime process, and
+another user's did not leak into it.
+
+What it costs is that Redis stops being optional in the way it is elsewhere.
+Without it the API degrades to an in-process bus and the cache to a local one;
+`realtime` instead accepts connections and delivers nothing, because every
+push originates in another process. Same shape as the broker for
+notifications, one layer out: extracting a component makes the transport
+under it load-bearing.
 
 Exactly **three crossings** exist, and the list is the whole price of the
 boundary. Adding a fourth needs the same test the first three passed: a
@@ -268,7 +286,7 @@ reach it.
 | --- | --- | --- |
 | `auth → API` | `POST /api/internal/profiles` | synchronous. A Student or Company is the API's, so registration is a write in two services with no transaction spanning them — write the user, ask for the profile, **delete the user if the API refuses**. A compensation, not a rollback. |
 | `auth → API` | `POST /api/internal/audit` | fire-and-forget. A sign-in still belongs in the placement office's trail. Crossing a boundary did not change what the write is worth, so a failure is logged and swallowed exactly as it was. |
-| `API → auth` | `POST /internal/introspect` | the socket handshake only. It carries its token in the Socket.IO connection payload and `/socket.io` is proxied straight through, so it is the one entry point no gateway can authenticate. |
+| `realtime → auth` | `POST /internal/introspect` | the socket handshake only. It carries its token in the Socket.IO connection payload and `/socket.io` is proxied straight through, so it is the one entry point no gateway can authenticate. **This was `API → auth` until the realtime extraction**: the API made the call only because it hosted the socket server, so it moved with the sockets and the API now talks to the auth service not at all. |
 
 A fourth was written and then deleted: the admin dashboard's `users` count. The
 figure was computed and never rendered — the dashboard shows four tiles and
@@ -519,7 +537,8 @@ containerised databases; the host's own mongod and dev server are untouched.
 | Container | What it is | Reachable at |
 | --- | --- | --- |
 | `edge` | nginx: serves the client, routes `/api`, balances it, **and authenticates every request** | `localhost:8080` |
-| `api` ×2 | the Express server, eight modules | **nowhere from the host, on purpose** |
+| `api` ×2 | the Express server, seven modules | **nowhere from the host, on purpose** |
+| `realtime` | every socket in the system, and no database | **nowhere from the host, on purpose** |
 | `auth` | the extracted auth service, own image and own database | **nowhere from the host, on purpose** |
 | `notifications` | the extracted notifications service, own image and own database | **nowhere from the host, on purpose** |
 | `mongo` | MongoDB 7 | `localhost:27018` (27017 is left for the host's own) |
@@ -663,6 +682,7 @@ the edge.
 | `api` | Deployment, 2–6 replicas, **owned by the HPA** | `api:5001`, in-cluster only |
 | `auth` | Deployment, 2 replicas, **fixed on purpose** — login is bcrypt-bound, not throughput-bound | `auth:5002`, in-cluster only |
 | `notifications` | Deployment, 2 replicas, **fixed by construction** — one partition per topic, so a third replica is assigned nothing | `notifications:5003`, in-cluster only |
+| `realtime` | Deployment, 2 replicas, **fixed because it scales on connections, not requests** — a socket is held while a tab is open, so CPU says almost nothing about load and the HPA's only metric would mislead. No mongo gate and no database. | `realtime:5004`, in-cluster only |
 | `mongo` | StatefulSet + headless Service + PVC | `mongo:27017`, in-cluster only |
 | `redis` | Deployment + Service, no volume | `redis:6379`, in-cluster only |
 | `kafka` | StatefulSet + headless Service, KRaft | `kafka:9092`, in-cluster only |
@@ -1065,8 +1085,8 @@ Three document-wide errors are fixed and worth not reintroducing:
   and §23 fails the build. Both are now counted **across all three services**,
   which matters: the API's barrel holds twelve collections and the auth
   service's two, and counting only the API's would silently "lose" two that
-  simply moved. The test *count* (**183** = 142 API + 28 auth + 13
-  notifications) is not pinned — counting it needs a run — so it is still
+  simply moved. The test *count* (**190** = 142 API + 28 auth + 13
+  notifications + 7 realtime) is not pinned — counting it needs a run — so it is still
   worth checking by eye, and §1 was found carrying 131 across 11 files on
   29 Oct 2026 while §22 already said 176. A pinned file count cannot catch
   that: `docs:check` reads the code, never the document's prose.
