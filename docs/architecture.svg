@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 800" width="1180" height="800"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1200" width="1180" height="1200"
      role="img"
      aria-label="Naukri Suvidha microservices architecture. Panel one: a browser reaches a single nginx edge, which routes four prefixes to four services and runs an auth_request subrequest against the auth service on every API request; three services own their own database and the realtime service owns none. Panel two: the API produces domain events to Kafka, the notifications service consumes them and publishes a push to Redis, and the realtime service delivers it to the browser's socket.">
   <style>
@@ -20,6 +20,11 @@
     .ard { stroke: #334155; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
     .arr { stroke: #b91c1c; stroke-width: 2.2; fill: none; }
     .arp { stroke: #7c3aed; stroke-width: 1.8; fill: none; }
+    .hpa { fill: #fffbeb; stroke: #b45309; stroke-width: 2; }
+    .hbx { fill: #ffffff; stroke: #b45309; stroke-width: 2; }
+    .arh { stroke: #b45309; stroke-width: 2.2; fill: none; }
+    .clu { fill: none; stroke: #94a3b8; stroke-width: 1.6; stroke-dasharray: 7 5; }
+    .amb { font-size: 10.5px; fill: #92400e; }
   </style>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -31,9 +36,12 @@
     <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
     </marker>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+    </marker>
   </defs>
 
-  <rect x="0" y="0" width="1180" height="800" fill="#ffffff"/>
+  <rect x="0" y="0" width="1180" height="1200" fill="#ffffff"/>
 
   <text class="t ttl" x="40" y="38">Naukri Suvidha — microservices architecture</text>
   <text class="t sub" x="40" y="58">Four deployables behind one API gateway. Three services were extracted from the API; three own a database no other service can connect to.</text>
@@ -178,6 +186,69 @@
   <text class="t sub" x="40" y="716">The notifications service has no Socket.IO server and the realtime service produces no content. Neither knows the other exists — Redis is the</text>
   <text class="t sub" x="40" y="732">only thing between them, and it is the same adapter added so a second API replica could not break pushes.</text>
 
-  <text class="t sub" x="40" y="768">Also running, not drawn: MongoDB as a single-node replica set (for transactions), the Redis shared cache and rate-limit counters, and the whole</text>
-  <text class="t sub" x="40" y="784">stack on Kubernetes with an autoscaler taking the API from 2 to 6 pods on CPU. Seven domain modules remain inside the api process.</text>
+  <text class="t sub" x="40" y="768">Seven domain modules remain inside the api process — profiles, jobs, applications, resumes, ai, interviews and admin. They are modules rather</text>
+  <text class="t sub" x="40" y="784">than services on purpose: none imports another module’s service, and each publishes domain events, which is why three of them could be extracted.</text>
+
+  <!-- ============ PANEL C ============ -->
+  <line x1="40" y1="812" x2="1140" y2="812" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text class="t pan" x="40" y="846">3 · On Kubernetes — what scales, what is fixed, and why</text>
+
+  <rect class="clu" x="40" y="868" width="1100" height="282" rx="10"/>
+  <text class="t sub" x="58" y="892">namespace naukri-suvidha — kind cluster, 3 nodes (the control-plane is tainted, so 2 take workload)</text>
+
+  <!-- entry -->
+  <rect class="edg" x="62" y="972" width="132" height="92" rx="6"/>
+  <text class="t bt" x="128" y="1000" text-anchor="middle">edge</text>
+  <text class="t bs" x="128" y="1018" text-anchor="middle">×1</text>
+  <text class="t bs" x="128" y="1036" text-anchor="middle">NodePort 30080</text>
+  <text class="t bs" x="128" y="1050" text-anchor="middle">→ localhost:8081</text>
+
+  <line class="ar" x1="194" y1="1018" x2="211" y2="1018" marker-end="url(#a)"/>
+
+  <!-- the autoscaled one -->
+  <rect class="hpa" x="219" y="900" width="212" height="50" rx="6"/>
+  <text class="t bt" x="325" y="920" text-anchor="middle" fill="#92400e">HorizontalPodAutoscaler</text>
+  <text class="t amb" x="325" y="938" text-anchor="middle">2 → 6 pods · target 60% CPU of 200m</text>
+  <line class="arh" x1="325" y1="950" x2="325" y2="968" marker-end="url(#ah)"/>
+
+  <rect class="hbx" x="219" y="972" width="212" height="92" rx="6"/>
+  <text class="t bt" x="233" y="996">api</text>
+  <text class="t amb" x="233" y="1014" font-weight="700">×2 → 6 — the only one</text>
+  <text class="t amb" x="233" y="1028" font-weight="700">that autoscales</text>
+  <text class="t bs" x="233" y="1048">gates: mongo · redis · kafka</text>
+
+  <!-- the fixed ones -->
+  <rect class="box" x="451" y="972" width="186" height="92" rx="6"/>
+  <text class="t bt" x="465" y="996">auth</text>
+  <text class="t bs" x="465" y="1014" font-weight="700">×2 — fixed</text>
+  <text class="t bs" x="465" y="1032">login is bcrypt-bound,</text>
+  <text class="t bs" x="465" y="1046">not throughput-bound</text>
+
+  <rect class="box" x="657" y="972" width="196" height="92" rx="6"/>
+  <text class="t bt" x="671" y="996">realtime</text>
+  <text class="t bs" x="671" y="1014" font-weight="700">×2 — fixed</text>
+  <text class="t bs" x="671" y="1032">scales on connections,</text>
+  <text class="t bs" x="671" y="1046">so CPU is the wrong metric</text>
+
+  <rect class="box" x="873" y="972" width="245" height="92" rx="6"/>
+  <text class="t bt" x="887" y="996">notifications</text>
+  <text class="t bs" x="887" y="1014" font-weight="700">×2 — fixed by construction</text>
+  <text class="t bs" x="887" y="1032">one partition per topic, so a third</text>
+  <text class="t bs" x="887" y="1046">replica would be assigned nothing</text>
+
+  <!-- data tier -->
+  <rect class="dat" x="219" y="1080" width="212" height="52" rx="6"/>
+  <text class="t bs" x="233" y="1100" font-weight="700">mongo ×1 — StatefulSet + PVC</text>
+  <text class="t bs" x="233" y="1118">single-node replica set</text>
+
+  <rect class="inf" x="451" y="1080" width="186" height="52" rx="6"/>
+  <text class="t bs" x="465" y="1100" font-weight="700">redis ×1</text>
+  <text class="t bs" x="465" y="1118">cache · limits · adapter</text>
+
+  <rect class="inf" x="657" y="1080" width="461" height="52" rx="6"/>
+  <text class="t bs" x="671" y="1100" font-weight="700">kafka ×1 — StatefulSet, KRaft</text>
+  <text class="t bs" x="671" y="1118">below the application tier nothing is redundant — these three are single points of failure</text>
+
+  <text class="t sub" x="40" y="1176">Only the API autoscales, and the other three are fixed for three different reasons — which is the argument for splitting them in the first place.</text>
+  <text class="t sub" x="40" y="1192">Measured under load: 17% CPU idle, then 617% driving 2 → 4 → 6 pods, serving 1,209,773 requests with 0 failures.</text>
 </svg>
