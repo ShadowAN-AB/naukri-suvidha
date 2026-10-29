@@ -28,7 +28,7 @@ npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
                           # writes BOTH databases - see AUTH_MONGODB_URI
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
-npm run docs:check        # 86 claims the design doc makes about this repo
+npm run docs:check        # 95 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -155,9 +155,18 @@ parallel toy.
 per-process rate limiter, sockets held in one process. That is right for one
 instance and quietly wrong for two, which is the whole reason step 2 exists.
 With it set, three things become shared — the cache (`infra/cache/redis.js`),
-the rate-limit counters, and the Socket.IO adapter. A Redis failure is always
-a miss or a warning, never a failed request: a cache that takes the request
-down with it is worse than no cache.
+the rate-limit counters, and the Socket.IO adapter. A Redis failure should
+always be a miss or a warning, never a failed request: a cache that takes the
+request down with it is worse than no cache.
+
+**The cache obeys that rule and the rate limiter does not.** Measured on
+29 Oct 2026 against a dead port: with `REDIS_URL` set and Redis unreachable,
+the limiter's store rejects after `maxRetriesPerRequest` and the request
+becomes a **500**, because `express-rate-limit` defaults `passOnStoreError`
+to `false` and nothing here overrides it. So the rule above is an intention at
+that one call site rather than a property. It is one option to fix, the
+reliability section states it as a known gap, and `docs:check` pins the gap —
+setting the option fails the build until the prose is rewritten.
 
 **Kafka is optional too, and what it buys is narrower than it looks.** With
 `KAFKA_BROKERS` set, a domain event is produced to a topic named after it and
@@ -412,7 +421,14 @@ Then the original list:
 3. **Rehearse the demo twice**, once with Ollama stopped — `DEMO.md`.
 4. **20 real résumés** into `server/test/fixtures/`, then `npm run resumes:check`.
    Extraction is tuned against clean text; real résumés are two-column or scanned.
-5. Optional: a UI for semantic search (API-only today), and Atlas `$vectorSearch`
+5. **Make the shared rate limiter fail open.** One option —
+   `passOnStoreError: true` on all three limiters — and the only item on this
+   list that is a defect rather than unbuilt work: with Redis configured and
+   unreachable, a login answers **500** instead of falling back, which breaks
+   the rule under "Redis is optional" above. Measured 29 Oct 2026 against a
+   dead port. `docs:check` pins the gap, so the fix must also rewrite the
+   reliability section's prose.
+6. Optional: a UI for semantic search (API-only today), and Atlas `$vectorSearch`
    (written, untested — a standalone mongod rejects it).
 
 ---
@@ -868,12 +884,12 @@ record.
 
 Retargeted and trustworthy — sections 1 existing system, 2 problems,
 4 services, 6 Redis, 7 message broker, 8 data, 9 résumé/AI, 10 workflows,
-11 notifications, 12 security, **15 observability**, 17 diagrams,
-18 sequence diagrams, 20 decisions, **22 monolith-vs-microservices**,
-23 summary, and the README.
+11 notifications, 12 security, **14 reliability & fault tolerance**,
+**15 observability**, 17 diagrams, 18 sequence diagrams, 20 decisions,
+**22 monolith-vs-microservices**, 23 summary, and the README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
-keys, service names that do not exist here: sections 3, 5, 13, 14, 16, 19
+keys, service names that do not exist here: sections 3, 5, 13, 16, 19
 and 21.
 
 **Observability was the worst of them and is done (29 Oct 2026).** It opened
@@ -891,11 +907,30 @@ in `package-lock.json`, transitively via `vitest` and the Anthropic SDK, and
 instruments nothing. The pinned claim deliberately searches only
 `package.json` files for that reason.
 
-While writing it, one contradiction surfaced that is **not** fixed: the
-Reliability & Fault Tolerance section still specifies `/healthz` and `/readyz`,
-where the four endpoints that exist are `/api/health`, `/api/ai/health` and
-the two services' `/health`. The observability section says so out loud rather
-than leaving the two sections to disagree quietly.
+**Reliability & Fault Tolerance is done (29 Oct 2026).** It was next because
+it held the most checkably wrong fact in the document — `/healthz` and
+`/readyz`, which this repository has never served — and around that it
+specified circuit breakers, an `X-Deadline-Ms` header, `X-Degraded`,
+one-click dead-letter replay, PodDisruptionBudgets, anti-affinity, a
+three-node replica set, a Redis cluster and three brokers. None exists. It is
+rewritten from the code and now opens with the thing the old draft inverted:
+**below the application tier nothing is redundant** — one mongo, one Redis,
+one broker, one edge — so the section's subject is degradation and recovery,
+which are real and measured, rather than high availability, which is not.
+**Nine claims pin it, four of them absence claims**, each verified to fail by
+planting a violation.
+
+One of those absence claims pins a *gap* rather than a feature, which is the
+only way prose about a known defect stays honest: `passOnStoreError` must stay
+unset, because the section states that the shared rate limiter **does not fail
+open**. That was measured while writing it and is a real contradiction of this
+file's own rule that a Redis failure is always a miss or a warning and never a
+failed request — stated in full under "Redis is optional" above. Fixing the
+code must rewrite the prose, and the claim is what forces that.
+
+`/healthz` and `/readyz` still appear in **13 scalability** and
+**16 deployment**, which are not yet retargeted; the observability section's
+cross-reference now says so rather than naming section 14.
 
 **Step 5 changed what several sections have to say, so they need a pass:**
 
@@ -924,9 +959,10 @@ than leaving the two sections to disagree quietly.
 - **4 services** should name the two that actually exist and say which nine
   modules are still in the one process.
 
-**`npm run docs:check` pins the retargeted sections to the code** — 86
+**`npm run docs:check` pins the retargeted sections to the code** — 95
 claims over routes, indexes, constants, the event topology, the counts the
-document states in prose, what observability is and is not, the figures the
+document states in prose, what observability is and is not, the probes,
+timeouts and retry curves the reliability argument rests on, the figures the
 monolith-vs-microservices argument rests on, and the document-wide
 invariants. It runs in CI. A renamed route or a dropped index fails there
 and names the section whose prose has just become fiction. It does not read
@@ -944,11 +980,14 @@ Three document-wide errors are fixed and worth not reintroducing:
 - **No "Nexus", and no `spp_` identifiers.** Same rule as the code.
 - **Counts in prose rot silently.** Nobody re-counts a collection list, so
   the numbers the document gives are pinned: **fourteen collections** and
-  **thirteen test files**. Adding either without updating §1, §2.7, §8.1, §22
-  and §23 fails the build. Both are now counted **across both services**,
+  **fourteen test files**. Adding either without updating §1, §2.7, §8.1, §22
+  and §23 fails the build. Both are now counted **across all three services**,
   which matters: the API's barrel holds twelve collections and the auth
   service's two, and counting only the API's would silently "lose" two that
-  simply moved. The test *count* (157 = 129 API + 28 auth) is not pinned —
-  counting it needs a run — so it is still worth checking by eye.
+  simply moved. The test *count* (**176** = 135 API + 28 auth + 13
+  notifications) is not pinned — counting it needs a run — so it is still
+  worth checking by eye, and §1 was found carrying 131 across 11 files on
+  29 Oct 2026 while §22 already said 176. A pinned file count cannot catch
+  that: `docs:check` reads the code, never the document's prose.
 - **No email/SMTP channel and no "Ask Assistant".** Neither exists in this
   repo. **§4.12 is the authoritative statement**; align anything new to it.
