@@ -49,6 +49,7 @@ const NOT = 'services/notifications/src';
 const AUTH = 'services/auth/src';
 const EV = 'server/src/infra/events';
 const KIT = 'service-kit/src';
+const RT = 'services/realtime/src';
 
 const claims = [
   // ---- document-wide invariants -------------------------------------------
@@ -116,12 +117,19 @@ const claims = [
   // test directory: it listed only two when notifications was extracted, so
   // the count stayed at thirteen and passed while there were fourteen - the
   // exact rot this check exists to catch, in the check itself.
-  ['counts', '§1 says 14 test files, across three services',
+  ['counts', '§1 says 15 test files, across four services',
     () => {
+      // `git ls-files` lists the *tracked* tree, so a new suite does not
+      // count until it is committed - which means this claim passes right up
+      // to the commit that should have updated it and fails immediately
+      // after. Two other claims here have the same property (`git grep` for
+      // the absent rate-limit option, `git ls-tree` for the service count),
+      // and all three have now bitten exactly once. A docs:check run before
+      // committing is not evidence about the committed tree.
       const r = spawnSync('git',
         ['ls-files', 'server/test/*.test.js', 'services/*/test/*.test.js'],
         { cwd: root, encoding: 'utf8' });
-      return r.status === 0 && r.stdout.trim().split('\n').length === 14;
+      return r.status === 0 && r.stdout.trim().split('\n').length === 15;
     }],
 
   // ---- §6 Redis & caching --------------------------------------------------
@@ -354,11 +362,13 @@ const claims = [
     // in their own database and run the same logic over it.
     () => has(`${KIT}/retryWorker.js`, 'requeued stranded deliveries')],
   ['§11', 'sockets join one room per user and carry three events',
-    // The names and the room format are in service-kit since notifications
-    // became its own service: a different process emits two of them, through
-    // the Redis adapter into rooms this gateway holds.
+    // The room format is a cross-service contract, and more so since the
+    // gateway was extracted: the API and notifications both address rooms
+    // they do not hold, through the Redis adapter. A local rename in the
+    // realtime service would stop both their pushes arriving with nothing
+    // failing in either process.
     () => has(`${KIT}/constants.js`, 'roomForUser = (userId)')
-       && has('server/src/modules/realtime/index.js', 'roomFor = roomForUser')
+       && has(`${RT}/sockets.js`, 'socket.join(roomForUser(userId))')
        && ["NOTIFICATION_NEW: 'notification:new'", "APPLICATION_STATUS: 'application:status'",
            "RESUME_PROCESSED: 'resume:processed'"]
          .every((e) => has(`${KIT}/constants.js`, e))],
@@ -463,7 +473,13 @@ const claims = [
        && has(`${KIT}/events.js`, 'CEILING_MS = 10 * 60_000')
        && /AI_TASK_MAX_ATTEMPTS:[^\n]*default\(3\)/.test(read('server/src/config/env.js'))],
   ['§14', 'the timeouts §14.2 tabulates are the ones in the code',
-    () => /AUTH_SERVICE_TIMEOUT_MS:[^\n]*default\(2000\)/.test(read('server/src/config/env.js'))
+    // The 2s introspection budget lives in the realtime service now - it went
+    // with the sockets, and the API no longer calls auth at all. The 3s is
+    // auth's own budget for its two calls into the API, which §14.2 had
+    // labelled with the API's variable and the wrong direction.
+    () => /AUTH_SERVICE_TIMEOUT_MS:[^\n]*default\(2000\)/.test(read(`${RT}/env.js`))
+       && /API_INTERNAL_TIMEOUT_MS:[^\n]*default\(3000\)/.test(read(`${AUTH}/env.js`))
+       && !has('server/src/config/env.js', 'AUTH_SERVICE_URL:')
        && /AI_TIMEOUT_MS:[^\n]*default\(30_000\)/.test(read('server/src/config/env.js'))
        && ['server/src/config/db.js', `${AUTH}/db.js`, `${NOT}/db.js`]
             .every((f) => has(f, 'serverSelectionTimeoutMS: 10_000'))
@@ -520,14 +536,19 @@ const claims = [
     () => has(`${KIT}/requestId.js`, "req.get('x-request-id')")
        && has('infra/nginx/default.conf.template', 'X-Request-ID')
        && has('infra/k8s/edge-nginx.conf.template', 'X-Request-ID')],
-  ['§15', 'all four health endpoints exist',
+  ['§15', 'all five health endpoints exist',
     () => has('server/src/app.js', "app.get('/api/health'")
        && has(`${AI}/routes.js`, "router.get('/health'")
        && has(`${AUTH}/app.js`, "app.get('/health'")
-       && has(`${NOT}/app.js`, "app.get('/health'")],
-  ['§15', 'readiness answers 503 while mongo is unreachable, in every service',
+       && has(`${NOT}/app.js`, "app.get('/health'")
+       && has(`${RT}/app.js`, "app.get('/health'")],
+  ['§15', 'readiness answers 503 on an unreachable db - in every service that has one',
     () => ['server/src/app.js', `${AUTH}/app.js`, `${NOT}/app.js`]
-      .every((f) => has(f, 'res.status(db ? 200 : 503)'))],
+      .every((f) => has(f, 'res.status(db ? 200 : 503)'))
+       // realtime owns no data, so it has no db to be unreachable and must
+       // not pretend otherwise: pulling it from the Service would drop every
+       // open socket. The absence is the claim.
+       && !has(`${RT}/app.js`, 'res.status(db ? 200 : 503)')],
   ['§15', 'the notifications health endpoint reports the broker and the push path',
     // The one service that can be completely healthy and useless, so its
     // health endpoint has to say more than "db up".
@@ -544,7 +565,7 @@ const claims = [
   // The three figures in §22.5 are the kind that rot silently - one of them
   // already had, because the audit-log fix removed a `populate` and the count
   // was written from memory of the figure before it.
-  ['§22', 'exactly two services are extracted, and eight modules remain',
+  ['§22', 'exactly three services are extracted, and seven modules remain',
     () => {
       const ls = (p) => {
         const r = spawnSync('git', ['ls-tree', '-d', '--name-only', `HEAD:${p}`],
@@ -553,11 +574,12 @@ const claims = [
       };
       const services = ls('services');
       const modules = ls('server/src/modules');
-      return services.length === 2
-        && ['auth', 'notifications'].every((n) => services.includes(`services/${n}`.split('/').pop()))
+      return services.length === 3
+        && ['auth', 'notifications', 'realtime']
+          .every((n) => services.includes(`services/${n}`.split('/').pop()))
         // `internal` is the service-to-service surface the extractions needed,
         // not a domain module - the section says so, so it is counted apart.
-        && modules.filter((m) => m !== 'internal').length === 8;
+        && modules.filter((m) => m !== 'internal').length === 7;
     }],
   ['§22', 'the database-per-module figures are what the section says',
     () => {
@@ -580,10 +602,11 @@ const claims = [
         '--', 'server/src/modules']);
       return populates === 6 && lookups === 1 && statics + dynamics === 29;
     }],
-  ['§22', 'three services means three test suites',
+  ['§22', 'every service has a suite of its own',
     () => {
       const pkg = read('package.json');
-      return ['test:api', 'test:auth', 'test:notifications'].every((s) => pkg.includes(s));
+      return ['test:api', 'test:auth', 'test:notifications', 'test:realtime']
+        .every((s) => pkg.includes(s));
     }],
   ['§22', 'the section no longer calls the extraction future work',
     // The failure this retarget fixed: it described the extraction as a plan.

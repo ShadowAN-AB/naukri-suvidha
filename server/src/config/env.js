@@ -55,16 +55,20 @@ const schema = baseEnvSchema.extend({
    */
   AUTH_GATEWAY_SECRET: z.string().min(16).optional(),
 
-  /**
-   * The auth service, for the two calls that cross the boundary in this
-   * direction: the socket handshake (which does not pass through the edge's
-   * authentication, so it introspects here) and the admin user count.
+  /*
+   * No AUTH_SERVICE_URL. This service makes no call to the auth service at
+   * all any more.
    *
-   * Optional, and both callers degrade rather than fail when it is unset -
-   * which is what keeps a single-process `npm run dev` working.
+   * It only ever had one: the socket handshake, which the edge cannot
+   * authenticate, so whoever held the socket had to introspect the token
+   * itself. The API held it for no better reason than that it hosted the
+   * HTTP server, and with realtime extracted the call went with the sockets
+   * to `services/realtime/`. (An earlier second caller, an admin user count,
+   * was deleted when it turned out nothing rendered the figure.)
+   *
+   * Removed rather than left configured, because a service that advertises a
+   * dependency it does not use is how the next person ends up reinstating it.
    */
-  AUTH_SERVICE_URL: z.string().url().optional(),
-  AUTH_SERVICE_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
 
   KAFKA_BROKERS: z.string().optional(),
   KAFKA_CLIENT_ID: z.string().default('naukri-suvidha-api'),
