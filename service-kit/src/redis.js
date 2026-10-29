@@ -1,6 +1,8 @@
 import Redis from 'ioredis';
 import { RedisStore } from 'rate-limit-redis';
 
+import { FallbackRateLimitStore } from './rateLimitStore.js';
+
 /**
  * One Redis connection per service, shared within it.
  *
@@ -100,6 +102,11 @@ export function createRedis({ url, logger }) {
    * as you scale is not a limit - which is as true of the auth service's login
    * limiter as it was of the API's.
    *
+   * Where Redis is configured the store is wrapped so that losing Redis
+   * degrades the limit to a per-process one instead of failing the request.
+   * Both ends of that are deliberate and the reasoning is in
+   * `rateLimitStore.js`.
+   *
    * `prefix` keeps two limiters from sharing a bucket.
    */
   function createRateLimitStore(prefix) {
@@ -137,7 +144,32 @@ export function createRedis({ url, logger }) {
       }
     }
 
-    return store;
+    /*
+     * Wrapped, because surviving boot was only half of that rule.
+     *
+     * The fix above keeps the process alive when Redis is late. It does
+     * nothing for a Redis that goes away while the service is serving: the
+     * store's command then rejects once `maxRetriesPerRequest` is spent, and
+     * express-rate-limit turns a rejected store into a rejected *request* - a
+     * 500 on somebody's login. Measured, against a dead port, before this
+     * wrapper existed.
+     *
+     * So the rule that a Redis failure is a miss or a warning and never a
+     * failed request was true of the cache and false here. The wrapper makes
+     * it true of both, by degrading to the per-process counter rather than by
+     * waving the request through unlimited - see rateLimitStore.js for why
+     * that distinction is the whole point.
+     */
+    return new FallbackRateLimitStore({
+      primary: store,
+      prefix,
+      logger,
+      // ioredis already knows whether it has a usable connection, and reading
+      // that is free where issuing a doomed command costs the full retry
+      // budget - measured at ~15s per request against a dead port, which is
+      // long enough for the limiter's own window to expire underneath it.
+      isReady: () => getRedis()?.status === 'ready',
+    });
   }
 
   async function closeRedis() {

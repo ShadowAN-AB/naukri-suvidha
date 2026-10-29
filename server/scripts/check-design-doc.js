@@ -407,18 +407,25 @@ const claims = [
       if (r.error || r.status === null) return false;
       return r.status === 1;
     }],
-  ['§14', 'the shared rate limiter still does not fail open (a stated gap)',
-    // An absence claim pinning a *gap* rather than a feature, which is the
-    // only way prose about a known defect stays honest. express-rate-limit
-    // defaults `passOnStoreError` to false, so with Redis unreachable the
-    // store rejects and the request becomes a 500 - measured against a dead
-    // port. Setting the option is the fix; doing so must rewrite §14.9.
+  ['§14', 'the rate limiter degrades to a per-process counter, not to no limit',
+    // Both halves matter and the absence half is the easier one to lose.
+    // `passOnStoreError: true` is the one-line "fix" that makes a Redis
+    // outage mean *unlimited* password guessing on /login - the limiter
+    // stops failing requests by stopping being a limiter. §14.4 says the
+    // outage degrades a shared limit to a per-process one, so the fallback
+    // store has to be there AND that option has to stay away.
     () => {
       const r = spawnSync('git', ['grep', '-l', 'passOnStoreError', '--',
         'server/src', 'services', 'service-kit/src'],
         { cwd: root, encoding: 'utf8' });
       if (r.error || r.status === null) return false;
-      return r.status === 1;
+      if (r.status !== 1) return false; // the option is in use: §14.4 is wrong
+      return has(`${KIT}/rateLimitStore.js`, 'class FallbackRateLimitStore')
+          && has(`${KIT}/redis.js`, 'new FallbackRateLimitStore(')
+          // Gating on the connection state rather than on a failed command is
+          // what keeps an outage from costing ~15s a request, which was long
+          // enough for the limiter's own window to expire underneath it.
+          && has(`${KIT}/redis.js`, "status === 'ready'");
     }],
   ['§14', 'liveness is a TCP check in all three Deployments, readiness is HTTP',
     // The section's central probe argument: liveness failing means "kill this
