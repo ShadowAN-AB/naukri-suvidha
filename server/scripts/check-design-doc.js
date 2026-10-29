@@ -415,8 +415,15 @@ const claims = [
     // outage degrades a shared limit to a per-process one, so the fallback
     // store has to be there AND that option has to stay away.
     () => {
+      // Scoped to the two files that construct limiters, which is the only
+      // place the option has any effect - and it has to be scoped, because
+      // `rateLimitStore.js` explains in prose why the option is banned. A
+      // grep over all of src counted that explanation as a violation, which
+      // is how this claim failed on the commit that introduced it. Same
+      // lesson as §15's package.json-only search: an absence claim has to
+      // search where the thing would *act*, not where it is discussed.
       const r = spawnSync('git', ['grep', '-l', 'passOnStoreError', '--',
-        'server/src', 'services', 'service-kit/src'],
+        'server/src/app.js', 'services/*/src/rateLimit.js'],
         { cwd: root, encoding: 'utf8' });
       if (r.error || r.status === null) return false;
       if (r.status !== 1) return false; // the option is in use: §14.4 is wrong
