@@ -268,13 +268,17 @@ server {
         proxy_read_timeout    60s;
     }
 
-    # No auth_request. A handshake carries its token in the Socket.IO
-    # connection payload rather than an Authorization header, and there is no
-    # subrequest to run on a websocket upgrade anyway - so this is the one
-    # entry point the gateway cannot authenticate, and the API introspects it
-    # against the auth service itself.
+    # No auth_request, and now a service of its own.
+    #
+    # A handshake carries its token in the Socket.IO connection payload rather
+    # than an Authorization header, and there is no subrequest to run on a
+    # websocket upgrade anyway - so this is the one entry point the gateway
+    # cannot authenticate. The service that holds the socket introspects the
+    # token against the auth service itself, which since the realtime
+    # extraction is `realtime` rather than the API. The API held it before
+    # only because it hosted the HTTP server.
     location /socket.io/ {
-        proxy_pass http://api:5001;
+        proxy_pass http://realtime:5004;
 
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;

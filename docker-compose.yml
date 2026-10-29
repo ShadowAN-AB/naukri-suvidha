@@ -271,6 +271,62 @@ services:
       retries: 6
       start_period: 15s
 
+  # Realtime, as its own service - the third extraction, and the cheapest.
+  #
+  # It owns no collection, read nothing and was read by nobody: it held the
+  # Socket.IO server and that was all. So there is no `MONGODB_URI` here, and
+  # that is the pattern applied honestly rather than bent - database-per-
+  # service means one database per deployable that owns data, and live
+  # connections are not data that can be persisted anywhere useful.
+  #
+  # Redis is the sharp dependency, sharper than for any other service. This
+  # one holds every socket and publishes none of its own content: every push
+  # originates in the API or notifications and arrives through the adapter's
+  # pub/sub channel. So without Redis it accepts connections and delivers
+  # nothing - not degraded, absent. Same lesson as the broker for
+  # notifications, one layer out: extracting a component makes the transport
+  # under it load-bearing.
+  #
+  # It needs the auth service, and it is the only service here that does. A
+  # websocket upgrade cannot carry an `auth_request`, so the edge cannot
+  # authenticate a handshake; whoever holds the socket introspects the token
+  # itself. That call moved here with the sockets, which is why the API no
+  # longer talks to auth at all.
+  realtime:
+    build:
+      context: .
+      dockerfile: services/realtime/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '5004'
+      LOG_LEVEL: info
+      REDIS_URL: redis://redis:6379
+      AUTH_SERVICE_URL: http://auth:5002
+      AUTH_SERVICE_TIMEOUT_MS: '2000'
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      JWT_ACCESS_SECRET: docker-compose-development-access-secret-not-for-production
+      JWT_REFRESH_SECRET: docker-compose-development-refresh-secret-not-for-production
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      BCRYPT_ROUNDS: '12'
+      CLIENT_ORIGIN: http://localhost:8080
+    depends_on:
+      # No mongo: there is nothing to connect to. The first service in this
+      # file that does not wait for the database.
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:5004/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # Shorter than the others' on purpose: no database to connect to, no
+      # consumer groups to join. It binds a port and attaches a socket server.
+      start_period: 5s
+
   edge:
     build:
       context: .
@@ -291,6 +347,10 @@ services:
       auth:
         condition: service_healthy
       notifications:
+        condition: service_healthy
+      # It proxies /socket.io here now, so a client that connects before this
+      # is up gets a 502 rather than a retry.
+      realtime:
         condition: service_healthy
 
   # Not started by default. `npm run docker:seed` runs it once and exits.

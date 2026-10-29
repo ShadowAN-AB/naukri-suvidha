@@ -36,11 +36,10 @@ data:
   # service, so it verifies no token and reads no user - it reads the identity
   # the gateway forwarded. The proof secret is in the Secret, not here.
   IDENTITY_MODE: gateway
-  # For the socket handshake only. A Socket.IO handshake carries its token in
-  # the connection payload and /socket.io is proxied straight through, so it
-  # is the one entry point the gateway cannot authenticate and this service
-  # introspects it itself.
-  AUTH_SERVICE_URL: http://auth:5002
+  # No AUTH_SERVICE_URL. This service makes no call to the auth service at
+  # all: its only one was the socket handshake, and that moved to the realtime
+  # service with the sockets. A pod that advertises a dependency it does not
+  # use is how the next person reinstates it.
 
   ACCESS_TOKEN_TTL: 15m
   REFRESH_TOKEN_TTL: 7d
@@ -136,6 +135,42 @@ data:
 
   # The edge has already authenticated every request that reaches the inbox.
   IDENTITY_MODE: gateway
+
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 7d
+  BCRYPT_ROUNDS: '12'
+  CLIENT_ORIGIN: http://localhost:8081
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: realtime-config
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: realtime
+    app.kubernetes.io/part-of: naukri-suvidha
+data:
+  NODE_ENV: production
+  PORT: '5004'
+  LOG_LEVEL: info
+
+  # No MONGODB_URI. This service owns no data, so there is no database to
+  # name - database-per-service means one per deployable that owns data, and
+  # live connections cannot be usefully persisted. It is the only config here
+  # without one, and that absence is the point rather than an oversight.
+
+  # The sharpest Redis dependency in the cluster. This service holds every
+  # socket and publishes none of its own content, so every push originates in
+  # the API or notifications and arrives through the adapter's channel.
+  # Without it: connections accepted, nothing delivered.
+  REDIS_URL: redis://redis:6379
+
+  # A websocket upgrade cannot carry an `auth_request`, so the edge cannot
+  # authenticate a handshake. Whoever holds the socket introspects the token
+  # itself, which is now this service. This is the third crossing, moved here
+  # from the API.
+  AUTH_SERVICE_URL: http://auth:5002
+  AUTH_SERVICE_TIMEOUT_MS: '2000'
 
   ACCESS_TOKEN_TTL: 15m
   REFRESH_TOKEN_TTL: 7d

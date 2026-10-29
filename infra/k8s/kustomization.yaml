@@ -18,6 +18,7 @@ resources:
   - api.yaml
   - auth.yaml
   - notifications.yaml
+  - realtime.yaml
   - edge.yaml
   - hpa.yaml
 

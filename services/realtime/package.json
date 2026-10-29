@@ -1,0 +1,29 @@
+{
+  "name": "@naukri-suvidha/realtime-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch --watch-preserve-output src/server.js",
+    "start": "node src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@naukri-suvidha/service-kit": "^0.1.0",
+    "@naukri-suvidha/shared": "^0.1.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "helmet": "^8.0.0",
+    "pino-http": "^10.4.0",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.0.0",
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.3.1",
+    "vitest": "^4.1.12"
+  }
+}

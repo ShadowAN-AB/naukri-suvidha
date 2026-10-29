@@ -1,0 +1,160 @@
+# The realtime service - the third extraction, and the one that changes what
+# the other pods are allowed to assume.
+#
+# Until now the client connected to /socket.io on the API, so every API pod
+# held sockets and the Redis adapter existed to stop a second replica breaking
+# the push. Now one service holds every socket and nothing else holds any. The
+# adapter does the same job across a service boundary that it did across a
+# replica boundary, which is why this extraction needed no new mechanism.
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: realtime
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: realtime
+  ports:
+    - name: http
+      port: 5004
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: realtime
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  # Two, and fixed - not behind the HPA, for a different reason from auth's.
+  #
+  # auth is excluded because login is bcrypt-bound rather than
+  # throughput-bound. This one is excluded because **it scales on connections,
+  # not requests**: a socket is held for as long as a tab is open, so the
+  # resource is file descriptors and memory, and CPU - the only metric this
+  # cluster has - says almost nothing about load here. An autoscaler on CPU
+  # would add pods when nothing was busy and keep them when thousands of idle
+  # tabs were attached.
+  #
+  # Scaling it properly needs a connection-count metric, which needs the
+  # metrics pipeline the observability section says is not built.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: realtime
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        naukri-suvidha/image-id: '__REALTIME_IMAGE_ID__'
+      labels:
+        app.kubernetes.io/name: realtime
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      # 45, matching notifications rather than the API's 30, and for a reason
+      # specific to websockets: shutdown disconnects every client first,
+      # because server.close() waits for connections to end and a socket held
+      # open by a browser tab never ends on its own. The clients then reconnect
+      # to the other replica.
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: realtime
+      # Two gates, not three, and **no mongo gate at all** - the first
+      # workload here that does not wait for the database, because it has
+      # none. Redis because a push cannot arrive without it; auth because
+      # every handshake introspects a token against it.
+      initContainers:
+        - name: wait-for-redis
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z redis 6379; do echo "waiting for redis"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-auth
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - 'until nc -z auth 5002; do echo "waiting for auth"; sleep 2; done'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: realtime
+          image: naukri-suvidha/realtime:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5004
+          envFrom:
+            - configMapRef:
+                name: realtime-config
+            - secretRef:
+                name: api-secrets
+          resources:
+            requests:
+              # 100m, matching auth rather than the API's 200m: it joins no
+              # consumer groups, so it has none of the ~39m idle floor the API
+              # pays for holding them open. Memory is the resource that will
+              # actually bind here as connections accumulate.
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            # Always 200 while the process is listening, which is a deliberate
+            # break from the other three. They answer 503 when their database
+            # is away; this one has no database, and pulling the pod from the
+            # Service because Redis is away would drop every open socket in
+            # order to signal that pushes are not arriving - trading a working
+            # channel for a broken one. /health reports the degradation.
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # TCP, for the same reason as everywhere else: liveness failing
+            # means kill the container, and a dependency check here would turn
+            # a Redis blip into a restart that drops every socket.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            # The shortest budget in the cluster, and the clearest single piece
+            # of evidence the extraction bought something: no database to
+            # connect to, no consumer groups to join, no stranded tasks to
+            # reclaim. It binds a port and attaches a socket server.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 15
+          lifecycle:
+            preStop:
+              exec:
+                command: ['/bin/sh', '-c', 'sleep 5']

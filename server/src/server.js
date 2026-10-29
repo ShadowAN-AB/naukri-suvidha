@@ -9,7 +9,6 @@ import { detectTransactionSupport } from './infra/events/transactions.js';
 import { closeRedis } from './infra/redis/index.js';
 import { eventBus } from './infra/events/eventBus.js';
 import { closeKafka } from './infra/events/kafka.js';
-import { initRealtime, closeRealtime } from './modules/realtime/index.js';
 
 async function main() {
   await connectDb();
@@ -45,16 +44,12 @@ async function main() {
     logger.info(`naukri suvidha server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
   });
 
-  // Shares the HTTP server, so there is one process and one port to deploy.
-  initRealtime(server);
-
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
       eventRetryWorker.stop();
       outboxWorker.stop();
       await closeKafka();
-      await closeRealtime();
       await closeRedis();
       await disconnectDb();
       logger.info('shutdown complete');

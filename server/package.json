@@ -18,7 +18,6 @@
     "@aws-sdk/client-s3": "^3.1153.0",
     "@naukri-suvidha/service-kit": "^0.1.0",
     "@naukri-suvidha/shared": "^0.1.0",
-    "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -37,7 +36,6 @@
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "rate-limit-redis": "^4.3.1",
-    "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
