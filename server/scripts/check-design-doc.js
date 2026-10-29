@@ -17,8 +17,8 @@
  *   npm run docs:check
  *
  * Sections covered: §6 Redis, §9 résumé/AI, §11 notifications,
- * §15 observability, §18 sequence diagrams, plus the document-wide
- * invariants.
+ * §15 observability, §18 sequence diagrams, §22 monolith-vs-microservices,
+ * plus the document-wide invariants.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -416,6 +416,59 @@ const claims = [
     () => has('server/src/lib/constants.js', "DEAD: 'dead'")
        && has(`${KIT}/events.js`, "DEAD: 'dead'")
        && has(`${EV}/outboxWorker.js`, 'stuck')],
+
+  // ---- §22 monolith vs microservices --------------------------------------
+  // Retargeted 29 Oct 2026. It argued for the monolith with the extraction as
+  // future work; two services are out, so the argument is now a measurement.
+  // The three figures in §22.5 are the kind that rot silently - one of them
+  // already had, because the audit-log fix removed a `populate` and the count
+  // was written from memory of the figure before it.
+  ['§22', 'exactly two services are extracted, and eight modules remain',
+    () => {
+      const ls = (p) => {
+        const r = spawnSync('git', ['ls-tree', '-d', '--name-only', `HEAD:${p}`],
+          { cwd: root, encoding: 'utf8' });
+        return r.status === 0 ? r.stdout.trim().split('\n').filter(Boolean) : [];
+      };
+      const services = ls('services');
+      const modules = ls('server/src/modules');
+      return services.length === 2
+        && ['auth', 'notifications'].every((n) => services.includes(`services/${n}`.split('/').pop()))
+        // `internal` is the service-to-service surface the extractions needed,
+        // not a domain module - the section says so, so it is counted apart.
+        && modules.filter((m) => m !== 'internal').length === 8;
+    }],
+  ['§22', 'the database-per-module figures are what the section says',
+    () => {
+      const count = (args) => {
+        const r = spawnSync('git', ['grep', '-c', ...args], { cwd: root, encoding: 'utf8' });
+        if (r.status !== 0) return -1;
+        return r.stdout.trim().split('\n')
+          .reduce((n, line) => n + Number(line.split(':').pop()), 0);
+      };
+      // Six populate call sites, in service files only: a model's comment
+      // mentioning populate is not a call, and a nested `populate:` option is
+      // not a second site.
+      const populates = count(['-F', '.populate(', '--', 'server/src/modules/*/service.js']);
+      // One $lookup, the analytics join - the thing that cannot cross at all.
+      const lookups = count(['-F', '$lookup', '--', 'server/src']);
+      // 29 cross-module model imports: 27 static, 2 dynamic.
+      const statics = count(['-E', "^import .* from '\\.\\./[a-z]*/model\\.js';",
+        '--', 'server/src/modules']);
+      const dynamics = count(['-E', "await import\\('\\.\\./[a-z]*/model\\.js'\\)",
+        '--', 'server/src/modules']);
+      return populates === 6 && lookups === 1 && statics + dynamics === 29;
+    }],
+  ['§22', 'three services means three test suites',
+    () => {
+      const pkg = read('package.json');
+      return ['test:api', 'test:auth', 'test:notifications'].every((s) => pkg.includes(s));
+    }],
+  ['§22', 'the section no longer calls the extraction future work',
+    // The failure this retarget fixed: it described the extraction as a plan.
+    // Pinned against the code it now describes rather than the prose.
+    () => has('services/auth/src/server.js', 'auth service listening')
+       && has(`${NOT}/server.js`, 'notifications service listening')],
 
   // ---- §18 sequence diagrams ----------------------------------------------
   ['§18', 'A: login is rate limited and timing-safe for unknown accounts',
