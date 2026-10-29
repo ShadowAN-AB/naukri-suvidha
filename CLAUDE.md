@@ -53,23 +53,37 @@ own `/health` on :5002, which is in-cluster only in both container stacks.
 
 ## The decisions that matter
 
-**A modular monolith with two services extracted, not ten microservices.** The
-original design had ten services, Kafka, Redis and Kubernetes. What exists is
-eight *modules* in one Express process plus **auth and notifications as real
-separate services**, each with its own image, lifecycle and database, keeping
-every service boundary and domain event. The reason the other eight stay
-together is operational — one person cannot run ten deployments alongside
-coursework. The seam is real, and it has been proved twice by using it: modules
-never import each other's services, they publish events, and both extractions
-came out without the remaining modules changing shape.
+**Full microservices. Decided 30 Oct 2026, and this reverses the decision that
+stood above it.** Every remaining domain module is being extracted into its own
+service, with its own image, process and database. Abdullah asked for it
+directly, was shown the measured cost below, and confirmed. It is now the
+plan of record; **do not re-argue it, and do not revert the modules that have
+already moved.**
 
-**If asked "why not microservices", the answer is no longer hypothetical.** One
-service is out, the cost of the boundary is measured rather than guessed — an
-introspection hop on every request, a two-service write that needs a
-compensation instead of a transaction, two databases to seed in step — and that
-cost is the argument for not paying it nine more times. Point at
-`services/auth/` and at the three crossings in this file; the extraction is the
-evidence, not a promise.
+What that overrode is worth keeping, because the cost it named is real and will
+be paid: the system was deliberately **eight modules in one Express process
+plus auth and notifications as separate services**, on the grounds that one
+person cannot operate ten deployments alongside coursework. That objection was
+not wrong — it is a prediction about operating the result, and nothing about
+the code refutes it. It was overruled, not disproved. Expect the compose and
+Kubernetes stacks, the seed path and CI to get materially heavier with each
+extraction, and treat that as the known price rather than a surprise.
+
+The seam itself is genuine, which is why this is feasible at all: modules never
+import each other's services, they publish domain events, and the two
+extractions already done came out without the remaining modules changing
+shape.
+
+**The cost of a boundary here is measured, not guessed, and it is now being
+paid deliberately.** Two extractions bought exact figures: an introspection hop
+on every request, a two-service write that needs a compensation because no
+transaction spans it, a `populate` that cannot cross, an event that must carry
+its audience, a broker that became load-bearing, three start-up races, and a
+database per deployable to seed in step. Those were the argument against
+extracting the rest. They are now the **estimate for doing so** — every one of
+them recurs per service, and the list is the best available prediction of what
+each extraction will cost. Point at `services/auth/` and `services/notifications/`
+for what the pattern looks like when it is finished.
 
 **Auth was the right one to extract first**, and not because it was easiest.
 It gives the gateway a real job, and it exercises the one inter-service style
@@ -414,14 +428,63 @@ Kubernetes, an API gateway, microservices, Docker, a CDN (the edge, standing in
 for one) and horizontal scaling. Nothing on this list is designed-but-absent
 any more.
 
-**Do not extract a third.** The point of two was to measure the cost of a
-boundary and to cover both inter-service styles; both are done. A third would
-be the same lesson at the same price, and the remaining candidates are worse
-seams — `ai` reads four other modules' collections and is read by two. If a
-third database is ever wanted, that is a reason to extract a service, not the
-other way round: database-per-*module* inside one process is the paperwork of
-the pattern without its benefit, and it would cost 28 cross-module imports,
-seven `populate` sites and the analytics `$lookup`.
+**Extract all of them, in this order.** Measured 30 Oct 2026 by counting
+model imports in both directions, the same way `notifications` was chosen
+rather than guessed. `internal` is the service-to-service surface, not a domain
+module, and is not extracted.
+
+| module | reads | read by | owns |
+| --- | --- | --- | --- |
+| `realtime` | nothing | **nobody** | nothing |
+| `profiles` | **nothing** | **7** | `Student`, `Company` |
+| `resumes` | 3 | 1 | `Resume` |
+| `interviews` | 4 | 1 | `Interview` |
+| `ai` | 4 | 2 | `FitScore`, `AiTask` |
+| `admin` | 4 | 4 | `AuditLog` |
+| `applications` | 4 | 4 | `Application` |
+| `jobs` | 3 | **5** | `Job` |
+
+The order follows from two findings in that table, neither of which a guess
+would have produced:
+
+1. **`realtime` first, because it costs nothing.** It owns no collection, reads
+   nothing and is read by nobody — it holds Socket.IO and that is all. It
+   establishes the pattern without a single data-ownership decision, and it is
+   the mirror of `notifications`: that service already pushes through the API's
+   Redis adapter, so moving the socket server out makes the API a publisher to
+   it too.
+2. **`profiles` second, although it is the most disruptive.** It reads nothing
+   and feeds **seven** modules, so it is a pure provider. Extracting it early
+   means every later extraction is written against a remote profiles client
+   once, instead of each one re-breaking the same edge. Left until last, the
+   same seven edges get rewritten piecemeal seven times.
+
+Then `resumes`, `interviews`, `ai` (low fan-in), then `jobs` and
+`applications` (the hot path), and **`admin` last** — see below for why it
+cannot go earlier.
+
+**Two problems to solve before the modules that depend on them move.**
+
+- **The audit trail is a write dependency, not a read one.** `admin` looks
+  read-by-4 only because four modules write `AuditLog` rows. That is already
+  solved: the auth service writes them with fire-and-forget
+  `POST /api/internal/audit`. Convert the four writers to the same call and
+  four inbound edges disappear without extracting anything.
+- **The analytics `$lookup` cannot cross databases at all**, which is why
+  `admin` goes last. There is no transport that makes a cross-database
+  aggregation work; it has to become a read model that `admin` maintains from
+  domain events. That is a redesign, not a move.
+
+**And eligibility is the hard case nobody should discover late.** The job list
+is narrowed **per student in the query** by CGPA, branch and graduation year,
+so once `profiles` is a service the `jobs` query cannot reach that data. The
+answer is this file's own rule — when a join crosses a boundary, denormalise:
+`jobs` keeps the eligibility facts it filters on, fed by a `profile.updated`
+event. A synchronous call cannot replace a query filter.
+
+For reference, the coupling all of this has to convert: **29 cross-module model
+imports** (27 static, 2 dynamic), **six `populate` call sites** and **one
+`$lookup`**, pinned by `docs:check`.
 
 Then the original list:
 
@@ -953,7 +1016,9 @@ cross-reference now says so rather than naming section 14.
 - **22 monolith-vs-microservices is done (29 Oct 2026).** It argued for the
   monolith with the extraction as future work; two services are out, so the
   argument changed in kind — the cost of a boundary is a measurement rather
-  than an estimate, and *that* is the case for not extracting the other eight.
+  than an estimate. **That section is now out of date**: as of 30 Oct 2026 the
+  remaining modules are being extracted, so its conclusion needs rewriting
+  once the first of them lands.
   The comparison gained a middle column for what actually runs, and a new
   subsection lists what a boundary cost with the symptom each produced,
   alongside **what was cheap** — which is the evidence the seam was genuine.
