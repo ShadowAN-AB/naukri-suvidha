@@ -28,7 +28,7 @@ npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
                           # writes BOTH databases - see AUTH_MONGODB_URI
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
-npm run docs:check        # 82 claims the design doc makes about this repo
+npm run docs:check        # 86 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -869,7 +869,8 @@ record.
 Retargeted and trustworthy — sections 1 existing system, 2 problems,
 4 services, 6 Redis, 7 message broker, 8 data, 9 résumé/AI, 10 workflows,
 11 notifications, 12 security, **15 observability**, 17 diagrams,
-18 sequence diagrams, 20 decisions, 23 summary, and the README.
+18 sequence diagrams, 20 decisions, **22 monolith-vs-microservices**,
+23 summary, and the README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
 keys, service names that do not exist here: sections 3, 5, 13, 14, 16, 19
@@ -898,12 +899,20 @@ than leaving the two sections to disagree quietly.
 
 **Step 5 changed what several sections have to say, so they need a pass:**
 
-- **22 monolith-vs-microservices was trustworthy and is now wrong.** It argued
-  for a modular monolith with the extraction hypothetical. One service is out,
-  so the argument has to become the stronger one: the seam was used, the cost
-  of crossing it is measured rather than guessed, and *that* is the reason not
-  to pay it nine more times. This is the section most likely to be asked about
-  in a viva — it should not still say the extraction is future work.
+- **22 monolith-vs-microservices is done (29 Oct 2026).** It argued for the
+  monolith with the extraction as future work; two services are out, so the
+  argument changed in kind — the cost of a boundary is a measurement rather
+  than an estimate, and *that* is the case for not extracting the other eight.
+  The comparison gained a middle column for what actually runs, and a new
+  subsection lists what a boundary cost with the symptom each produced,
+  alongside **what was cheap** — which is the evidence the seam was genuine.
+
+  Four claims pin it, and one of them caught a figure that had **already**
+  rotted: the section said seven `populate` call sites where the audit-log fix
+  had left six, and 28 cross-module imports where there are 29. The figures are
+  six, 29 and one `$lookup` now, pinned and verified to fail by removing a
+  `populate`. The lesson is the one this list keeps relearning — a number
+  written from memory of a number is wrong by the time it is published.
 - **5, 13, 14 and 16 describe the target architecture**, which is why they
   were worth doing after this step rather than before. Two services, two
   databases, a gateway doing `auth_request`, and the three crossings in this
@@ -915,10 +924,11 @@ than leaving the two sections to disagree quietly.
 - **4 services** should name the two that actually exist and say which nine
   modules are still in the one process.
 
-**`npm run docs:check` pins the retargeted sections to the code** — 82
+**`npm run docs:check` pins the retargeted sections to the code** — 86
 claims over routes, indexes, constants, the event topology, the counts the
-document states in prose, what observability is and is not, and the
-document-wide invariants. It runs in CI. A renamed route or a dropped index fails there
+document states in prose, what observability is and is not, the figures the
+monolith-vs-microservices argument rests on, and the document-wide
+invariants. It runs in CI. A renamed route or a dropped index fails there
 and names the section whose prose has just become fiction. It does not read
 the document (it cannot — that lives in an artifact); it checks that what
 the document says is still true.
