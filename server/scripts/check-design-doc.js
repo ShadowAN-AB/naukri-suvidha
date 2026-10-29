@@ -407,18 +407,32 @@ const claims = [
       if (r.error || r.status === null) return false;
       return r.status === 1;
     }],
-  ['§14', 'the shared rate limiter still does not fail open (a stated gap)',
-    // An absence claim pinning a *gap* rather than a feature, which is the
-    // only way prose about a known defect stays honest. express-rate-limit
-    // defaults `passOnStoreError` to false, so with Redis unreachable the
-    // store rejects and the request becomes a 500 - measured against a dead
-    // port. Setting the option is the fix; doing so must rewrite §14.9.
+  ['§14', 'the rate limiter degrades to a per-process counter, not to no limit',
+    // Both halves matter and the absence half is the easier one to lose.
+    // `passOnStoreError: true` is the one-line "fix" that makes a Redis
+    // outage mean *unlimited* password guessing on /login - the limiter
+    // stops failing requests by stopping being a limiter. §14.4 says the
+    // outage degrades a shared limit to a per-process one, so the fallback
+    // store has to be there AND that option has to stay away.
     () => {
+      // Scoped to the two files that construct limiters, which is the only
+      // place the option has any effect - and it has to be scoped, because
+      // `rateLimitStore.js` explains in prose why the option is banned. A
+      // grep over all of src counted that explanation as a violation, which
+      // is how this claim failed on the commit that introduced it. Same
+      // lesson as §15's package.json-only search: an absence claim has to
+      // search where the thing would *act*, not where it is discussed.
       const r = spawnSync('git', ['grep', '-l', 'passOnStoreError', '--',
-        'server/src', 'services', 'service-kit/src'],
+        'server/src/app.js', 'services/*/src/rateLimit.js'],
         { cwd: root, encoding: 'utf8' });
       if (r.error || r.status === null) return false;
-      return r.status === 1;
+      if (r.status !== 1) return false; // the option is in use: §14.4 is wrong
+      return has(`${KIT}/rateLimitStore.js`, 'class FallbackRateLimitStore')
+          && has(`${KIT}/redis.js`, 'new FallbackRateLimitStore(')
+          // Gating on the connection state rather than on a failed command is
+          // what keeps an outage from costing ~15s a request, which was long
+          // enough for the limiter's own window to expire underneath it.
+          && has(`${KIT}/redis.js`, "status === 'ready'");
     }],
   ['§14', 'liveness is a TCP check in all three Deployments, readiness is HTTP',
     // The section's central probe argument: liveness failing means "kill this

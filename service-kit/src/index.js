@@ -39,6 +39,7 @@ export {
 } from './constants.js';
 export { createIdentity, requireRole } from './identity.js';
 export { createRedis } from './redis.js';
+export { FallbackRateLimitStore } from './rateLimitStore.js';
 export {
   EVENTS,
   EVENT_DELIVERY_STATUS,

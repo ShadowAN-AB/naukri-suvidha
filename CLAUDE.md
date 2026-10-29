@@ -16,8 +16,8 @@ and should not be re-litigated without a reason.
 
 ```bash
 npm run dev            # client :5173, API :5001, auth :5002, notif :5003
-npm test               # 176 tests over three suites, needs a local mongod
-                       # (= api 135 + auth 28 + notifications 13; a standalone
+npm test               # 183 tests over three suites, needs a local mongod
+                       # (= api 142 + auth 28 + notifications 13; a standalone
                        #  mongod exercises the no-transaction path, CI's
                        #  replica set exercises the outbox)
 npm run test:api          # the API's suite alone
@@ -155,18 +155,39 @@ parallel toy.
 per-process rate limiter, sockets held in one process. That is right for one
 instance and quietly wrong for two, which is the whole reason step 2 exists.
 With it set, three things become shared — the cache (`infra/cache/redis.js`),
-the rate-limit counters, and the Socket.IO adapter. A Redis failure should
-always be a miss or a warning, never a failed request: a cache that takes the
-request down with it is worse than no cache.
+the rate-limit counters, and the Socket.IO adapter. A Redis failure is always
+a miss or a warning, never a failed request: a cache that takes the request
+down with it is worse than no cache.
 
-**The cache obeys that rule and the rate limiter does not.** Measured on
-29 Oct 2026 against a dead port: with `REDIS_URL` set and Redis unreachable,
-the limiter's store rejects after `maxRetriesPerRequest` and the request
-becomes a **500**, because `express-rate-limit` defaults `passOnStoreError`
-to `false` and nothing here overrides it. So the rule above is an intention at
-that one call site rather than a property. It is one option to fix, the
-reliability section states it as a known gap, and `docs:check` pins the gap —
-setting the option fails the build until the prose is rewritten.
+**The limiter obeys that rule now, and it took two wrong fixes** (29 Oct 2026).
+It used to answer **500** on a login when Redis was configured and
+unreachable, because `express-rate-limit` turns a rejected store into a
+rejected request. Both obvious repairs were wrong, and the second is the one
+worth remembering:
+
+- **`passOnStoreError: true`** lets the request through *unlimited*, so a Redis
+  outage would mean unbounded password guessing on `/login`. It stops failing
+  requests by stopping being a limiter. **Never set it** — `docs:check` pins
+  its absence.
+- **Try Redis, fall back when it throws** cost **~15s per request** against a
+  dead port, waiting out `maxRetriesPerRequest`. Worse, five increments at 15s
+  is 75s against a 60s window, so the window expired and the counter reset —
+  **the limit stopped biting at all**. A fallback that is slower than its own
+  window is not a fallback.
+
+What works is gating on `getRedis()?.status === 'ready'`, which ioredis
+already tracks and which costs nothing to read: not ready means count in
+process immediately rather than issue a command that will time out, with a
+try/catch underneath for the ready-but-failing race. Recovery needs no probe —
+ioredis returns to `ready` itself and `rate-limit-redis` reloads its Lua
+script on the next call. Measured after: seven bad logins with Redis away give
+`401`×5 then `429`×2, six increments in **0ms**, and two stores on a live
+Redis share one counter. `service-kit/src/rateLimitStore.js` carries the
+reasoning and the numbers.
+
+**The general lesson, because it generalises past this one file:** a fallback
+has to be measured on the path that uses it. Both wrong fixes would pass any
+test asking only "is the request served".
 
 **Kafka is optional too, and what it buys is narrower than it looks.** With
 `KAFKA_BROKERS` set, a domain event is produced to a topic named after it and
@@ -421,14 +442,7 @@ Then the original list:
 3. **Rehearse the demo twice**, once with Ollama stopped — `DEMO.md`.
 4. **20 real résumés** into `server/test/fixtures/`, then `npm run resumes:check`.
    Extraction is tuned against clean text; real résumés are two-column or scanned.
-5. **Make the shared rate limiter fail open.** One option —
-   `passOnStoreError: true` on all three limiters — and the only item on this
-   list that is a defect rather than unbuilt work: with Redis configured and
-   unreachable, a login answers **500** instead of falling back, which breaks
-   the rule under "Redis is optional" above. Measured 29 Oct 2026 against a
-   dead port. `docs:check` pins the gap, so the fix must also rewrite the
-   reliability section's prose.
-6. Optional: a UI for semantic search (API-only today), and Atlas `$vectorSearch`
+5. Optional: a UI for semantic search (API-only today), and Atlas `$vectorSearch`
    (written, untested — a standalone mongod rejects it).
 
 ---
@@ -920,13 +934,15 @@ which are real and measured, rather than high availability, which is not.
 **Nine claims pin it, four of them absence claims**, each verified to fail by
 planting a violation.
 
-One of those absence claims pins a *gap* rather than a feature, which is the
-only way prose about a known defect stays honest: `passOnStoreError` must stay
-unset, because the section states that the shared rate limiter **does not fail
-open**. That was measured while writing it and is a real contradiction of this
-file's own rule that a Redis failure is always a miss or a warning and never a
-failed request — stated in full under "Redis is optional" above. Fixing the
-code must rewrite the prose, and the claim is what forces that.
+Writing it turned up a real defect, by measuring rather than reading: the
+shared rate limiter answered **500** when Redis was configured and
+unreachable, breaking this file's own rule about Redis failures. **That is now
+fixed** — see "Redis is optional" above for the two wrong fixes it took, which
+are the part worth remembering. `passOnStoreError` must stay unset, and one of
+the nine claims pins its absence, because setting it would make an outage mean
+no limit at all. The section's new closing subsection keeps the measurements,
+since the second wrong fix passed every test that asked only whether the
+request was served.
 
 `/healthz` and `/readyz` still appear in **13 scalability** and
 **16 deployment**, which are not yet retargeted; the observability section's
@@ -984,7 +1000,7 @@ Three document-wide errors are fixed and worth not reintroducing:
   and §23 fails the build. Both are now counted **across all three services**,
   which matters: the API's barrel holds twelve collections and the auth
   service's two, and counting only the API's would silently "lose" two that
-  simply moved. The test *count* (**176** = 135 API + 28 auth + 13
+  simply moved. The test *count* (**183** = 142 API + 28 auth + 13
   notifications) is not pinned — counting it needs a run — so it is still
   worth checking by eye, and §1 was found carrying 131 across 11 files on
   29 Oct 2026 while §22 already said 176. A pinned file count cannot catch
