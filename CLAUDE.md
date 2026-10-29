@@ -28,7 +28,7 @@ npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
                           # writes BOTH databases - see AUTH_MONGODB_URI
 npm run seed:resumes      # 10 varied résumés + embeddings, for search
 npm run resumes:check     # extraction report over server/test/fixtures/
-npm run docs:check        # 74 claims the design doc makes about this repo
+npm run docs:check        # 82 claims the design doc makes about this repo
 
 npm run docker:up         # the whole stack in containers, on :8080
 npm run docker:seed       # seed the containerised mongo (one shot)
@@ -868,12 +868,33 @@ record.
 
 Retargeted and trustworthy — sections 1 existing system, 2 problems,
 4 services, 6 Redis, 7 message broker, 8 data, 9 résumé/AI, 10 workflows,
-11 notifications, 12 security, 17 diagrams, 18 sequence diagrams,
-20 decisions, 23 summary, and the README.
+11 notifications, 12 security, **15 observability**, 17 diagrams,
+18 sequence diagrams, 20 decisions, 23 summary, and the README.
 
 Still carrying the other project's inventory — endpoints, collections, Redis
-keys, service names that do not exist here: sections 3, 5, 13, 14, 15, 16,
-19 and 21.
+keys, service names that do not exist here: sections 3, 5, 13, 14, 16, 19
+and 21.
+
+**Observability was the worst of them and is done (29 Oct 2026).** It opened
+by claiming "the current repo has `console.log`" — never true — and then
+specified Prometheus, Grafana, Loki, promtail, OpenTelemetry, Tempo, Sentry
+and burn-rate alerting, none of which exist. It is now split into what is
+built and what is not, and **eight claims pin it**, including two *absence*
+claims that fail the build if anyone adds `prom-client`, `@sentry/*`, an
+OpenTelemetry SDK, or an application `/metrics` route without rewriting the
+prose. Both were verified to fail by planting a violation, because an absence
+claim that cannot bite is worse than none.
+
+It also records the one thing that misleads a grep: `@opentelemetry/api` **is**
+in `package-lock.json`, transitively via `vitest` and the Anthropic SDK, and
+instruments nothing. The pinned claim deliberately searches only
+`package.json` files for that reason.
+
+While writing it, one contradiction surfaced that is **not** fixed: the
+Reliability & Fault Tolerance section still specifies `/healthz` and `/readyz`,
+where the four endpoints that exist are `/api/health`, `/api/ai/health` and
+the two services' `/health`. The observability section says so out loud rather
+than leaving the two sections to disagree quietly.
 
 **Step 5 changed what several sections have to say, so they need a pass:**
 
@@ -894,9 +915,10 @@ keys, service names that do not exist here: sections 3, 5, 13, 14, 15, 16,
 - **4 services** should name the two that actually exist and say which nine
   modules are still in the one process.
 
-**`npm run docs:check` pins the retargeted sections to the code** — 72
+**`npm run docs:check` pins the retargeted sections to the code** — 82
 claims over routes, indexes, constants, the event topology, the counts the
-document states in prose, and the document-wide invariants. It runs in CI. A renamed route or a dropped index fails there
+document states in prose, what observability is and is not, and the
+document-wide invariants. It runs in CI. A renamed route or a dropped index fails there
 and names the section whose prose has just become fiction. It does not read
 the document (it cannot — that lives in an artifact); it checks that what
 the document says is still true.
