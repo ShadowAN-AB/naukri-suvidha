@@ -17,8 +17,8 @@
  *   npm run docs:check
  *
  * Sections covered: §6 Redis, §9 résumé/AI, §11 notifications,
- * §15 observability, §18 sequence diagrams, §22 monolith-vs-microservices,
- * plus the document-wide invariants.
+ * §14 reliability & fault tolerance, §15 observability, §18 sequence diagrams,
+ * §22 monolith-vs-microservices, plus the document-wide invariants.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -362,6 +362,113 @@ const claims = [
        && ["NOTIFICATION_NEW: 'notification:new'", "APPLICATION_STATUS: 'application:status'",
            "RESUME_PROCESSED: 'resume:processed'"]
          .every((e) => has(`${KIT}/constants.js`, e))],
+
+  // ---- §14 reliability & fault tolerance ----------------------------------
+  // Retargeted 29 Oct 2026. This section had the most checkably wrong fact in
+  // the document - it specified `/healthz` and `/readyz`, which this repository
+  // has never served - and around that it described circuit breakers, an
+  // `X-Deadline-Ms` header, `X-Degraded`, PodDisruptionBudgets, anti-affinity,
+  // a three-node replica set, a Redis cluster and three brokers. None of it
+  // exists, so four of the nine claims below are *absence* claims: adding any
+  // of those things makes the section's prose false, and the section is worth
+  // nothing if it cannot be trusted about what the system does not do.
+  ['§14', 'no /healthz or /readyz is served anywhere',
+    () => {
+      // The whole reason this section was next. If someone adds either path,
+      // the section's correction ("this repository has never served either")
+      // becomes a lie and the probe matrix is wrong too.
+      const r = spawnSync('git', ['grep', '-l', '-E', 'healthz|readyz', '--',
+        'server/src', 'services', 'client/src', 'infra', 'service-kit/src',
+        'docker-compose.yml', ':!server/scripts/check-design-doc.js'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false; // git missing
+      return r.status === 1;                          // no matches: clean
+    }],
+  ['§14', 'no circuit breaker, deadline header or degraded header exists',
+    () => {
+      // `deadline` on its own is excluded deliberately: a Job has an
+      // application deadline, which is a different sense of the word and
+      // would make this claim fail on an unrelated field.
+      const r = spawnSync('git', ['grep', '-l', '-E',
+        'opossum|CircuitBreaker|X-Deadline|x-deadline|X-Degraded|x-degraded',
+        '--', 'server/src', 'services', 'client/src', 'infra', 'service-kit/src',
+        'package.json', '*/package.json', 'services/*/package.json'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false;
+      return r.status === 1;
+    }],
+  ['§14', 'no PodDisruptionBudget and no anti-affinity rule exist',
+    // §14.7 says pod spread is a *preference* and that there are no budgets.
+    // Adding either would make the redundancy table understate the system.
+    () => {
+      const r = spawnSync('git', ['grep', '-l', '-E',
+        'PodDisruptionBudget|podAntiAffinity|affinity:', '--', 'infra'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false;
+      return r.status === 1;
+    }],
+  ['§14', 'the shared rate limiter still does not fail open (a stated gap)',
+    // An absence claim pinning a *gap* rather than a feature, which is the
+    // only way prose about a known defect stays honest. express-rate-limit
+    // defaults `passOnStoreError` to false, so with Redis unreachable the
+    // store rejects and the request becomes a 500 - measured against a dead
+    // port. Setting the option is the fix; doing so must rewrite §14.9.
+    () => {
+      const r = spawnSync('git', ['grep', '-l', 'passOnStoreError', '--',
+        'server/src', 'services', 'service-kit/src'],
+        { cwd: root, encoding: 'utf8' });
+      if (r.error || r.status === null) return false;
+      return r.status === 1;
+    }],
+  ['§14', 'liveness is a TCP check in all three Deployments, readiness is HTTP',
+    // The section's central probe argument: liveness failing means "kill this
+    // container", so pointing it at a dependency check would turn one mongo
+    // blip into a restart of every replica at once.
+    () => [['infra/k8s/api.yaml', '/api/health'],
+           ['infra/k8s/auth.yaml', '/health'],
+           ['infra/k8s/notifications.yaml', '/health']]
+      .every(([f, path]) => /livenessProbe:\s*\n(?:\s*#[^\n]*\n)*\s*tcpSocket:/.test(read(f))
+                         && has(f, `path: ${path}`))],
+  ['§14', 'rolling updates are maxUnavailable: 0 with a 5s preStop, and the '
+        + 'notifications grace period is the longest',
+    () => ['infra/k8s/api.yaml', 'infra/k8s/auth.yaml', 'infra/k8s/notifications.yaml']
+      .every((f) => has(f, 'maxUnavailable: 0') && has(f, "'sleep 5'"))
+       && has('infra/k8s/api.yaml', 'terminationGracePeriodSeconds: 30')
+       && has('infra/k8s/auth.yaml', 'terminationGracePeriodSeconds: 30')
+       // 45, because a SIGTERM can land mid-handler and leaving the consumer
+       // group cleanly is what stops the survivor waiting out a session
+       // timeout before it takes the partitions.
+       && has('infra/k8s/notifications.yaml', 'terminationGracePeriodSeconds: 45')],
+  ['§14', 'the three retry queues keep the attempt caps and curves §14.3 states',
+    () => has(`${EV}/outboxWorker.js`, 'const MAX_PUBLISH_ATTEMPTS = 10')
+       // 2s floor, 60s ceiling: the fast path for every event.
+       && has(`${EV}/outboxWorker.js`, '60_000')
+       && has(`${KIT}/events.js`, 'MAX_DELIVERY_ATTEMPTS = 5')
+       // 10s, 20s, 40s, 80s, 160s under a ten-minute ceiling: a long-stop.
+       && has(`${KIT}/events.js`, 'BASE_MS = 5_000')
+       && has(`${KIT}/events.js`, 'CEILING_MS = 10 * 60_000')
+       && /AI_TASK_MAX_ATTEMPTS:[^\n]*default\(3\)/.test(read('server/src/config/env.js'))],
+  ['§14', 'the timeouts §14.2 tabulates are the ones in the code',
+    () => /AUTH_SERVICE_TIMEOUT_MS:[^\n]*default\(2000\)/.test(read('server/src/config/env.js'))
+       && /AI_TIMEOUT_MS:[^\n]*default\(30_000\)/.test(read('server/src/config/env.js'))
+       && ['server/src/config/db.js', `${AUTH}/db.js`, `${NOT}/db.js`]
+            .every((f) => has(f, 'serverSelectionTimeoutMS: 10_000'))
+       && has(`${KIT}/redis.js`, 'maxRetriesPerRequest: 2')
+       // The 2s introspection subrequest, in both edges: the one synchronous
+       // crossing on the request path, and the tightest budget in the system.
+       && ['infra/nginx/default.conf.template', 'infra/k8s/edge-nginx.conf.template']
+            .every((f) => /proxy_read_timeout\s+2s;/.test(read(f))
+                       && /proxy_read_timeout\s+3600s;/.test(read(f)))],
+  ['§14', 'the data tier is one instance each, and the replica set is single-node',
+    // §14.7's headline: below the application tier nothing is redundant. The
+    // replica set exists for transactions, not availability - one node.
+    () => ['infra/k8s/mongo.yaml', 'infra/k8s/redis.yaml', 'infra/k8s/kafka.yaml']
+      .every((f) => has(f, 'replicas: 1'))
+       && has('infra/k8s/mongo.yaml', "'--replSet', 'rs0'")
+       && has('docker-compose.yml', "'--replSet', 'rs0'")
+       // A preference, not a rule: on one cold bring-up it held, on another
+       // all four pods landed on one node. Both are correct behaviour.
+       && has('infra/k8s/api.yaml', 'whenUnsatisfiable: ScheduleAnyway')],
 
   // ---- §15 observability --------------------------------------------------
   // Retargeted 29 Oct 2026. It was the last section describing a stack that is
