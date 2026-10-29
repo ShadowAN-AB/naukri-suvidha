@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 800" width="1180" height="800"
+     role="img"
+     aria-label="Naukri Suvidha microservices architecture. Panel one: a browser reaches a single nginx edge, which routes four prefixes to four services and runs an auth_request subrequest against the auth service on every API request; three services own their own database and the realtime service owns none. Panel two: the API produces domain events to Kafka, the notifications service consumes them and publishes a push to Redis, and the realtime service delivers it to the browser's socket.">
+  <style>
+    .t   { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; fill: #1f2937; }
+    .ttl { font-size: 21px; font-weight: 700; }
+    .sub { font-size: 12px; fill: #64748b; }
+    .pan { font-size: 13.5px; font-weight: 700; fill: #334155; }
+    .bt  { font-size: 13px; font-weight: 700; }
+    .bs  { font-size: 10.5px; fill: #475569; }
+    .lbl { font-size: 10.5px; fill: #334155; }
+    .acc { font-size: 10.5px; fill: #b91c1c; font-weight: 700; }
+    .box { fill: #ffffff; stroke: #334155; stroke-width: 1.6; }
+    .edg { fill: #ecfdf5; stroke: #047857; stroke-width: 2; }
+    .cli { fill: #eff6ff; stroke: #0369a1; stroke-width: 1.6; }
+    .dat { fill: #fdf2f8; stroke: #be185d; stroke-width: 1.6; }
+    .inf { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.6; }
+    .non { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .ar  { stroke: #334155; stroke-width: 1.6; fill: none; }
+    .ard { stroke: #334155; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+    .arr { stroke: #b91c1c; stroke-width: 2.2; fill: none; }
+    .arp { stroke: #7c3aed; stroke-width: 1.8; fill: none; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/>
+    </marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="800" fill="#ffffff"/>
+
+  <text class="t ttl" x="40" y="38">Naukri Suvidha — microservices architecture</text>
+  <text class="t sub" x="40" y="58">Four deployables behind one API gateway. Three services were extracted from the API; three own a database no other service can connect to.</text>
+
+  <!-- ============ PANEL A ============ -->
+  <text class="t pan" x="40" y="92">1 · The request path — one entry, prefix routing, and authentication at the edge</text>
+
+  <!-- browser -->
+  <rect class="cli" x="40" y="215" width="150" height="66" rx="6"/>
+  <text class="t bt" x="115" y="243" text-anchor="middle">Browser</text>
+  <text class="t bs" x="115" y="261" text-anchor="middle">React SPA</text>
+
+  <!-- edge -->
+  <rect class="edg" x="250" y="110" width="140" height="300" rx="6"/>
+  <text class="t bt" x="320" y="238" text-anchor="middle">edge</text>
+  <text class="t bs" x="320" y="256" text-anchor="middle">nginx</text>
+  <text class="t bs" x="320" y="276" text-anchor="middle">API gateway</text>
+  <text class="t bs" x="320" y="292" text-anchor="middle">+ static host</text>
+  <text class="t bs" x="320" y="318" text-anchor="middle" font-weight="700">the only</text>
+  <text class="t bs" x="320" y="332" text-anchor="middle" font-weight="700">published port</text>
+
+  <line class="ar" x1="190" y1="248" x2="246" y2="248" marker-end="url(#a)"/>
+  <text class="t lbl" x="218" y="240" text-anchor="middle">HTTPS</text>
+
+  <!-- services -->
+  <rect class="box" x="470" y="110" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="134">api</text>
+  <text class="t bs" x="485" y="152">seven domain modules</text>
+  <text class="t bs" x="485" y="165">+ internal surface</text>
+
+  <rect class="box" x="470" y="202" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="226">auth</text>
+  <text class="t bs" x="485" y="244">accounts · sessions</text>
+  <text class="t bs" x="485" y="257">refresh rotation</text>
+
+  <rect class="box" x="470" y="294" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="318">realtime</text>
+  <text class="t bs" x="485" y="336">every Socket.IO</text>
+  <text class="t bs" x="485" y="349">connection</text>
+
+  <rect class="box" x="470" y="386" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="410">notifications</text>
+  <text class="t bs" x="485" y="428">the inbox —</text>
+  <text class="t bs" x="485" y="441">built from events</text>
+
+  <!-- edge -> services -->
+  <line class="ar" x1="390" y1="141" x2="466" y2="141" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="134">/api/*</text>
+
+  <line class="ar" x1="390" y1="215" x2="466" y2="215" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="208">/api/auth/*</text>
+
+  <line class="arr" x1="390" y1="250" x2="466" y2="250" marker-end="url(#ar)"/>
+  <text class="t acc" x="394" y="268">auth_request</text>
+  <text class="t acc" x="394" y="281">every /api request</text>
+
+  <line class="ard" x1="390" y1="325" x2="466" y2="325" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="318">/socket.io</text>
+
+  <line class="ar" x1="390" y1="417" x2="466" y2="417" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="410">/api/notifications/*</text>
+
+  <!-- crossings between services -->
+  <line class="ar" x1="560" y1="198" x2="560" y2="176" marker-end="url(#a)"/>
+  <text class="t lbl" x="570" y="190">profiles · audit</text>
+
+  <line class="ar" x1="620" y1="290" x2="620" y2="268" marker-end="url(#a)"/>
+  <text class="t lbl" x="630" y="282">introspect handshake</text>
+
+  <!-- databases -->
+  <rect class="dat" x="790" y="110" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="134">naukri_suvidha</text>
+  <text class="t bs" x="805" y="152">11 collections — jobs, applications,</text>
+  <text class="t bs" x="805" y="165">students, resumes, fitScores …</text>
+
+  <rect class="dat" x="790" y="202" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="226">naukri_suvidha_auth</text>
+  <text class="t bs" x="805" y="244">users · refreshTokens</text>
+  <text class="t bs" x="805" y="257">the API has no connection to this</text>
+
+  <rect class="non" x="790" y="294" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="318" fill="#64748b">no database</text>
+  <text class="t bs" x="805" y="336">owns no data — live connections</text>
+  <text class="t bs" x="805" y="349">are state in memory</text>
+
+  <rect class="dat" x="790" y="386" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="410">naukri_suvidha_notifications</text>
+  <text class="t bs" x="805" y="428">notifications</text>
+  <text class="t bs" x="805" y="441">written only from domain events</text>
+
+  <line class="ar" x1="700" y1="141" x2="786" y2="141" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="134" text-anchor="middle">owns</text>
+  <line class="ar" x1="700" y1="233" x2="786" y2="233" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="226" text-anchor="middle">owns</text>
+  <line class="ar" x1="700" y1="417" x2="786" y2="417" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="410" text-anchor="middle">owns</text>
+
+  <text class="t sub" x="40" y="482">The red hop is what makes the edge a gateway rather than a proxy: it introspects the token against the auth service, so the API verifies none and</text>
+  <text class="t sub" x="40" y="498">can still refuse a suspended account. No arrow runs from api to auth — that call left with the sockets when realtime was extracted.</text>
+
+  <!-- ============ PANEL B ============ -->
+  <line x1="40" y1="528" x2="1140" y2="528" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text class="t pan" x="40" y="560">2 · The event and push path — nothing that publishes a notification holds a socket</text>
+
+  <rect class="box" x="40" y="610" width="150" height="66" rx="6"/>
+  <text class="t bt" x="115" y="636" text-anchor="middle">api</text>
+  <text class="t bs" x="115" y="655" text-anchor="middle">commits job + event</text>
+  <text class="t bs" x="115" y="668" text-anchor="middle">in one transaction</text>
+
+  <rect class="inf" x="250" y="610" width="170" height="66" rx="6"/>
+  <text class="t bt" x="335" y="636" text-anchor="middle">Kafka</text>
+  <text class="t bs" x="335" y="655" text-anchor="middle">7 domain events, one</text>
+  <text class="t bs" x="335" y="668" text-anchor="middle">group per subscriber</text>
+
+  <rect class="box" x="480" y="610" width="180" height="66" rx="6"/>
+  <text class="t bt" x="570" y="636" text-anchor="middle">notifications</text>
+  <text class="t bs" x="570" y="655" text-anchor="middle">writes the row in its</text>
+  <text class="t bs" x="570" y="668" text-anchor="middle">own database</text>
+
+  <rect class="inf" x="720" y="610" width="160" height="66" rx="6"/>
+  <text class="t bt" x="800" y="636" text-anchor="middle">Redis</text>
+  <text class="t bs" x="800" y="655" text-anchor="middle">Socket.IO adapter</text>
+  <text class="t bs" x="800" y="668" text-anchor="middle">channel</text>
+
+  <rect class="box" x="940" y="610" width="180" height="66" rx="6"/>
+  <text class="t bt" x="1030" y="636" text-anchor="middle">realtime</text>
+  <text class="t bs" x="1030" y="655" text-anchor="middle">holds the socket,</text>
+  <text class="t bs" x="1030" y="668" text-anchor="middle">delivers the emit</text>
+
+  <line class="arp" x1="190" y1="643" x2="246" y2="643" marker-end="url(#ap)"/>
+  <text class="t lbl" x="218" y="635" text-anchor="middle">produces</text>
+  <line class="arp" x1="420" y1="643" x2="476" y2="643" marker-end="url(#ap)"/>
+  <text class="t lbl" x="448" y="635" text-anchor="middle">consumes</text>
+  <line class="arp" x1="660" y1="643" x2="716" y2="643" marker-end="url(#ap)"/>
+  <text class="t lbl" x="688" y="635" text-anchor="middle">publishes</text>
+  <line class="arp" x1="880" y1="643" x2="936" y2="643" marker-end="url(#ap)"/>
+  <text class="t lbl" x="908" y="635" text-anchor="middle">delivers</text>
+
+  <path class="ard" d="M1030 610 L1030 586 L1150 586" marker-end="url(#a)"/>
+  <text class="t lbl" x="1148" y="578" text-anchor="end">to the browser’s socket</text>
+
+  <text class="t sub" x="40" y="716">The notifications service has no Socket.IO server and the realtime service produces no content. Neither knows the other exists — Redis is the</text>
+  <text class="t sub" x="40" y="732">only thing between them, and it is the same adapter added so a second API replica could not break pushes.</text>
+
+  <text class="t sub" x="40" y="768">Also running, not drawn: MongoDB as a single-node replica set (for transactions), the Redis shared cache and rate-limit counters, and the whole</text>
+  <text class="t sub" x="40" y="784">stack on Kubernetes with an autoscaler taking the API from 2 to 6 pods on CPU. Seven domain modules remain inside the api process.</text>
+</svg>
