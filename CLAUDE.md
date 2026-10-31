@@ -16,10 +16,11 @@ and should not be re-litigated without a reason.
 
 ```bash
 npm run dev            # client :5173, API :5001, auth :5002, notif :5003,
-                       # realtime :5004
-npm test               # 190 tests over four suites, needs a local mongod
-                       # (= api 142 + auth 28 + notif 13 + realtime 7, which
-                       #  needs no database at all; a standalone
+                       # realtime :5004, email :5005
+npm test               # 202 tests over five suites, needs a local mongod
+                       # (= api 142 + auth 34 + notif 13 + realtime 7 + email 6;
+                       #  realtime needs no database at all;
+                       #  a standalone
                        #  mongod exercises the no-transaction path, CI's
                        #  replica set exercises the outbox)
 npm run test:api          # the API's suite alone
@@ -57,17 +58,20 @@ three services' endpoints are in-cluster only in both container stacks.
 
 ## The decisions that matter
 
-**Three services out, and the split is paused there.** 30 Oct 2026: Abdullah
-asked for full microservices, and the reason turned out to be a project
-evaluation within the week. Once that was clear the plan changed on purpose —
-what an evaluation needs is a microservices architecture that **runs and can be
-demonstrated**, which this already is, not a larger service count arrived at by
-dismantling a working system under deadline. `realtime` was extracted before
-that came to light and stays; `profiles` was measured and not started.
+**Four services out, with the fourth deliberately out of the measured order.**
+31 Oct 2026: Abdullah asked for a fourth service that **sends email** to
+students for scheduled interviews - the specific use case his teacher wanted
+to see at the evaluation. That is `services/email/`, added as a pure Kafka
+consumer with its own database, calling the auth service for the recipient
+email (the fourth crossing, documented above). It took three previous services
+out in the measured order (auth, notifications, realtime); this one was out of
+order, for a specific demonstration, and the record says so.
 
-So: **do not extract a fourth without being asked.** The measured order below
-is kept for whenever it resumes, and nothing about it has been invalidated.
-Equally, **do not revert the three that are out** — they are what makes the
+So: **do not extract a fifth without being asked**, and do not read `email` as
+permission to resume the full split. The measured order below is for the seven
+remaining modules and is still correct; `email` was a module nobody had ever
+written, so it slots in beside them rather than consuming one of their rows.
+Equally, **do not revert the four that are out** — they are what makes the
 architecture demonstrable rather than described.
 
 What that overrode is worth keeping, because the cost it named is real and will
@@ -283,21 +287,24 @@ push originates in another process. Same shape as the broker for
 notifications, one layer out: extracting a component makes the transport
 under it load-bearing.
 
-Exactly **three crossings** exist, and the list is the whole price of the
-boundary. Adding a fourth needs the same test the first three passed: a
-specific piece of data lives on the other side and the caller has no way to
-reach it.
+**Four crossings** exist as of 31 Oct 2026, and the list is still the whole
+price of the boundaries. The first three passed a specific test: a piece of
+data lives on the other side and the caller has no way to reach it. The
+fourth passes the same test for the same reason - the email service needs the
+student's email, which only auth owns.
 
 | | | |
 | --- | --- | --- |
 | `auth → API` | `POST /api/internal/profiles` | synchronous. A Student or Company is the API's, so registration is a write in two services with no transaction spanning them — write the user, ask for the profile, **delete the user if the API refuses**. A compensation, not a rollback. |
 | `auth → API` | `POST /api/internal/audit` | fire-and-forget. A sign-in still belongs in the placement office's trail. Crossing a boundary did not change what the write is worth, so a failure is logged and swallowed exactly as it was. |
 | `realtime → auth` | `POST /internal/introspect` | the socket handshake only. It carries its token in the Socket.IO connection payload and `/socket.io` is proxied straight through, so it is the one entry point no gateway can authenticate. **This was `API → auth` until the realtime extraction**: the API made the call only because it hosted the socket server, so it moved with the sockets and the API now talks to the auth service not at all. |
+| `email → auth` | `GET\|POST /internal/users/:id/email` | synchronous, and the fourth crossing. Student emails live in `naukri_suvidha_auth.users` and nowhere else; `Student.userId` has no `ref` on purpose (the API has no connection that could `populate()` it). So the service that sends email asks the service that owns the address. Note what this does **not** do: the API still calls auth not at all - the one line that was expensive to get back and would be expensive to lose. |
 
-A fourth was written and then deleted: the admin dashboard's `users` count. The
-figure was computed and never rendered — the dashboard shows four tiles and
-that was not one of them. **A crossing added for a number nobody displays is a
-dependency bought for nothing.**
+A different fourth was written and then deleted: the admin dashboard's `users`
+count. The figure was computed and never rendered — the dashboard shows four
+tiles and that was not one of them. **A crossing added for a number nobody
+displays is a dependency bought for nothing.** The email crossing is not that
+shape - every send genuinely needs the lookup.
 
 **The gateway authenticates; the API does not.** `IDENTITY_MODE` picks one of
 two strategies behind one interface, the same shape as `infra/cache`:
@@ -1099,5 +1106,11 @@ Three document-wide errors are fixed and worth not reintroducing:
   worth checking by eye, and §1 was found carrying 131 across 11 files on
   29 Oct 2026 while §22 already said 176. A pinned file count cannot catch
   that: `docs:check` reads the code, never the document's prose.
-- **No email/SMTP channel and no "Ask Assistant".** Neither exists in this
-  repo. **§4.12 is the authoritative statement**; align anything new to it.
+- **No "Ask Assistant", and email now lives in `services/email/`.** The old
+  bullet said neither existed, and the design document's §4.12 was the
+  authoritative statement for both. Email was reversed on 31 Oct 2026 for an
+  evaluation, as a fourth extracted service with its own image, process and
+  database - see the "do not extract a fourth" paragraph below for the
+  specific scope. There is still no conversational assistant and no plan to
+  add one. The §4.12 statement has been updated in the artifact and is no
+  longer authoritative about email.

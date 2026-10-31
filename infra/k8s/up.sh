@@ -26,6 +26,7 @@ docker build -t naukri-suvidha/api:dev  -f "$ROOT/server/Dockerfile" "$ROOT"
 docker build -t naukri-suvidha/auth:dev -f "$ROOT/services/auth/Dockerfile" "$ROOT"
 docker build -t naukri-suvidha/notifications:dev -f "$ROOT/services/notifications/Dockerfile" "$ROOT"
 docker build -t naukri-suvidha/realtime:dev -f "$ROOT/services/realtime/Dockerfile" "$ROOT"
+docker build -t naukri-suvidha/email:dev -f "$ROOT/services/email/Dockerfile" "$ROOT"
 docker build -t naukri-suvidha/edge:dev -f "$ROOT/client/Dockerfile" "$ROOT"
 
 step "Side-loading the images into the cluster"
@@ -37,6 +38,7 @@ kind load docker-image naukri-suvidha/api:dev  --name "$CLUSTER"
 kind load docker-image naukri-suvidha/auth:dev --name "$CLUSTER"
 kind load docker-image naukri-suvidha/notifications:dev --name "$CLUSTER"
 kind load docker-image naukri-suvidha/realtime:dev --name "$CLUSTER"
+kind load docker-image naukri-suvidha/email:dev --name "$CLUSTER"
 kind load docker-image naukri-suvidha/edge:dev --name "$CLUSTER"
 # busybox, which the API's dependency gates use, is deliberately *not* loaded
 # this way. It is a public multi-arch image, and `docker pull` on an arm64 Mac
@@ -78,6 +80,7 @@ API_ID="$(docker image inspect naukri-suvidha/api:dev  --format '{{.Id}}')"
 AUTH_ID="$(docker image inspect naukri-suvidha/auth:dev --format '{{.Id}}')"
 NOTIF_ID="$(docker image inspect naukri-suvidha/notifications:dev --format '{{.Id}}')"
 REALTIME_ID="$(docker image inspect naukri-suvidha/realtime:dev --format '{{.Id}}')"
+EMAIL_ID="$(docker image inspect naukri-suvidha/email:dev --format '{{.Id}}')"
 EDGE_ID="$(docker image inspect naukri-suvidha/edge:dev --format '{{.Id}}')"
 # And the gateway config, for the same reason one layer along. The edge's
 # ConfigMap is generated without a content hash so the object keeps a readable
@@ -89,7 +92,7 @@ EDGE_CONFIG_HASH="$(shasum -a 256 "$HERE/edge-nginx.conf.template" | cut -c1-16)
 kubectl kustomize "$HERE" \
   | sed "s|http://172\.18\.0\.1:11434|http://${GATEWAY:-172.18.0.1}:11434|" \
   | sed "s|__API_IMAGE_ID__|${API_ID}|; s|__AUTH_IMAGE_ID__|${AUTH_ID}|; s|__EDGE_IMAGE_ID__|${EDGE_ID}|" \
-  | sed "s|__NOTIFICATIONS_IMAGE_ID__|${NOTIF_ID}|; s|__REALTIME_IMAGE_ID__|${REALTIME_ID}|" \
+  | sed "s|__NOTIFICATIONS_IMAGE_ID__|${NOTIF_ID}|; s|__REALTIME_IMAGE_ID__|${REALTIME_ID}|; s|__EMAIL_IMAGE_ID__|${EMAIL_ID}|" \
   | sed "s|__EDGE_CONFIG_HASH__|${EDGE_CONFIG_HASH}|" \
   | kubectl apply -f -
 
@@ -107,6 +110,9 @@ kubectl -n "$NS" rollout status deployment/auth --timeout=180s
 # notifications takes longer than auth: five consumer groups to join, in
 # parallel, before it answers /health.
 kubectl -n "$NS" rollout status deployment/notifications --timeout=240s
+# email is next: one consumer group, plus an SMTP verify after listen. Faster
+# than notifications so a shorter wait is honest.
+kubectl -n "$NS" rollout status deployment/email --timeout=180s
 kubectl -n "$NS" rollout status deployment/api  --timeout=300s
 kubectl -n "$NS" rollout status deployment/edge --timeout=120s
 

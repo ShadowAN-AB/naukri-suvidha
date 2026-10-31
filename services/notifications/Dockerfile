@@ -13,6 +13,7 @@ COPY server/package.json ./server/
 COPY services/auth/package.json ./services/auth/
 COPY services/notifications/package.json ./services/notifications/
 COPY services/realtime/package.json ./services/realtime/
+COPY services/email/package.json ./services/email/
 COPY client/package.json ./client/
 RUN npm ci --omit=dev --ignore-scripts
 

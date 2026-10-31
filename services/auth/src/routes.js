@@ -49,3 +49,14 @@ internalRouter.use(internalOnly);
  */
 internalRouter.get('/introspect', controller.introspect);
 internalRouter.post('/introspect', controller.introspect);
+
+/*
+ * Added for the email service's getUserEmail call. GET and POST for the same
+ * reason as introspect: no reason to force a verb when the data is just a URL
+ * parameter, and symmetry across the internal surface is easier for a reader
+ * than per-endpoint rules. The id goes in the URL rather than the body because
+ * it is the only parameter and because an id-shaped URL is cacheable at the
+ * edge if that ever becomes useful.
+ */
+internalRouter.get('/users/:id/email', controller.userEmail);
+internalRouter.post('/users/:id/email', controller.userEmail);

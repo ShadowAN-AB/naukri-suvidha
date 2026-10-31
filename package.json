@@ -12,12 +12,12 @@
     "client"
   ],
   "scripts": {
-    "dev": "concurrently -n api,auth,notif,rt,client -c cyan,yellow,green,blue,magenta \"npm:dev:server\" \"npm:dev:auth\" \"npm:dev:notifications\" \"npm:dev:realtime\" \"npm:dev:client\"",
+    "dev": "concurrently -n api,auth,notif,rt,email,client -c cyan,yellow,green,blue,red,magenta \"npm:dev:server\" \"npm:dev:auth\" \"npm:dev:notifications\" \"npm:dev:realtime\" \"npm:dev:email\" \"npm:dev:client\"",
     "dev:server": "npm run dev --workspace=server",
     "dev:client": "npm run dev --workspace=client",
     "seed": "AUTH_MONGODB_URI=${AUTH_MONGODB_URI:-mongodb://127.0.0.1:27017/naukri_suvidha_auth} NOTIFICATIONS_MONGODB_URI=${NOTIFICATIONS_MONGODB_URI:-mongodb://127.0.0.1:27017/naukri_suvidha_notifications} node server/scripts/seed.js",
     "lint": "eslint .",
-    "test": "npm run test:api && npm run test:auth && npm run test:notifications && npm run test:realtime",
+    "test": "npm run test:api && npm run test:auth && npm run test:notifications && npm run test:realtime && npm run test:email",
     "seed:fresh": "npm run seed -- --fresh",
     "resumes:check": "node server/scripts/check-resumes.js",
     "lint:fix": "eslint . --fix",
@@ -42,8 +42,10 @@
     "test:auth": "npm run test --workspace=@naukri-suvidha/auth-service",
     "dev:notifications": "npm run dev --workspace=@naukri-suvidha/notifications-service",
     "dev:realtime": "npm run dev --workspace=@naukri-suvidha/realtime-service",
+    "dev:email": "npm run dev --workspace=@naukri-suvidha/email-service",
     "test:notifications": "npm run test --workspace=@naukri-suvidha/notifications-service",
-    "test:realtime": "npm run test --workspace=@naukri-suvidha/realtime-service"
+    "test:realtime": "npm run test --workspace=@naukri-suvidha/realtime-service",
+    "test:email": "npm run test --workspace=@naukri-suvidha/email-service"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

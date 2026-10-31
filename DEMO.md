@@ -257,13 +257,62 @@ actually get you".
 
 Put it back afterwards with `status:"active"`.
 
+### 10h. The fourth service, end to end — an email the student actually gets
+
+Set `DEMO_EMAIL_OVERRIDE` to a real inbox you have open in a browser, then
+schedule an interview. The event crosses every piece of infrastructure in
+turn, and the final step lands in a Gmail tab the audience can see.
+
+Before the demo, open:
+
+- the inbox you set `DEMO_EMAIL_OVERRIDE` to
+- a shell for `docker compose logs -f email`
+- a shell ready to run the Kafka consumer-group describe below
+
+Then schedule an interview as the recruiter. In the three windows, in this
+order:
+
+```bash
+# 1. The consumer group lagged by zero. The event really went through Kafka
+#    and was consumed by this group alongside notifications' own.
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 --describe --group email:interview-scheduled
+
+# 2. The audit trail - and the honest fact that the "to" was rewritten:
+docker compose exec mongo mongosh --quiet naukri_suvidha_email --eval \
+  'db.emaillogs.find({}, {status:1, to:1, originalTo:1, overrideApplied:1, messageId:1}).toArray()'
+```
+
+Then switch to the Gmail tab. The email is there.
+
+**Say this:** the API wrote the job approval, committed the event in the same
+transaction through the outbox, and had nothing more to say. The notifications
+service wrote an inbox row. The email service, a different process with a
+different database, consumed the same event into its own group, called the
+auth service for the student's email - because student emails live in
+`naukri_suvidha_auth.users` and nowhere else - and sent through SMTP. **One
+scheduled interview, two consumers each with their own copy of the event,
+four crossings on paper, and an email in Gmail.** That is what the whole
+architecture is for.
+
+Honest footnotes, if asked:
+- Yes, the "from" is Abdullah's personal Gmail with an app password. Project
+  email was out of scope for the evaluation - the shape is identical for a
+  real sender.
+- Yes, `DEMO_EMAIL_OVERRIDE` rewrote the recipient. The `EmailLog` row
+  carries both `to` and `originalTo` so the override is visible rather than
+  silent, which is also the right behaviour for a staging environment.
+- The service does not run on Vercel - there is no gateway there. On the
+  compose and Kubernetes stacks, it runs.
+
 ---
 
 ## Questions to expect
 
 | They ask | The answer |
 |---|---|
-| Is this microservices? | **Yes — four deployables, three of them extracted services.** `services/auth/`, `services/notifications/` and `services/realtime/` each have their own image, process and lifecycle, behind an nginx API gateway; three of the four own a database nothing else can connect to. Seven domain modules remain inside the API process, and that is a deliberate boundary rather than an unfinished one — see the next row. |
+| Is this microservices? | **Yes — five deployables, four of them extracted services.** `services/auth/`, `services/notifications/`, `services/realtime/` and `services/email/` each have their own image, process and lifecycle, behind an nginx API gateway; four of the five own a database nothing else can connect to. Seven domain modules remain inside the API process, and that is a deliberate boundary rather than an unfinished one — see the next row. |
+| Why did email come later? | It is strictly additive, and it was asked for by the evaluation itself. The other three were extracted on measured coupling — auth to give the gateway a real job, notifications because it was the only module nothing read, realtime because it owned no data. Email was never a module in the first place; it is a new concern added as a service rather than a module, with the one honest cost named in the fourth-crossing row. |
 | Why are seven modules still together? | Because the cost of a boundary here is **measured, not guessed**, and it recurs per service: an introspection hop on every request, a two-service write that needs a compensation because no transaction spans it, a `populate` that cannot cross, an event that must carry its audience, a broker that becomes load-bearing, three start-up races, and a database per deployable to seed in step. One person cannot operate ten deployments alongside coursework. The seam is real either way — modules never import each other's services, they publish domain events — which is exactly why three of them came out without the rest changing shape. |
 | How did you choose which three? | By measurement, not preference. **auth** first: it gives the gateway a real job and exercises synchronous RPC with its failure mode. **notifications** second, chosen by counting coupling — it was the only module *no other module read*, and it already consumed five events rather than being called, so it demonstrates the *other* kind of boundary, event-driven and asynchronous. **realtime** third because it cost nothing: it owned no collection, read nothing and was read by nobody. Together they cover both halves of what a service boundary can be. |
 | What would you extract next, and why not yet? | `profiles`, and the order is measured: it reads nothing and is read by seven modules, so it is a pure provider and extracting it early means every later extraction is written against a remote profiles client once. Not yet because the two hardest cases need redesigns rather than moves — the analytics `$lookup` **cannot cross databases at all**, and the job list is filtered per student *inside the query*, so `jobs` would have to denormalise eligibility facts behind a `profile.updated` event. |

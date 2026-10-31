@@ -50,6 +50,7 @@ const AUTH = 'services/auth/src';
 const EV = 'server/src/infra/events';
 const KIT = 'service-kit/src';
 const RT = 'services/realtime/src';
+const EMAIL = 'services/email/src';
 
 const claims = [
   // ---- document-wide invariants -------------------------------------------
@@ -70,9 +71,19 @@ const claims = [
       offenders = r.stdout.trim();
       return offenders === '';
     }],
-  ['invariant', 'no email/SMTP transport exists (§4.12)',
-    () => !existsSync(path.join(root, 'server/src/modules/notifications/email.js'))
-       && !/nodemailer/i.test(read('server/package.json'))],
+  ['invariant', 'email lives in services/email/ and nowhere else',
+    // Flipped 31 Oct 2026 - the "no email service" assertion that stood here
+    // was reversed when the email microservice was added. The claim is now
+    // narrow on purpose: nodemailer is banned in every package.json *except*
+    // the email service's own. Same lesson as the passOnStoreError scoping
+    // fix in PR #16 - an absence claim has to search where the thing would
+    // *act*, not where it is discussed, so the explanation inside
+    // services/email/src/transport.js does not count as a violation.
+    () => existsSync(path.join(root, `${EMAIL}/transport.js`))
+       && !/nodemailer/i.test(read('server/package.json'))
+       && !/nodemailer/i.test(read(`${AUTH}/../package.json`))
+       && !/nodemailer/i.test(read(`${NOT}/../package.json`))
+       && !/nodemailer/i.test(read(`${RT}/../package.json`))],
   ['invariant', 'no conversational assistant route exists (§4.12)',
     () => lacks(`${AI}/routes.js`, "'/ask'") && lacks(`${AI}/routes.js`, 'ChatMessage')],
   ['invariant', 'the transactional outbox exists and every publish site uses it',
@@ -117,7 +128,7 @@ const claims = [
   // test directory: it listed only two when notifications was extracted, so
   // the count stayed at thirteen and passed while there were fourteen - the
   // exact rot this check exists to catch, in the check itself.
-  ['counts', '§1 says 15 test files, across four services',
+  ['counts', '§1 says 16 test files, across five services',
     () => {
       // `git ls-files` lists the *tracked* tree, so a new suite does not
       // count until it is committed - which means this claim passes right up
@@ -129,7 +140,7 @@ const claims = [
       const r = spawnSync('git',
         ['ls-files', 'server/test/*.test.js', 'services/*/test/*.test.js'],
         { cwd: root, encoding: 'utf8' });
-      return r.status === 0 && r.stdout.trim().split('\n').length === 15;
+      return r.status === 0 && r.stdout.trim().split('\n').length === 16;
     }],
 
   // ---- §6 Redis & caching --------------------------------------------------
@@ -380,15 +391,18 @@ const claims = [
   // and says which seven modules are still together. The absence claims
   // matter as much as the presence ones: the section's credibility rests on
   // not naming a service that does not exist.
-  ['§4', 'four application images exist, and no fifth',
+  ['§4', 'five application images exist, and no sixth',
+    // 31 Oct: fifth image is services/email/Dockerfile. The remaining seven
+    // modules still share the API's image.
     () => {
       const r = spawnSync('git', ['ls-files', 'server/Dockerfile', 'services/*/Dockerfile'],
         { cwd: root, encoding: 'utf8' });
       if (r.status !== 0) return false;
       const files = r.stdout.trim().split('\n').filter(Boolean);
-      return files.length === 4
+      return files.length === 5
         && ['services/auth/Dockerfile', 'services/notifications/Dockerfile',
-            'services/realtime/Dockerfile'].every((f) => files.includes(f));
+            'services/realtime/Dockerfile', 'services/email/Dockerfile']
+          .every((f) => files.includes(f));
     }],
   ['§4', 'the seven module mounts are the ones the section tabulates',
     () => {
@@ -407,12 +421,15 @@ const claims = [
     // `GET /auth/me`. The current user's profile is served by the API.
     () => lacks(`${AUTH}/routes.js`, "'/me'")
        && has('server/src/modules/profiles/routes.js', "'/me'")],
-  ['§4', 'the three crossings are where the section says they are',
+  ['§4', 'the four crossings are where the section says they are',
+    // 31 Oct: email -> auth is the fourth crossing. The property "the API
+    // calls auth not at all" is still true - email calls auth, not the API.
+    // That one line is what has to be defended across every extraction, so
+    // it stays pinned by the final clause.
     () => has(`${AUTH}/apiClient.js`, '/api/internal/profiles')
        && has(`${AUTH}/apiClient.js`, '/api/internal/audit')
        && has(`${RT}/identity.js`, '/internal/introspect')
-       // And the fourth that was deleted stays deleted: the API calls auth
-       // not at all, which §4.6 states as a property rather than an accident.
+       && has(`${EMAIL}/identity.js`, '/internal/users/')
        && !has('server/src/config/env.js', 'AUTH_SERVICE_URL:')],
 
   // ---- §5 API gateway -----------------------------------------------------
@@ -609,14 +626,15 @@ const claims = [
     () => has(`${KIT}/requestId.js`, "req.get('x-request-id')")
        && has('infra/nginx/default.conf.template', 'X-Request-ID')
        && has('infra/k8s/edge-nginx.conf.template', 'X-Request-ID')],
-  ['§15', 'all five health endpoints exist',
+  ['§15', 'all six health endpoints exist',
     () => has('server/src/app.js', "app.get('/api/health'")
        && has(`${AI}/routes.js`, "router.get('/health'")
        && has(`${AUTH}/app.js`, "app.get('/health'")
        && has(`${NOT}/app.js`, "app.get('/health'")
-       && has(`${RT}/app.js`, "app.get('/health'")],
+       && has(`${RT}/app.js`, "app.get('/health'")
+       && has(`${EMAIL}/app.js`, "app.get('/health'")],
   ['§15', 'readiness answers 503 on an unreachable db - in every service that has one',
-    () => ['server/src/app.js', `${AUTH}/app.js`, `${NOT}/app.js`]
+    () => ['server/src/app.js', `${AUTH}/app.js`, `${NOT}/app.js`, `${EMAIL}/app.js`]
       .every((f) => has(f, 'res.status(db ? 200 : 503)'))
        // realtime owns no data, so it has no db to be unreachable and must
        // not pretend otherwise: pulling it from the Service would drop every
@@ -638,7 +656,11 @@ const claims = [
   // The three figures in §22.5 are the kind that rot silently - one of them
   // already had, because the audit-log fix removed a `populate` and the count
   // was written from memory of the figure before it.
-  ['§22', 'exactly three services are extracted, and seven modules remain',
+  ['§22', 'exactly four services are extracted, and seven modules remain',
+    // 31 Oct: email was added as a fourth extraction, out of the measured
+    // order and specifically for an evaluation. The seven modules did not
+    // move - the SMTP concern never had a module. CLAUDE.md records the
+    // reversal and names the one exception.
     () => {
       const ls = (p) => {
         const r = spawnSync('git', ['ls-tree', '-d', '--name-only', `HEAD:${p}`],
@@ -647,8 +669,8 @@ const claims = [
       };
       const services = ls('services');
       const modules = ls('server/src/modules');
-      return services.length === 3
-        && ['auth', 'notifications', 'realtime']
+      return services.length === 4
+        && ['auth', 'notifications', 'realtime', 'email']
           .every((n) => services.includes(`services/${n}`.split('/').pop()))
         // `internal` is the service-to-service surface the extractions needed,
         // not a domain module - the section says so, so it is counted apart.
@@ -678,7 +700,7 @@ const claims = [
   ['§22', 'every service has a suite of its own',
     () => {
       const pkg = read('package.json');
-      return ['test:api', 'test:auth', 'test:notifications', 'test:realtime']
+      return ['test:api', 'test:auth', 'test:notifications', 'test:realtime', 'test:email']
         .every((s) => pkg.includes(s));
     }],
   ['§22', 'the section no longer calls the extraction future work',

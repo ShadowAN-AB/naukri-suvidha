@@ -285,3 +285,31 @@ export async function introspect(token) {
 
   return { id: String(user._id), email: user.email, role: user.role };
 }
+
+/**
+ * Look up a user's email by id.
+ *
+ * The one piece of data this service owns that other services need by id
+ * rather than by token: the email service receives an event with a
+ * `studentUserId` and needs the address to send to. There is no other way for
+ * it to get there - the API's `profiles` database has only the id (deliberately
+ * un-`ref`'d, see `server/src/modules/profiles/model.js`), and students have
+ * no second-source email in the system.
+ *
+ * Returns null for an unknown id, and for a suspended account - the caller
+ * then records a `skipped` row rather than sending. A suspended user who was
+ * scheduled before suspension does not get an email about an interview they
+ * can no longer attend, which is the right answer.
+ *
+ * Does not throw on `null`: the controller turns it into a 404 and the client
+ * handles that as a skip-reason. Throwing here would conflate "do not retry
+ * this one" with the retriable "I crashed", which is exactly the ambiguity
+ * the shape of AppError exists to prevent.
+ */
+export async function findUserEmail(userId) {
+  if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+  const user = await User.findById(userId).select('email status').lean();
+  if (!user) return null;
+  if (user.status !== USER_STATUS.ACTIVE) return null;
+  return { email: user.email, status: user.status };
+}
