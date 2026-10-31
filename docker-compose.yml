@@ -327,6 +327,60 @@ services:
       # consumer groups to join. It binds a port and attaches a socket server.
       start_period: 5s
 
+  # The email service - a fourth extraction, added for the evaluation and
+  # recorded as deliberately out of the measured order.
+  #
+  # It sends email to students when an interview is scheduled, carrying date,
+  # time and job title. Pure consumer like notifications: no caller, every
+  # action begins with a Kafka message. The broker is load-bearing here for
+  # the same reason - with no broker it serves /health and sends nothing.
+  #
+  # It is the first service that needs the auth service for data rather than
+  # for a token: student emails live in naukri_suvidha_auth.users, so this
+  # service calls /internal/users/:id/email to resolve the recipient. That is
+  # the fourth service-to-service crossing documented in CLAUDE.md.
+  #
+  # SMTP credentials come from the host .env (gitignored). The sample at
+  # services/email/.env.example documents the shape; the docker-compose
+  # service reads SMTP_* and MAIL_FROM from the shell environment, falling
+  # back to the stubs so a `docker compose up` without SMTP configured still
+  # starts the service - every send then fails with an SMTP error, which the
+  # EmailLog row records honestly.
+  email:
+    build:
+      context: .
+      dockerfile: services/email/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '5005'
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_email?replicaSet=rs0
+      KAFKA_BROKERS: kafka:9092
+      AUTH_SERVICE_URL: http://auth:5002
+      AUTH_SERVICE_TIMEOUT_MS: '2000'
+      AUTH_GATEWAY_SECRET: docker-compose-development-gateway-secret
+      SMTP_HOST: ${SMTP_HOST:-smtp.example.test}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-dev@example.test}
+      SMTP_PASS: ${SMTP_PASS:-not-a-real-password}
+      MAIL_FROM: ${MAIL_FROM:-Naukri Suvidha <dev@example.test>}
+      DEMO_EMAIL_OVERRIDE: ${DEMO_EMAIL_OVERRIDE:-}
+      CLIENT_ORIGIN: http://localhost:8080
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:5005/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
   edge:
     build:
       context: .

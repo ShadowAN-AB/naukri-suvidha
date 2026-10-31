@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1200" width="1180" height="1200"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1340" width="1180" height="1340"
      role="img"
-     aria-label="Naukri Suvidha microservices architecture. Panel one: a browser reaches a single nginx edge, which routes four prefixes to four services and runs an auth_request subrequest against the auth service on every API request; three services own their own database and the realtime service owns none. Panel two: the API produces domain events to Kafka, the notifications service consumes them and publishes a push to Redis, and the realtime service delivers it to the browser's socket.">
+     aria-label="Naukri Suvidha microservices architecture. Panel one: a browser reaches a single nginx edge, which routes four prefixes to five services and runs an auth_request subrequest against the auth service on every API request; four services own their own database and realtime owns none. Panel two: the API produces domain events to Kafka, and two consumer groups each get their own copy - notifications publishes a push to Redis which realtime delivers to the browser's socket, and email calls auth for the recipient's address then sends via SMTP to the student's inbox. Panel three: on Kubernetes the API is the only workload behind a HorizontalPodAutoscaler, scaling 2 to 6 pods on CPU, while auth, realtime, notifications and email are each fixed at 2 replicas for a stated reason, above a single mongo, redis and kafka.">
   <style>
     .t   { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; fill: #1f2937; }
     .ttl { font-size: 21px; font-weight: 700; }
@@ -16,10 +16,12 @@
     .dat { fill: #fdf2f8; stroke: #be185d; stroke-width: 1.6; }
     .inf { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.6; }
     .non { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .new { fill: #fff7ed; stroke: #c2410c; stroke-width: 1.8; }
     .ar  { stroke: #334155; stroke-width: 1.6; fill: none; }
     .ard { stroke: #334155; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
     .arr { stroke: #b91c1c; stroke-width: 2.2; fill: none; }
     .arp { stroke: #7c3aed; stroke-width: 1.8; fill: none; }
+    .arn { stroke: #c2410c; stroke-width: 2; fill: none; }
     .hpa { fill: #fffbeb; stroke: #b45309; stroke-width: 2; }
     .hbx { fill: #ffffff; stroke: #b45309; stroke-width: 2; }
     .arh { stroke: #b45309; stroke-width: 2.2; fill: none; }
@@ -36,80 +38,94 @@
     <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
     </marker>
+    <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1180" height="1200" fill="#ffffff"/>
+  <rect x="0" y="0" width="1180" height="1340" fill="#ffffff"/>
 
   <text class="t ttl" x="40" y="38">Naukri Suvidha — microservices architecture</text>
-  <text class="t sub" x="40" y="58">Four deployables behind one API gateway. Three services were extracted from the API; three own a database no other service can connect to.</text>
+  <text class="t sub" x="40" y="58">Five deployables behind one API gateway. Four services were extracted from the API; four own a database no other service can connect to.</text>
 
-  <!-- ============ PANEL A ============ -->
+  <!-- ============ PANEL A — the request path ============ -->
   <text class="t pan" x="40" y="92">1 · The request path — one entry, prefix routing, and authentication at the edge</text>
 
-  <!-- browser -->
-  <rect class="cli" x="40" y="215" width="150" height="66" rx="6"/>
-  <text class="t bt" x="115" y="243" text-anchor="middle">Browser</text>
-  <text class="t bs" x="115" y="261" text-anchor="middle">React SPA</text>
+  <rect class="cli" x="40" y="230" width="150" height="66" rx="6"/>
+  <text class="t bt" x="115" y="258" text-anchor="middle">Browser</text>
+  <text class="t bs" x="115" y="276" text-anchor="middle">React SPA</text>
 
-  <!-- edge -->
-  <rect class="edg" x="250" y="110" width="140" height="300" rx="6"/>
-  <text class="t bt" x="320" y="238" text-anchor="middle">edge</text>
-  <text class="t bs" x="320" y="256" text-anchor="middle">nginx</text>
-  <text class="t bs" x="320" y="276" text-anchor="middle">API gateway</text>
-  <text class="t bs" x="320" y="292" text-anchor="middle">+ static host</text>
-  <text class="t bs" x="320" y="318" text-anchor="middle" font-weight="700">the only</text>
-  <text class="t bs" x="320" y="332" text-anchor="middle" font-weight="700">published port</text>
+  <rect class="edg" x="250" y="110" width="140" height="395" rx="6"/>
+  <text class="t bt" x="320" y="286" text-anchor="middle">edge</text>
+  <text class="t bs" x="320" y="304" text-anchor="middle">nginx</text>
+  <text class="t bs" x="320" y="320" text-anchor="middle">API gateway</text>
+  <text class="t bs" x="320" y="336" text-anchor="middle">+ static host</text>
+  <text class="t bs" x="320" y="362" text-anchor="middle" font-weight="700">the only</text>
+  <text class="t bs" x="320" y="376" text-anchor="middle" font-weight="700">published port</text>
 
-  <line class="ar" x1="190" y1="248" x2="246" y2="248" marker-end="url(#a)"/>
-  <text class="t lbl" x="218" y="240" text-anchor="middle">HTTPS</text>
+  <line class="ar" x1="190" y1="263" x2="246" y2="263" marker-end="url(#a)"/>
+  <text class="t lbl" x="218" y="255" text-anchor="middle">HTTPS</text>
 
-  <!-- services -->
+  <!-- Five services, each with its database to the right -->
   <rect class="box" x="470" y="110" width="230" height="62" rx="6"/>
   <text class="t bt" x="485" y="134">api</text>
   <text class="t bs" x="485" y="152">seven domain modules</text>
   <text class="t bs" x="485" y="165">+ internal surface</text>
 
-  <rect class="box" x="470" y="202" width="230" height="62" rx="6"/>
-  <text class="t bt" x="485" y="226">auth</text>
-  <text class="t bs" x="485" y="244">accounts · sessions</text>
-  <text class="t bs" x="485" y="257">refresh rotation</text>
+  <rect class="box" x="470" y="192" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="216">auth</text>
+  <text class="t bs" x="485" y="234">accounts · sessions</text>
+  <text class="t bs" x="485" y="247">refresh rotation</text>
 
-  <rect class="box" x="470" y="294" width="230" height="62" rx="6"/>
-  <text class="t bt" x="485" y="318">realtime</text>
-  <text class="t bs" x="485" y="336">every Socket.IO</text>
-  <text class="t bs" x="485" y="349">connection</text>
+  <rect class="box" x="470" y="274" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="298">realtime</text>
+  <text class="t bs" x="485" y="316">every Socket.IO</text>
+  <text class="t bs" x="485" y="329">connection</text>
 
-  <rect class="box" x="470" y="386" width="230" height="62" rx="6"/>
-  <text class="t bt" x="485" y="410">notifications</text>
-  <text class="t bs" x="485" y="428">the inbox —</text>
-  <text class="t bs" x="485" y="441">built from events</text>
+  <rect class="box" x="470" y="356" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="380">notifications</text>
+  <text class="t bs" x="485" y="398">the inbox —</text>
+  <text class="t bs" x="485" y="411">built from events</text>
+
+  <rect class="new" x="470" y="438" width="230" height="62" rx="6"/>
+  <text class="t bt" x="485" y="462">email</text>
+  <text class="t bs" x="485" y="480">sends mail on</text>
+  <text class="t bs" x="485" y="493">interview.scheduled</text>
 
   <!-- edge -> services -->
   <line class="ar" x1="390" y1="141" x2="466" y2="141" marker-end="url(#a)"/>
   <text class="t lbl" x="394" y="134">/api/*</text>
 
-  <line class="ar" x1="390" y1="215" x2="466" y2="215" marker-end="url(#a)"/>
-  <text class="t lbl" x="394" y="208">/api/auth/*</text>
+  <line class="ar" x1="390" y1="205" x2="466" y2="205" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="198">/api/auth/*</text>
 
-  <line class="arr" x1="390" y1="250" x2="466" y2="250" marker-end="url(#ar)"/>
-  <text class="t acc" x="394" y="268">auth_request</text>
-  <text class="t acc" x="394" y="281">every /api request</text>
+  <line class="arr" x1="390" y1="240" x2="466" y2="240" marker-end="url(#ar)"/>
+  <text class="t acc" x="394" y="258">auth_request</text>
+  <text class="t acc" x="394" y="271">every /api request</text>
 
-  <line class="ard" x1="390" y1="325" x2="466" y2="325" marker-end="url(#a)"/>
-  <text class="t lbl" x="394" y="318">/socket.io</text>
+  <line class="ard" x1="390" y1="305" x2="466" y2="305" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="298">/socket.io</text>
 
-  <line class="ar" x1="390" y1="417" x2="466" y2="417" marker-end="url(#a)"/>
-  <text class="t lbl" x="394" y="410">/api/notifications/*</text>
+  <line class="ar" x1="390" y1="387" x2="466" y2="387" marker-end="url(#a)"/>
+  <text class="t lbl" x="394" y="380">/api/notifications/*</text>
+
+  <!-- No arrow to email from the edge: it has no public route. Say so. -->
+  <text class="t lbl" x="394" y="469">no edge route</text>
+  <text class="t lbl" x="394" y="482">(Kafka only)</text>
 
   <!-- crossings between services -->
-  <line class="ar" x1="560" y1="198" x2="560" y2="176" marker-end="url(#a)"/>
-  <text class="t lbl" x="570" y="190">profiles · audit</text>
+  <line class="ar" x1="560" y1="188" x2="560" y2="176" marker-end="url(#a)"/>
+  <text class="t lbl" x="570" y="183">profiles · audit</text>
 
-  <line class="ar" x1="620" y1="290" x2="620" y2="268" marker-end="url(#a)"/>
-  <text class="t lbl" x="630" y="282">introspect handshake</text>
+  <line class="ar" x1="620" y1="270" x2="620" y2="258" marker-end="url(#a)"/>
+  <text class="t lbl" x="630" y="265">introspect handshake</text>
+
+  <path class="arn" d="M 580 438 L 580 230 L 600 230" marker-end="url(#an)"/>
+  <text class="t lbl" x="605" y="223" fill="#c2410c">users/:id/email</text>
+  <text class="t lbl" x="605" y="236" fill="#c2410c">(the 4th crossing)</text>
 
   <!-- databases -->
   <rect class="dat" x="790" y="110" width="330" height="62" rx="6"/>
@@ -117,138 +133,169 @@
   <text class="t bs" x="805" y="152">11 collections — jobs, applications,</text>
   <text class="t bs" x="805" y="165">students, resumes, fitScores …</text>
 
-  <rect class="dat" x="790" y="202" width="330" height="62" rx="6"/>
-  <text class="t bt" x="805" y="226">naukri_suvidha_auth</text>
-  <text class="t bs" x="805" y="244">users · refreshTokens</text>
-  <text class="t bs" x="805" y="257">the API has no connection to this</text>
+  <rect class="dat" x="790" y="192" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="216">naukri_suvidha_auth</text>
+  <text class="t bs" x="805" y="234">users · refreshTokens</text>
+  <text class="t bs" x="805" y="247">the API has no connection to this</text>
 
-  <rect class="non" x="790" y="294" width="330" height="62" rx="6"/>
-  <text class="t bt" x="805" y="318" fill="#64748b">no database</text>
-  <text class="t bs" x="805" y="336">owns no data — live connections</text>
-  <text class="t bs" x="805" y="349">are state in memory</text>
+  <rect class="non" x="790" y="274" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="298" fill="#64748b">no database</text>
+  <text class="t bs" x="805" y="316">owns no data — live connections</text>
+  <text class="t bs" x="805" y="329">are state in memory</text>
 
-  <rect class="dat" x="790" y="386" width="330" height="62" rx="6"/>
-  <text class="t bt" x="805" y="410">naukri_suvidha_notifications</text>
-  <text class="t bs" x="805" y="428">notifications</text>
-  <text class="t bs" x="805" y="441">written only from domain events</text>
+  <rect class="dat" x="790" y="356" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="380">naukri_suvidha_notifications</text>
+  <text class="t bs" x="805" y="398">notifications</text>
+  <text class="t bs" x="805" y="411">written only from domain events</text>
+
+  <rect class="dat" x="790" y="438" width="330" height="62" rx="6"/>
+  <text class="t bt" x="805" y="462">naukri_suvidha_email</text>
+  <text class="t bs" x="805" y="480">emailLogs — audit of every send,</text>
+  <text class="t bs" x="805" y="493">with originalTo and overrideApplied</text>
 
   <line class="ar" x1="700" y1="141" x2="786" y2="141" marker-end="url(#a)"/>
   <text class="t lbl" x="743" y="134" text-anchor="middle">owns</text>
-  <line class="ar" x1="700" y1="233" x2="786" y2="233" marker-end="url(#a)"/>
-  <text class="t lbl" x="743" y="226" text-anchor="middle">owns</text>
-  <line class="ar" x1="700" y1="417" x2="786" y2="417" marker-end="url(#a)"/>
-  <text class="t lbl" x="743" y="410" text-anchor="middle">owns</text>
+  <line class="ar" x1="700" y1="223" x2="786" y2="223" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="216" text-anchor="middle">owns</text>
+  <line class="ar" x1="700" y1="387" x2="786" y2="387" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="380" text-anchor="middle">owns</text>
+  <line class="ar" x1="700" y1="469" x2="786" y2="469" marker-end="url(#a)"/>
+  <text class="t lbl" x="743" y="462" text-anchor="middle">owns</text>
 
-  <text class="t sub" x="40" y="482">The red hop is what makes the edge a gateway rather than a proxy: it introspects the token against the auth service, so the API verifies none and</text>
-  <text class="t sub" x="40" y="498">can still refuse a suspended account. No arrow runs from api to auth — that call left with the sockets when realtime was extracted.</text>
+  <text class="t sub" x="40" y="534">The red hop is what makes the edge a gateway rather than a proxy: it introspects the token against the auth service, so the API verifies none and</text>
+  <text class="t sub" x="40" y="550">can still refuse a suspended account. The orange arrow is the fourth crossing: email calls auth for the recipient address, because student emails live in</text>
+  <text class="t sub" x="40" y="566">the auth database and nowhere else. The API itself still calls auth not at all — that line is defended by every extraction.</text>
 
-  <!-- ============ PANEL B ============ -->
-  <line x1="40" y1="528" x2="1140" y2="528" stroke="#e2e8f0" stroke-width="1.5"/>
-  <text class="t pan" x="40" y="560">2 · The event and push path — nothing that publishes a notification holds a socket</text>
+  <!-- ============ PANEL B — events + two consumer groups ============ -->
+  <line x1="40" y1="596" x2="1140" y2="596" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text class="t pan" x="40" y="628">2 · The event path — one Kafka event, two independent consumer groups</text>
 
-  <rect class="box" x="40" y="610" width="150" height="66" rx="6"/>
-  <text class="t bt" x="115" y="636" text-anchor="middle">api</text>
-  <text class="t bs" x="115" y="655" text-anchor="middle">commits job + event</text>
-  <text class="t bs" x="115" y="668" text-anchor="middle">in one transaction</text>
+  <rect class="box" x="40" y="672" width="150" height="66" rx="6"/>
+  <text class="t bt" x="115" y="698" text-anchor="middle">api</text>
+  <text class="t bs" x="115" y="717" text-anchor="middle">commits interview +</text>
+  <text class="t bs" x="115" y="730" text-anchor="middle">event in one tx</text>
 
-  <rect class="inf" x="250" y="610" width="170" height="66" rx="6"/>
-  <text class="t bt" x="335" y="636" text-anchor="middle">Kafka</text>
-  <text class="t bs" x="335" y="655" text-anchor="middle">7 domain events, one</text>
-  <text class="t bs" x="335" y="668" text-anchor="middle">group per subscriber</text>
+  <rect class="inf" x="250" y="672" width="170" height="66" rx="6"/>
+  <text class="t bt" x="335" y="698" text-anchor="middle">Kafka</text>
+  <text class="t bs" x="335" y="717" text-anchor="middle">interview.scheduled</text>
+  <text class="t bs" x="335" y="730" text-anchor="middle">— two groups listening</text>
 
-  <rect class="box" x="480" y="610" width="180" height="66" rx="6"/>
-  <text class="t bt" x="570" y="636" text-anchor="middle">notifications</text>
-  <text class="t bs" x="570" y="655" text-anchor="middle">writes the row in its</text>
-  <text class="t bs" x="570" y="668" text-anchor="middle">own database</text>
+  <line class="arp" x1="190" y1="705" x2="246" y2="705" marker-end="url(#ap)"/>
+  <text class="t lbl" x="218" y="697" text-anchor="middle">produces</text>
 
-  <rect class="inf" x="720" y="610" width="160" height="66" rx="6"/>
-  <text class="t bt" x="800" y="636" text-anchor="middle">Redis</text>
-  <text class="t bs" x="800" y="655" text-anchor="middle">Socket.IO adapter</text>
-  <text class="t bs" x="800" y="668" text-anchor="middle">channel</text>
+  <!-- Upper branch: notifications -> redis -> realtime -->
+  <path class="arp" d="M 420 695 L 475 695 L 475 615" marker-end="url(#ap)" />
+  <text class="t lbl" x="485" y="640">notifications group</text>
 
-  <rect class="box" x="940" y="610" width="180" height="66" rx="6"/>
-  <text class="t bt" x="1030" y="636" text-anchor="middle">realtime</text>
-  <text class="t bs" x="1030" y="655" text-anchor="middle">holds the socket,</text>
-  <text class="t bs" x="1030" y="668" text-anchor="middle">delivers the emit</text>
+  <rect class="box" x="470" y="610" width="180" height="60" rx="6"/>
+  <text class="t bt" x="560" y="635" text-anchor="middle">notifications</text>
+  <text class="t bs" x="560" y="653" text-anchor="middle">writes an inbox row</text>
 
-  <line class="arp" x1="190" y1="643" x2="246" y2="643" marker-end="url(#ap)"/>
-  <text class="t lbl" x="218" y="635" text-anchor="middle">produces</text>
-  <line class="arp" x1="420" y1="643" x2="476" y2="643" marker-end="url(#ap)"/>
-  <text class="t lbl" x="448" y="635" text-anchor="middle">consumes</text>
-  <line class="arp" x1="660" y1="643" x2="716" y2="643" marker-end="url(#ap)"/>
-  <text class="t lbl" x="688" y="635" text-anchor="middle">publishes</text>
-  <line class="arp" x1="880" y1="643" x2="936" y2="643" marker-end="url(#ap)"/>
-  <text class="t lbl" x="908" y="635" text-anchor="middle">delivers</text>
+  <rect class="inf" x="700" y="610" width="150" height="60" rx="6"/>
+  <text class="t bt" x="775" y="635" text-anchor="middle">Redis</text>
+  <text class="t bs" x="775" y="653" text-anchor="middle">adapter channel</text>
 
-  <path class="ard" d="M1030 610 L1030 586 L1150 586" marker-end="url(#a)"/>
-  <text class="t lbl" x="1148" y="578" text-anchor="end">to the browser’s socket</text>
+  <rect class="box" x="900" y="610" width="180" height="60" rx="6"/>
+  <text class="t bt" x="990" y="635" text-anchor="middle">realtime</text>
+  <text class="t bs" x="990" y="653" text-anchor="middle">pushes to the socket</text>
 
-  <text class="t sub" x="40" y="716">The notifications service has no Socket.IO server and the realtime service produces no content. Neither knows the other exists — Redis is the</text>
-  <text class="t sub" x="40" y="732">only thing between them, and it is the same adapter added so a second API replica could not break pushes.</text>
+  <line class="arp" x1="650" y1="640" x2="696" y2="640" marker-end="url(#ap)"/>
+  <text class="t lbl" x="673" y="632" text-anchor="middle">publishes</text>
+  <line class="arp" x1="850" y1="640" x2="896" y2="640" marker-end="url(#ap)"/>
+  <text class="t lbl" x="873" y="632" text-anchor="middle">delivers</text>
 
-  <text class="t sub" x="40" y="768">Seven domain modules remain inside the api process — profiles, jobs, applications, resumes, ai, interviews and admin. They are modules rather</text>
-  <text class="t sub" x="40" y="784">than services on purpose: none imports another module’s service, and each publishes domain events, which is why three of them could be extracted.</text>
+  <!-- Lower branch: email -> auth -> SMTP -> inbox -->
+  <path class="arn" d="M 420 715 L 475 715 L 475 795" marker-end="url(#an)" />
+  <text class="t lbl" x="485" y="765" fill="#c2410c">email group</text>
 
-  <!-- ============ PANEL C ============ -->
-  <line x1="40" y1="812" x2="1140" y2="812" stroke="#e2e8f0" stroke-width="1.5"/>
-  <text class="t pan" x="40" y="846">3 · On Kubernetes — what scales, what is fixed, and why</text>
+  <rect class="new" x="470" y="790" width="180" height="60" rx="6"/>
+  <text class="t bt" x="560" y="815" text-anchor="middle">email</text>
+  <text class="t bs" x="560" y="833" text-anchor="middle">resolves + sends</text>
 
-  <rect class="clu" x="40" y="868" width="1100" height="282" rx="10"/>
-  <text class="t sub" x="58" y="892">namespace naukri-suvidha — kind cluster, 3 nodes (the control-plane is tainted, so 2 take workload)</text>
+  <rect class="box" x="700" y="790" width="150" height="60" rx="6"/>
+  <text class="t bt" x="775" y="815" text-anchor="middle">auth</text>
+  <text class="t bs" x="775" y="833" text-anchor="middle">returns the email</text>
+
+  <rect class="inf" x="900" y="790" width="180" height="60" rx="6"/>
+  <text class="t bt" x="990" y="815" text-anchor="middle">SMTP → inbox</text>
+  <text class="t bs" x="990" y="833" text-anchor="middle">nodemailer · Gmail</text>
+
+  <line class="arn" x1="650" y1="820" x2="696" y2="820" marker-end="url(#an)"/>
+  <text class="t lbl" x="673" y="812" text-anchor="middle">users/:id/email</text>
+  <line class="arn" x1="850" y1="820" x2="896" y2="820" marker-end="url(#an)"/>
+  <text class="t lbl" x="873" y="812" text-anchor="middle">sends</text>
+
+  <text class="t sub" x="40" y="886">One event, two independent consumer groups. Neither consumer knows the other exists. The notifications service writes an inbox row and</text>
+  <text class="t sub" x="40" y="902">publishes a push through Redis to realtime, which holds the socket. The email service calls auth for the student’s address — because that is the</text>
+  <text class="t sub" x="40" y="918">only database it lives in — and sends through SMTP. The outbox commits the event with the write, so neither consumer can see a scheduled interview</text>
+  <text class="t sub" x="40" y="934">that is not actually in the database.</text>
+
+  <!-- ============ PANEL C — Kubernetes ============ -->
+  <line x1="40" y1="964" x2="1140" y2="964" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text class="t pan" x="40" y="996">3 · On Kubernetes — what scales, what is fixed, and why</text>
+
+  <rect class="clu" x="40" y="1018" width="1100" height="282" rx="10"/>
+  <text class="t sub" x="58" y="1042">namespace naukri-suvidha — kind cluster, 3 nodes (the control-plane is tainted, so 2 take workload)</text>
 
   <!-- entry -->
-  <rect class="edg" x="62" y="972" width="132" height="92" rx="6"/>
-  <text class="t bt" x="128" y="1000" text-anchor="middle">edge</text>
-  <text class="t bs" x="128" y="1018" text-anchor="middle">×1</text>
-  <text class="t bs" x="128" y="1036" text-anchor="middle">NodePort 30080</text>
-  <text class="t bs" x="128" y="1050" text-anchor="middle">→ localhost:8081</text>
+  <rect class="edg" x="62" y="1122" width="108" height="92" rx="6"/>
+  <text class="t bt" x="116" y="1150" text-anchor="middle">edge</text>
+  <text class="t bs" x="116" y="1168" text-anchor="middle">×1</text>
+  <text class="t bs" x="116" y="1184" text-anchor="middle">NodePort 30080</text>
+  <text class="t bs" x="116" y="1198" text-anchor="middle">→ :8081</text>
 
-  <line class="ar" x1="194" y1="1018" x2="211" y2="1018" marker-end="url(#a)"/>
+  <line class="ar" x1="170" y1="1168" x2="183" y2="1168" marker-end="url(#a)"/>
 
   <!-- the autoscaled one -->
-  <rect class="hpa" x="219" y="900" width="212" height="50" rx="6"/>
-  <text class="t bt" x="325" y="920" text-anchor="middle" fill="#92400e">HorizontalPodAutoscaler</text>
-  <text class="t amb" x="325" y="938" text-anchor="middle">2 → 6 pods · target 60% CPU of 200m</text>
-  <line class="arh" x1="325" y1="950" x2="325" y2="968" marker-end="url(#ah)"/>
+  <rect class="hpa" x="188" y="1050" width="190" height="50" rx="6"/>
+  <text class="t bt" x="283" y="1070" text-anchor="middle" fill="#92400e">HorizontalPodAutoscaler</text>
+  <text class="t amb" x="283" y="1088" text-anchor="middle">2 → 6 pods · target 60% of 200m</text>
+  <line class="arh" x1="283" y1="1100" x2="283" y2="1118" marker-end="url(#ah)"/>
 
-  <rect class="hbx" x="219" y="972" width="212" height="92" rx="6"/>
-  <text class="t bt" x="233" y="996">api</text>
-  <text class="t amb" x="233" y="1014" font-weight="700">×2 → 6 — the only one</text>
-  <text class="t amb" x="233" y="1028" font-weight="700">that autoscales</text>
-  <text class="t bs" x="233" y="1048">gates: mongo · redis · kafka</text>
+  <rect class="hbx" x="188" y="1122" width="190" height="92" rx="6"/>
+  <text class="t bt" x="202" y="1146">api</text>
+  <text class="t amb" x="202" y="1164" font-weight="700">×2 → 6 — the only one</text>
+  <text class="t amb" x="202" y="1178" font-weight="700">that autoscales</text>
+  <text class="t bs" x="202" y="1198">gates: mongo · redis · kafka</text>
 
-  <!-- the fixed ones -->
-  <rect class="box" x="451" y="972" width="186" height="92" rx="6"/>
-  <text class="t bt" x="465" y="996">auth</text>
-  <text class="t bs" x="465" y="1014" font-weight="700">×2 — fixed</text>
-  <text class="t bs" x="465" y="1032">login is bcrypt-bound,</text>
-  <text class="t bs" x="465" y="1046">not throughput-bound</text>
+  <!-- the fixed four -->
+  <rect class="box" x="396" y="1122" width="170" height="92" rx="6"/>
+  <text class="t bt" x="410" y="1146">auth</text>
+  <text class="t bs" x="410" y="1164" font-weight="700">×2 — fixed</text>
+  <text class="t bs" x="410" y="1182">login is bcrypt-bound,</text>
+  <text class="t bs" x="410" y="1196">not throughput-bound</text>
 
-  <rect class="box" x="657" y="972" width="196" height="92" rx="6"/>
-  <text class="t bt" x="671" y="996">realtime</text>
-  <text class="t bs" x="671" y="1014" font-weight="700">×2 — fixed</text>
-  <text class="t bs" x="671" y="1032">scales on connections,</text>
-  <text class="t bs" x="671" y="1046">so CPU is the wrong metric</text>
+  <rect class="box" x="584" y="1122" width="170" height="92" rx="6"/>
+  <text class="t bt" x="598" y="1146">realtime</text>
+  <text class="t bs" x="598" y="1164" font-weight="700">×2 — fixed</text>
+  <text class="t bs" x="598" y="1182">scales on connections,</text>
+  <text class="t bs" x="598" y="1196">so CPU is wrong metric</text>
 
-  <rect class="box" x="873" y="972" width="245" height="92" rx="6"/>
-  <text class="t bt" x="887" y="996">notifications</text>
-  <text class="t bs" x="887" y="1014" font-weight="700">×2 — fixed by construction</text>
-  <text class="t bs" x="887" y="1032">one partition per topic, so a third</text>
-  <text class="t bs" x="887" y="1046">replica would be assigned nothing</text>
+  <rect class="box" x="772" y="1122" width="170" height="92" rx="6"/>
+  <text class="t bt" x="786" y="1146">notifications</text>
+  <text class="t bs" x="786" y="1164" font-weight="700">×2 — by construction</text>
+  <text class="t bs" x="786" y="1182">1 partition per topic:</text>
+  <text class="t bs" x="786" y="1196">3rd replica idle</text>
+
+  <rect class="new" x="960" y="1122" width="170" height="92" rx="6"/>
+  <text class="t bt" x="974" y="1146">email</text>
+  <text class="t bs" x="974" y="1164" font-weight="700">×2 — by construction</text>
+  <text class="t bs" x="974" y="1182">same reason as notif;</text>
+  <text class="t bs" x="974" y="1196">also depends on auth</text>
 
   <!-- data tier -->
-  <rect class="dat" x="219" y="1080" width="212" height="52" rx="6"/>
-  <text class="t bs" x="233" y="1100" font-weight="700">mongo ×1 — StatefulSet + PVC</text>
-  <text class="t bs" x="233" y="1118">single-node replica set</text>
+  <rect class="dat" x="188" y="1232" width="190" height="52" rx="6"/>
+  <text class="t bs" x="202" y="1252" font-weight="700">mongo ×1 — StatefulSet + PVC</text>
+  <text class="t bs" x="202" y="1270">single-node replica set</text>
 
-  <rect class="inf" x="451" y="1080" width="186" height="52" rx="6"/>
-  <text class="t bs" x="465" y="1100" font-weight="700">redis ×1</text>
-  <text class="t bs" x="465" y="1118">cache · limits · adapter</text>
+  <rect class="inf" x="396" y="1232" width="170" height="52" rx="6"/>
+  <text class="t bs" x="410" y="1252" font-weight="700">redis ×1</text>
+  <text class="t bs" x="410" y="1270">cache · limits · adapter</text>
 
-  <rect class="inf" x="657" y="1080" width="461" height="52" rx="6"/>
-  <text class="t bs" x="671" y="1100" font-weight="700">kafka ×1 — StatefulSet, KRaft</text>
-  <text class="t bs" x="671" y="1118">below the application tier nothing is redundant — these three are single points of failure</text>
+  <rect class="inf" x="584" y="1232" width="546" height="52" rx="6"/>
+  <text class="t bs" x="598" y="1252" font-weight="700">kafka ×1 — StatefulSet, KRaft</text>
+  <text class="t bs" x="598" y="1270">below the application tier nothing is redundant — these three are single points of failure</text>
 
-  <text class="t sub" x="40" y="1176">Only the API autoscales, and the other three are fixed for three different reasons — which is the argument for splitting them in the first place.</text>
-  <text class="t sub" x="40" y="1192">Measured under load: 17% CPU idle, then 617% driving 2 → 4 → 6 pods, serving 1,209,773 requests with 0 failures.</text>
+  <text class="t sub" x="40" y="1326">The API is the only workload that autoscales. The other four services are fixed for four different reasons — which is the argument for splitting</text>
+  <text class="t sub" x="40" y="1342">them in the first place.</text>
 </svg>

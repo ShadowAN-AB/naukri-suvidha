@@ -93,3 +93,31 @@ export async function introspect(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Resolve a user's email by id, for the email service.
+ *
+ * The handler is deliberately small: the user id comes in on the URL, the
+ * service does the work, a 404 is what tells the caller "do not retry this
+ * one". A 500 means the service itself failed and should be retried.
+ *
+ * Protected by `internalOnly` through the router mount, so the shared secret
+ * is checked before this ever runs. The email service is the only caller
+ * today, but the shape is a general "resolve one user by id" rather than an
+ * email-specific one, because adding another consumer who needs a different
+ * field is cheaper than a second lookup endpoint.
+ */
+export async function userEmail(req, res, next) {
+  try {
+    const user = await service.findUserEmail(req.params.id);
+    if (!user) {
+      // 404 rather than a body with `email: null`: the client's lookup is
+      // over, not pending. "Do not retry" encoded in the status.
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such active user' } });
+      return;
+    }
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}

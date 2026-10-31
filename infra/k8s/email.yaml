@@ -1,0 +1,161 @@
+# The email service: a fourth extraction, added for an evaluation and listed
+# in CLAUDE.md as deliberately out of the measured order.
+#
+# Read it next to notifications.yaml. Same shape: pure consumer, fixed at two
+# replicas (one partition per topic, so a third sits idle by construction),
+# three init-container gates. The one difference is auth: notifications never
+# calls back into the system, this one does, because student emails live in
+# naukri_suvidha_auth.users and nowhere else. So the gate on auth is as
+# load-bearing here as the one on Kafka, and the comment at the auth gate
+# below says so.
+#
+# No gateway route - the edge configs are not touched for this service.
+# Nothing in a browser reaches it. The only inputs are Kafka events and the
+# auth response to its one call.
+apiVersion: v1
+kind: Service
+metadata:
+  name: email
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: email
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: email
+  ports:
+    - name: http
+      port: 5005
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: email
+    app.kubernetes.io/part-of: naukri-suvidha
+spec:
+  # Two, fixed - same reason as notifications. One partition per topic means a
+  # third replica joins the group and is assigned nothing. Not request-shaped
+  # load, not throughput-bound: however many interview events the system
+  # produces, which on a university placement portal is bounded.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: email
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # The service has no public endpoint so a rolling gap is invisible to a
+      # browser - but a dropped handshake with auth during a roll is a
+      # delivery that lands in the retry queue instead of being sent. 0 keeps
+      # the retry queue for genuine failures.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        naukri-suvidha/image-id: '__EMAIL_IMAGE_ID__'
+      labels:
+        app.kubernetes.io/name: email
+        app.kubernetes.io/part-of: naukri-suvidha
+    spec:
+      # Matches notifications' 45s rather than auth's 30: a SIGTERM here can
+      # arrive mid-handler, mid-SMTP, and leaving the consumer group cleanly
+      # is what stops the surviving replica waiting out a session timeout
+      # before it picks up the partitions. An in-flight send is not resumable
+      # across pods, so the retry queue takes over.
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: email
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z mongo 27017; do echo "waiting for mongo"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-kafka
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo "waiting for kafka"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: wait-for-auth
+          # Not optional for this service. Without auth there is no way to
+          # resolve a recipient email - every send would land as `skipped`.
+          # Pulling in auth as a gate rather than a soft dependency makes the
+          # service refuse to start rather than start and never send, which is
+          # the right failure mode on a cold cluster.
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z auth 5002; do echo "waiting for auth"; sleep 2; done']
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+      containers:
+        - name: email
+          image: naukri-suvidha/email:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5005
+          envFrom:
+            - configMapRef:
+                name: email-config
+            - secretRef:
+                name: api-secrets
+          resources:
+            requests:
+              # 100m: one consumer group open, no model, no uploads, no
+              # socket server. SMTP is pooled by nodemailer so a steady state
+              # of sends is close to idle CPU.
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            # 200 while mongo is reachable. Deliberately NOT 503 on SMTP or
+            # auth being away: a transient SMTP outage or an auth blip must
+            # not take the pod out of the Service, because an EmailLog write
+            # still records the failure and the retry queue takes over.
+            # /health reports both separately.
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # TCP, same reason as everywhere else: a liveness failure kills
+            # the container, so pointing it at a dependency turns one mongo
+            # blip into a restart of every replica.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            # One consumer group to join and an SMTP verify after listen -
+            # faster than notifications' five, so a shorter budget than its
+            # 30x3s is fine.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          lifecycle:
+            preStop:
+              exec:
+                command: ['/bin/sh', '-c', 'sleep 5']

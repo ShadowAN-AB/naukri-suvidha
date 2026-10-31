@@ -176,3 +176,46 @@ data:
   REFRESH_TOKEN_TTL: 7d
   BCRYPT_ROUNDS: '12'
   CLIENT_ORIGIN: http://localhost:8081
+---
+# The email service's non-secret configuration.
+#
+# SMTP credentials are secrets and go into api-secrets, not here. SMTP_HOST,
+# PORT and MAIL_FROM are not secrets - the first two are protocol constants
+# and the third is the visible sender, which an evaluator sees in the email
+# anyway.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: email-config
+  namespace: naukri-suvidha
+  labels:
+    app.kubernetes.io/name: email
+    app.kubernetes.io/part-of: naukri-suvidha
+data:
+  NODE_ENV: production
+  PORT: '5005'
+  LOG_LEVEL: info
+
+  # Its own database. The audit trail of what was sent, when, to whom and
+  # whether an override was in play. Nothing else can read it, and this
+  # service cannot read anyone else's.
+  MONGODB_URI: mongodb://mongo:27017/naukri_suvidha_email?replicaSet=rs0
+
+  # Not optional. Pure consumer like notifications; no broker, no input.
+  KAFKA_BROKERS: kafka:9092
+
+  # The fourth service-to-service crossing in the system, and the reason it
+  # exists: student emails live in naukri_suvidha_auth.users, so the service
+  # that sends to them has to ask the service that owns them.
+  AUTH_SERVICE_URL: http://auth:5002
+  AUTH_SERVICE_TIMEOUT_MS: '2000'
+
+  # SMTP non-secret fields. The real host and port go here because they are
+  # protocol constants; MAIL_FROM goes here because the "from" address is
+  # visible in every email anyway. The credentials (SMTP_USER, SMTP_PASS) are
+  # in api-secrets.
+  SMTP_HOST: smtp.gmail.com
+  SMTP_PORT: '587'
+  MAIL_FROM: "Naukri Suvidha <naukri.suvidha@example.test>"
+
+  CLIENT_ORIGIN: http://localhost:8081

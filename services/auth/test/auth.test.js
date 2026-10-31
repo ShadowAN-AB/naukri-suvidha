@@ -335,3 +335,53 @@ describe('rate limiting', () => {
     expect(attempts).toContain(429);
   });
 });
+
+describe('user email lookup', () => {
+  it('returns the email for an active user', async () => {
+    const { user } = await makeUser(ROLES.STUDENT);
+    const res = await api()
+      .post(`/internal/users/${user._id}/email`)
+      .set(internal())
+      .expect(200);
+    expect(res.body.email).toBe(user.email);
+    expect(res.body.status).toBe('active');
+  });
+
+  it('also answers GET - same shape as introspect', async () => {
+    // Both verbs for the same reason as introspect: no caller-driven forcing,
+    // and symmetry across the internal surface. The email service calls POST
+    // today, but the shape is id-in-URL, which reads better as GET.
+    const { user } = await makeUser(ROLES.STUDENT);
+    const res = await api()
+      .get(`/internal/users/${user._id}/email`)
+      .set(internal())
+      .expect(200);
+    expect(res.body.email).toBe(user.email);
+  });
+
+  it('returns 404 for an unknown id, so the client knows not to retry', async () => {
+    const bogus = '507f1f77bcf86cd799439011';
+    await api().post(`/internal/users/${bogus}/email`).set(internal()).expect(404);
+  });
+
+  it('returns 404 for a malformed id, same meaning', async () => {
+    await api().post('/internal/users/not-a-real-id/email').set(internal()).expect(404);
+  });
+
+  it('returns 404 for a suspended user - do not email someone who is suspended', async () => {
+    const { user } = await makeUser(ROLES.STUDENT);
+    await User.updateOne({ _id: user._id }, { $set: { status: 'suspended' } });
+    await api()
+      .post(`/internal/users/${user._id}/email`)
+      .set(internal())
+      .expect(404);
+  });
+
+  it('refuses without the shared secret - this is the internal surface', async () => {
+    const { user } = await makeUser(ROLES.STUDENT);
+    // No internal() header - internalOnly answers 404 rather than 401, so
+    // nothing on the outside can confirm this route exists. Same rule the
+    // whole project follows for resources a caller may not see.
+    await api().post(`/internal/users/${user._id}/email`).expect(404);
+  });
+});
