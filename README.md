@@ -1,615 +1,706 @@
-# Naukri Suvidha — Naukri Suvidha
+# Naukri Suvidha
 
-An AI-assisted campus placement portal. Students upload a résumé once, an LLM turns it
-into a structured profile, and every job they see is ranked by how well they actually fit
-it. Recruiters post jobs behind an admin approval gate and work a shortlist sorted by the
-same score. Admins run the whole placement cycle and watch it on a live dashboard.
+An AI-assisted campus placement portal. Students upload a résumé once, an LLM
+turns it into a structured profile, and every job they see is ranked by how
+well they actually fit it. Recruiters post jobs behind an admin approval gate
+and work a shortlist sorted by the same score. Admins run the whole placement
+cycle and watch it on a live dashboard.
 
-**Status:** Phase 6 of 7 complete — the portal is feature-complete: live notifications,
-interview scheduling and placement analytics. Only hardening and deployment remain.
+**Status:** Phase 7 of 7 — the portal is feature-complete. All nine
+infrastructure concepts the course requires run rather than being designed:
+load balancing, Redis, Kafka, Kubernetes, API gateway, microservices, Docker,
+a CDN-standing-in edge, and horizontal scaling.
 
 ---
 
-## What problem it solves
+## Table of contents
 
-Campus placement today runs on spreadsheets, WhatsApp groups and notice boards. Three
-things break repeatedly:
+1. [What it does](#what-it-does)
+2. [Architecture](#architecture)
+3. [Prerequisites](#prerequisites)
+4. [Quick start — development mode](#quick-start--development-mode)
+5. [Running it as Docker containers](#running-it-as-docker-containers)
+6. [Running it on Kubernetes](#running-it-on-kubernetes)
+7. [Setting up Ollama (the LLM)](#setting-up-ollama-the-llm)
+8. [Seeding the databases](#seeding-the-databases)
+9. [Running the tests](#running-the-tests)
+10. [Repository layout](#repository-layout)
+11. [Environment variables](#environment-variables)
+12. [Troubleshooting](#troubleshooting)
+13. [Deploying](#deploying)
+14. [How things work](#how-things-work)
+
+---
+
+## What it does
+
+Campus placement today runs on spreadsheets, WhatsApp groups and notice
+boards. Three things break repeatedly:
 
 | Problem | What Naukri Suvidha does |
 | --- | --- |
 | Students apply to jobs they are not eligible for | Eligibility is a rule on the job, checked by the server before an application is written |
-| Recruiters read hundreds of résumés by hand | Every résumé is parsed once and scored against the job, with reasoning attached |
+| Recruiters read hundreds of résumés by hand | Every résumé is parsed once and scored against each job, with reasoning attached |
 | Nobody knows the real placement numbers until the cycle ends | Every status change is an event; the admin dashboard reads live counts |
 
-The end-to-end flow: a student registers, uploads a résumé, and the AI layer extracts a
-profile from it. A recruiter posts a job; an admin approves it; only then is it visible.
-The student sees that job ranked by fit, applies, and the recruiter moves them through a
-status pipeline that the student can watch in real time.
+End-to-end flow: a student registers, uploads a résumé, the AI extracts a
+structured profile. A recruiter posts a job; an admin approves it; only then
+is it visible. The student sees jobs ranked by fit, applies, and the recruiter
+moves them through a status pipeline the student watches in real time. When
+an interview is scheduled, the email service sends the invite.
 
-## Architecture in one paragraph
+## Architecture
 
-One React SPA, **three Express services behind an API gateway**, and MongoDB. Eight
-modules live inside the API process with their own routes, collections and domain
-events; **authentication and notifications are separate services**, each with its own
-image, its own lifecycle and its own database. The service boundaries from the design
-are real, and two of them are now network boundaries rather than module boundaries —
-which is what makes the cost of the rest of them measurable rather than theoretical.
-
-The two were chosen to demonstrate *different* things. Auth is request-driven, so its
-boundary is synchronous HTTP with a compensation where a write spans both services.
-Notifications is event-driven: it has no caller at all, consumes five domain events
-from Kafka, and pushes to sockets it does not hold through the Redis adapter. Together
-they cover both halves of what a service boundary can be.
-
-The edge is the only way in. It serves the built SPA, routes `/api/auth` to the auth
-service and the rest of `/api` to the API, and **authenticates every API request on
-the way through**: an nginx `auth_request` subrequest asks the auth service to
-introspect the bearer token, and the identity it returns is forwarded to the API. So
-the API verifies no token and reads no user — that happened once, at the edge, in the
-service that owns the data.
-
-The model never runs inside a request: résumé extraction and fit scoring are queued
-and handled by an in-process worker, so a slow LLM call can never hold a user's
-request open.
+One React SPA, **five Node services behind an nginx API gateway**, and
+MongoDB. Seven modules live inside the API process; auth, notifications,
+realtime, and email are each their own service with their own image, lifecycle
+and database.
 
 ```
                         ┌─── edge (nginx) ─ static host · router · load balancer · gateway
 React 19 SPA ─HTTPS/wss─┤
-                        │   /api/auth/*          ──▶ auth     ──▶ …_auth
-                        │   /api/notifications/* ──▶ notif    ──▶ …_notifications
-                        │   /api/*               ──▶ API ×N   ──▶ naukri_suvidha
-                        │   /socket.io           ──▶ API      ──▶ object store
-                        └                                     ──▶ LLM provider
+                        │   /api/auth/*          ──▶ auth      ──▶ naukri_suvidha_auth
+                        │   /api/*               ──▶ API ×N    ──▶ naukri_suvidha
+                        │   /socket.io           ──▶ realtime  (no db)
+                        └                                      ──▶ Ollama / Claude
 
 every /api/* request:   edge ──auth_request──▶ auth /internal/introspect
                              ──X-Auth-User-{Id,Role}──▶ the upstream
 
-a notification:         API ──commit+outbox──▶ Kafka ──▶ notif ──▶ its own db
-                        notif ──▶ Redis adapter ──▶ whichever API pod
-                                                     holds that socket
+a notification:         API ──commit+outbox──▶ Kafka ──▶ notif    ──▶ naukri_suvidha_notifications
+                                                      ──▶ email   ──▶ naukri_suvidha_email ──▶ SMTP
+                        notif ──▶ Redis adapter ──▶ realtime ──▶ the student's socket
 ```
 
-Full design, data model, API surface and phase plan: **[project plan][plan]**.
-The written report: **[project report][report]**.
+**Five services, four databases:**
 
-[plan]: https://claude.ai/code/artifact/9e031f77-7e4b-442b-9edb-d85c7c00c803
-[report]: https://claude.ai/code/artifact/9ee5f933-efa2-40ac-9d36-a7f69079a76d
+| Service | Port (dev) | Database | What it does |
+| --- | --- | --- | --- |
+| API | 5001 | `naukri_suvidha` | 7 domain modules (jobs, applications, interviews, résumés, admin, AI, profiles) |
+| Auth | 5002 | `naukri_suvidha_auth` | Login, JWT minting, users table — the only one that owns credentials |
+| Notifications | 5003 | `naukri_suvidha_notifications` | Kafka consumer, writes inbox rows, pushes via Redis |
+| Realtime | 5004 | — | Holds every Socket.IO connection; no database of its own |
+| Email | 5005 | `naukri_suvidha_email` | Kafka consumer for `interview.scheduled`, sends via SMTP |
 
-## Tech stack
+**Tech stack:** React 19 + Vite + Tailwind on the client. Node 22 + Express 5
++ Mongoose 8 on the server. MongoDB, Redis, Kafka (KRaft mode), nginx. Zod for
+validation (shared client/server). Socket.IO for realtime. Ollama locally,
+Claude in production (one `LLMProvider` interface).
 
-| Layer | Choice |
-| --- | --- |
-| Frontend | React 19, Vite, Tailwind, React Router, TanStack Query |
-| Backend | Node 22, Express 5, Mongoose 8 |
-| Database | MongoDB Atlas |
-| Auth | A separate service: JWT access tokens + httpOnly refresh cookie, bcrypt |
-| Notifications | A separate service: five Kafka consumer groups, pushes via the Redis adapter |
-| Gateway | nginx — routing, load balancing and `auth_request` authentication |
-| Infrastructure | Docker Compose and Kubernetes (kind), Redis, Kafka — all running, not described |
-| Realtime | Socket.IO |
-| AI | Ollama (`llama3.1:8b`) in dev, Claude in production, behind one `LLMProvider` |
-| Validation | Zod, shared between client and server |
+---
 
-## Build phases
+## Prerequisites
 
-| Phase | Scope | Status |
+Install these before anything else. Versions matter — Node 22, Docker and
+kubectl are the ones most likely to bite you if you install an older one.
+
+### Core (needed for every mode)
+
+| Tool | Version | Install (macOS) |
 | --- | --- | --- |
-| 1 | Foundation — scaffold, 11 schemas, seed data, infra interfaces | ✅ done |
-| 2 | Auth, RBAC, React shell | ✅ done |
-| 3 | Profiles, jobs, admin approval gate | ✅ done |
-| 4 | Résumés, extraction, applying | ✅ done |
-| 5 | The AI layer — provider, worker, fit scoring | ✅ done |
-| 6 | Realtime, interviews, analytics | ✅ done |
-| 7 | Harden, deploy, document | 🟡 in progress |
+| **Node.js** | ≥ 22.0 | `brew install node@22` then `brew link node@22` |
+| **npm** | ≥ 10 | ships with Node |
+| **Git** | any recent | `brew install git` |
+| **MongoDB Community** | ≥ 7.0 | `brew tap mongodb/brew && brew install mongodb-community@7.0` |
 
-All nine infrastructure concepts the course requires now run rather than being
-designed: load balancing, Redis, Kafka, Kubernetes, an API gateway, microservices,
-Docker, a CDN-standing-in edge, and horizontal scaling.
-
-## Repository layout
-
-```
-naukri-suvidha/
-  server/src/         the API: nine domain modules in one process
-    modules/        one folder per domain module, plus internal/ for the
-                    two routes the auth service calls back on
-    infra/          storage, llm, events, cache, identity - interfaces +
-                    implementations
-    middleware/     requestId, error, auth, rbac
-    config/         env loading and validation
-  services/
-    auth/           the extracted auth service: its own package, image,
-                    Dockerfile, test suite and database
-    notifications/  the second extraction, same shape - and a pure consumer,
-                    so a broker it can reach is not optional for it
-  service-kit/src/    plumbing BOTH services must agree on - the token
-                    functions, the one error shape, the dotenv rules, the
-                    Redis connection. Only things that would be a *bug* to
-                    duplicate, not merely inconvenient.
-  client/src/
-    pages/          auth, student, recruiter, admin
-    api/            one TanStack Query hook file per module
-    context/        auth session
-    layouts/        the signed-in shell
-    components/  hooks/  lib/
-  shared/src/       Zod schemas and constants used by BOTH sides
-  infra/
-    nginx/          the compose edge's gateway config
-    k8s/            the Kubernetes manifests, and the edge's config for them
-  docs/             notes that are not the plan
-```
-
-## Running the checks
+Verify:
 
 ```bash
-npm run lint       # eslint across every workspace
-npm test           # 176 tests over three suites, against a real mongod
-npm run test:api   # the API's 135 alone
-npm run test:auth  # the auth service's 28 alone
-npm run test:notifications   # the notifications service's 13 alone
-npm run docs:check # 74 claims the design document makes about this repo
-npm run build --workspace=client
+node --version        # v22.x
+npm --version         # 10.x or newer
+mongod --version      # db version v7.x
 ```
 
-Each service has its own suite and its own throwaway database, so the two can run at
-the same time without either wiping the other's rows — which is the boundary doing
-its job.
+### For Docker mode
 
-Both suites need a local MongoDB and **refuse to run unless the database name
-contains "test"** — they delete every collection between tests, and one destroyed a
-development database once before that guard existed. Their configuration is
-`server/.env.test` and `services/auth/.env.test`, committed on purpose so CI needs no
-secrets. The guard itself lives in `service-kit`, so a third service cannot
-accidentally reintroduce the bug.
+| Tool | Install |
+| --- | --- |
+| **Docker Desktop** | https://www.docker.com/products/docker-desktop/ — includes Docker CLI and Compose v2 |
 
-GitHub Actions runs all three on every push, plus
-`npm audit --omit=dev --audit-level=high`.
+Verify `docker --version` and `docker compose version`.
 
-## Deploying
+### For Kubernetes mode
 
-See **[DEPLOYMENT.md](DEPLOYMENT.md)**. Short version: Vercel for the client,
-Render for the API, Atlas for the database, and an S3-compatible bucket for
-résumés — Render's disk is ephemeral, so local storage would lose every upload
-on the next deploy.
+| Tool | Install |
+| --- | --- |
+| **kind** | `brew install kind` — Kubernetes-in-Docker, used for the local cluster |
+| **kubectl** | `brew install kubectl` — CLI |
 
-**[DEMO.md](DEMO.md)** is the eight-minute demo script, including the run with
-the model switched off.
+Verify `kind --version` and `kubectl version --client`.
 
-## Getting started
+### For the AI features (optional in dev)
+
+| Tool | Install |
+| --- | --- |
+| **Ollama** | https://ollama.com/download — needed for résumé extraction and fit scoring |
+
+See [Setting up Ollama](#setting-up-ollama-the-llm) below.
+
+### For the email service (optional in dev)
+
+The email service is a pure Kafka consumer, so without SMTP credentials it
+will log sends as `failed` in `EmailLog` and the rest of the portal still
+works. To actually send mail you need SMTP credentials — a Gmail app password
+is the easiest. Create one at https://myaccount.google.com/apppasswords (needs
+2-step verification enabled first).
+
+---
+
+## Quick start — development mode
+
+This is the fastest path. Everything runs on your laptop against a local
+MongoDB. No Docker needed.
+
+### 1 · Clone and install
 
 ```bash
+git clone <this-repo-url> naukri-suvidha
+cd naukri-suvidha
 npm install
-cp server/.env.example               server/.env     # MONGODB_URI, secrets
-cp services/auth/.env.example          services/auth/.env
-cp services/notifications/.env.example services/notifications/.env
-npm run seed -- --fresh   # 3 admins, 6 companies, 40 students, 12 jobs
-npm run dev               # client :5173, API :5001, auth :5002, notif :5003
 ```
 
-**Notifications need a broker, and that is not optional the way Redis and Kafka are
-for the API.** The notifications service is a pure consumer: every notification it
-creates begins with a Kafka message, so with no broker it serves its inbox and
-creates nothing. Start the two it needs before expecting one to appear:
+This installs every workspace: `shared`, `service-kit`, `server`,
+`services/*`, and `client`.
+
+### 2 · Start MongoDB
+
+```bash
+brew services start mongodb-community@7.0
+```
+
+Verify it is up:
+
+```bash
+mongosh --eval 'db.runCommand({ ping: 1 })'
+```
+
+### 3 · Copy the env files
+
+Each service reads its `.env` from its own package directory. Copy the
+examples:
+
+```bash
+cp server/.env.example                    server/.env
+cp services/auth/.env.example             services/auth/.env
+cp services/notifications/.env.example    services/notifications/.env
+cp services/realtime/.env.example         services/realtime/.env
+cp services/email/.env.example            services/email/.env
+```
+
+The examples work out of the box for development. The one value you'd want to
+edit is `services/email/.env`'s `SMTP_USER` and `SMTP_PASS` — set these to
+your own Gmail + app password if you want real email sends.
+
+**Security:** every `.env` file is gitignored. Never commit one, never paste
+their contents into chat. The JWT secrets must be byte-identical in
+`server/.env` and `services/auth/.env` — the examples already match.
+
+### 4 · Seed the databases
+
+```bash
+npm run seed -- --fresh
+```
+
+Writes 3 admins, 6 companies, 40 students and 12 jobs across the API and auth
+databases in one run. Seeded accounts use `@naukrisuvidha.edu` emails with
+password `Passw0rd!seed`.
+
+### 5 · (Optional) Start Kafka + Redis for notifications
+
+The notifications and email services need a broker. If you want to see
+notifications and emails fire, start them in Docker:
 
 ```bash
 docker compose up -d kafka redis
 ```
 
-Two env files, because there are two services. **The JWT secrets must be byte-identical
-in both** — the auth service mints the access tokens the API verifies, and a mismatch is
-a sign-in that appears to work and is then refused everywhere.
+If you skip this, the API and client still work. Notifications simply won't
+appear.
 
-Seeding writes **both** databases in one run, and it has to: a student profile carries a
-`userId`, so the users have to exist in the auth service's database and their ids have to
-match. There is no ordering of two separate scripts that produces that. The `seed` script
-sets `AUTH_MONGODB_URI` for you; override it if your auth database is elsewhere.
-
-The API listens on **5001**, not 5000: on macOS, port 5000 is held by the AirPlay
-Receiver in Control Center, which answers requests with a bare `403`. The auth service is
-on 5002. Change `PORT` in either `.env` if you need different ones.
-
-Each service reads its `.env` from its own package directory regardless of where you
-start the process from. If a required variable is missing the service refuses to start and
-prints exactly which ones.
-
-There is no gateway in this mode — Vite's dev proxy does the routing instead, sending
-`/api/auth` to 5002 and the rest of `/api` to 5001. To see the real gateway, run one of
-the container stacks: `npm run docker:up` (`:8080`) or `npm run k8s:up` (`:8081`).
-
-## Still to do by hand
-
-Three Phase 1 items need a person, not a commit:
-
-- [ ] Install Ollama and pull `llama3.1:8b`, then confirm it returns valid JSON. Phase 5
-      needs it; nothing before then does.
-- [ ] Collect 20 real résumés as PDFs into `server/test/fixtures/`. They are the only
-      honest test of extraction, and the directory is gitignored because they are personal
-      data.
-- [ ] Sketch the five main screens on paper before Phase 2 starts.
-
-## How eligibility works
-
-Whether a student may apply to a job is decided by **one pure function** in
-`shared/src/eligibility.js`, with no database and no imports from either side. The server
-enforces it; the client calls the same function to explain a greyed-out job without a
-round trip. There is one copy of the rules, which is the point — a rule that exists twice
-eventually disagrees with itself.
-
-It checks four things: CGPA, active backlogs, branch (an empty `allowedBranches` means
-every branch), and the deadline.
-
-Because fetching every job and filtering in memory does not scale, the same rules are also
-expressed as a MongoDB filter. The two **must** agree, so a check runs both over the same
-data and compares the results.
-
-Students see jobs they are not eligible for, with the reason spelled out — "Open to CSE,
-IT; you are in CIVIL" — rather than a shorter list they cannot explain.
-
-## How the approval gate works
-
-A job is created `pending` and is invisible to students until an admin approves it. A
-student asking for an unapproved job by id gets `404`, not `403`, so the response does not
-confirm that it exists.
-
-Changing `minCgpa`, `maxBacklogs` or `allowedBranches` on an already-approved job sends it
-back to the queue. Without that, a recruiter could be approved on easy terms and then
-tighten them, and the gate would be decorative. Editing a description or deadline does not
-re-queue.
-
-## How realtime works
-
-Socket.IO shares the HTTP server, so there is one process and one port to deploy. A socket
-authenticates exactly as a request does — the access token is verified and the user
-re-checked against the database — so a suspended account or an ended session cannot hold
-an open channel. Each connection joins exactly one room, its own, which is what stops one
-student subscribing to another's events.
-
-Screens know nothing about sockets. A push invalidates the relevant queries and TanStack
-Query refetches, so there is one source of truth for the data and every screen behaves the
-same whether the socket is up or not.
-
-Notifications are **written first and pushed second**. The row is what matters; the emit
-is a nicety. Someone with no tab open still finds it in their inbox, and a failed
-notification never fails the thing it was describing.
-
-Measured: a recruiter status change reaches an open student tab in **10ms**.
-
-## Semantic resume search (prototype)
-
-Retrieval is used where it earns its place and nowhere else. Extraction reads one
-document and scoring compares one pair — both fit in context, so neither needs it.
-Searching several hundred résumés does, because exact skill matching misses a candidate
-whose résumé says "event streaming" when the recruiter asks for message queues.
+### 6 · Run the stack
 
 ```bash
-ollama pull nomic-embed-text   # 768-dimension vectors, ~274 MB
-npm run seed:resumes           # ten varied résumés, embedded
+npm run dev
 ```
 
-`GET /api/resumes/search?q=…` — four queries with **no literal keyword overlap**, each
-returning the right student first:
+This starts six processes with coloured prefixed logs:
 
-| Query | Top result |
-| --- | --- |
-| "built event-driven backends with message queues" | Kafka, Spring Boot |
-| "make the interface accessible and fast" | React, Tailwind, Accessibility |
-| "experience shipping to app stores" | Flutter, Dart, Kotlin |
-| "wrote firmware for microcontrollers" | C, FreeRTOS, STM32 |
+| Prefix | Process | URL |
+| --- | --- | --- |
+| `api` | API server | http://localhost:5001 |
+| `auth` | Auth service | http://localhost:5002 |
+| `notif` | Notifications service | http://localhost:5003 |
+| `rt` | Realtime service | http://localhost:5004 |
+| `email` | Email service | http://localhost:5005 |
+| `client` | Vite dev server | http://localhost:5173 |
 
-**It does not widen who may read a résumé.** The corpus is narrowed in the database filter
-*before* ranking: an admin searches every student, a recruiter only students who applied
-to one of their own jobs, a student not at all. The same query returns 11 results for the
-placement office and 1 for a recruiter.
+Open **http://localhost:5173** and sign in as a seeded admin:
+`tpo@naukrisuvidha.edu` / `Passw0rd!seed`.
 
-`VECTOR_INDEX=memory` is a linear scan in process — a few hundred vectors of 768 floats is
-well under a millisecond, and the database round trip dominates (measured 2–6ms end to
-end). `VECTOR_INDEX=atlas` switches to `$vectorSearch`, which needs a search index defined
-on Atlas and is the untested path here.
-
-## How the AI layer works
-
-**The model never runs inside a request.** Work is written to `aiTasks` first, then handed
-to an in-process queue at concurrency 2. The database row is the durable part — the queue
-is lost on restart, so anything stranded mid-run is reclaimed on boot. Claiming a task is
-an atomic `findOneAndUpdate`, so a recovered task cannot run twice. A task that exhausts
-its attempts lands in `dead` instead of cycling forever.
-
-**Every answer is validated.** Extraction and scoring both parse the model's JSON against
-a Zod schema. On a violation the model gets **one repair attempt**, shown its own output
-and what was wrong with it. A second failure falls back rather than failing the upload.
-
-**The fallbacks are deliberately dumb** — regexes and set arithmetic, no inference. They
-exist so an examiner can stop Ollama mid-demo and the portal keeps ranking. Everything
-they produce is **capped at 70 and flagged in the UI**, so a guess can never outrank
-something the model actually reasoned about.
-
-Swapping Ollama for Claude is one environment variable. `GET /api/ai/health` reports the
-provider, the queue depth, task counts and what degraded behaviour is in effect.
-
-Measured locally on `qwen2.5-coder:7b`: extraction ~10s, scoring ~4s each.
-
-## How uploads are checked
-
-A filename extension and a `Content-Type` are both supplied by whoever is uploading, so
-neither is evidence. Every upload is identified by its **leading bytes** — `%PDF` for a
-PDF, and for a DOCX the zip header plus an actual `word/` entry, because every `.jar` and
-`.xlsx` starts with the same four bytes.
-
-Files are held in memory until they pass, then stored under a random UUID key that is
-never derived from the filename, so a crafted name cannot traverse out of the upload
-directory. If the database row fails to write, the stored file is deleted again rather
-than left orphaned.
-
-Extraction never throws. A résumé that cannot be read is flagged on the record and the
-upload still succeeds — and a file that yields under 50 characters is reported as a
-probable scan instead of silently storing an empty string.
-
-Run `npm run resumes:check` to push everything in `server/test/fixtures/` through the real
-extraction path and see what fails.
-
-## How applying works
-
-Eligibility is re-checked at the moment of writing, not just when the list was drawn, so a
-stale page or a direct API call cannot skip it.
-
-Deduplication is the unique `(jobId, studentId)` index rather than a read-then-write, so
-two simultaneous clicks cannot both succeed.
-
-Every status change appends to `timeline[]` with the actor and the time. Transitions are
-validated from a single map in `shared/`, which the recruiter UI also reads to decide
-which buttons to show — so a stage cannot be skipped, and a rejection or an offer cannot
-be quietly reversed.
-
-## How authentication works
-
-Two tokens, with different jobs:
-
-- The **access token** is a 15-minute JWT the client keeps *in memory only*. It is never
-  written to `localStorage`, so a script injected into the page cannot steal a credential
-  that outlives the tab.
-- The **refresh token** is a 7-day JWT in an `httpOnly` cookie scoped to `/api/auth`.
-  JavaScript cannot read it, and the browser does not attach it to any other request.
-
-A reload loses the access token but keeps the cookie, so the app exchanges it for a new
-access token once on start-up. When any request comes back `401`, the same exchange runs
-and the original request is retried once; concurrent `401`s share a single refresh rather
-than each firing their own.
-
-Both tokens carry a `tokenVersion`. Bumping that column on a user invalidates every token
-already issued to them, which is how suspension and "sign out everywhere" work without
-storing a session table.
-
-### Where the checking happens
-
-All of the above is the **auth service's** now, and so is the `users` collection. The API
-has no connection that can read it. That moves one question: who decides a request is
-allowed?
-
-In both container stacks, the **edge** does, once per request. nginx runs an
-`auth_request` subrequest against the auth service's introspection endpoint, which
-verifies the signature *and* re-reads the row — because a token that has not expired is
-not the same thing as a session that is still allowed. The identity comes back in
-response headers, and the edge forwards it to the API.
-
-Trusting a header is the sharp edge of that design, so it has two locks. nginx sets all
-four identity headers on **every** proxied request, including empty on the unauthenticated
-ones, so a client's own values are always overwritten; and the API additionally requires a
-shared secret, so being able to reach it is not enough. Be precise about the limit: that
-secret is a bearer secret shared between three processes, **not** a per-request proof, so
-anything holding it and a route to the API could mint any identity. A short-lived signed
-assertion — what Envoy's `ext_authz` and ALB's `X-Amzn-Oidc-Data` carry — removes that,
-and is the upgrade path rather than something already built.
-
-Running the API alone, as `npm run dev` and the test suite do, there is no edge to do any
-of this, so it verifies the token itself and trusts the claims. The cost of that mode is
-exact and worth stating: **no revocation check**, so a suspended account keeps access
-until its access token expires. That is why it is the development mode and the gateway is
-the deployed one.
-
-Route guards in React are a convenience for the person using the app, **not** a security
-boundary. Every rule they express is enforced again on the server, which is the only place
-that counts.
-
-## Build log
-
-Newest first. Every entry is one pushed commit.
-
-### 2026-10-20 — Phase 7
-Hardening and release preparation. 72 tests, a security pass, S3-compatible storage, CI,
-deployment configuration and the written report. Deployment itself, the production seed
-and the demo rehearsal need accounts and a person — `DEPLOYMENT.md` and `DEMO.md` cover
-both.
-
-### 2026-10-20 — Phase 6 complete
-- **Realtime.** Socket.IO on the same server, token-authenticated, per-user rooms, three
-  events. Status change to open tab measured at **10ms** against a one-second requirement.
-- **Notifications.** Consumers for every domain event in one file, an inbox with unread
-  counts, and a live/reconnecting indicator.
-- **Interviews.** Schedule, reschedule and cancel, gated on the pipeline so only a
-  shortlisted applicant can be booked. Validation refuses an online interview with no link
-  or an onsite one with no location.
-- **Analytics.** Placement rate, offers, median CTC, upcoming interviews, an eight-week
-  trend and a stage breakdown — plus the audit log and AI-layer health.
-- **Chart colours were computed, not chosen.** The two categorical hues separate by ΔE
-  29.6 under protanopia (target 8). One axis, legend for two series, direct labels for the
-  single-series chart, 2px surface rings so coinciding points stay legible.
-- **Fixed the Vite proxy**, which only covered `/api` — the `/socket.io` handshake never
-  reached the server, so realtime silently failed in development.
-- **Code-split the analytics page.** Recharts pushed the bundle past 500 kB for everyone;
-  only the placement office now downloads those 382 kB.
-
-### 2026-10-20 — Phase 5 complete
-- **Both providers implemented.** Ollama via its JSON mode, Claude via the Anthropic SDK —
-  which checks `stop_reason` for a refusal or token cutoff before reading content, because
-  neither raises.
-- **The queue.** `aiTasks` + `p-queue` at concurrency 2, with backoff retries, a dead
-  state, and recovery of stranded tasks on boot.
-- **Extraction and scoring**, each with Zod validation, one repair retry, and a
-  deterministic fallback.
-- **Ranked lists.** Students see jobs best-fit-first; recruiters see applicants the same
-  way. Both show the breakdown and the model's reasoning.
-- **Verified by killing the model mid-run:** health went `degraded`, scoring continued,
-  and every score came back ≤70, flagged, and still correctly ordered.
-- **Corrected `ANTHROPIC_MODEL` to `claude-opus-5`.** The earlier value was a cheaper
-  model picked without being asked for.
-
-### 2026-10-20 — Phase 4 complete
-- **Résumés.** Upload with drag-and-drop, magic-byte validation, a 5 MB cap, versioning,
-  and text extraction via `pdf-parse` and `mammoth`. Files are readable by the student who
-  owns one, an admin, or a recruiter at a company that student actually applied to.
-- **Applying.** Eligibility enforced again at write time, deduplication by unique index,
-  and a résumé required before applying.
-- **The pipeline.** Applied → shortlisted → interview → offered, with rejection available
-  throughout and withdrawal available to the student until an offer exists. An offer marks
-  the student placed.
-- **Screens.** The student résumé page and application tracker with its timeline, and the
-  recruiter applicant list with the résumé attached and only the valid next actions shown.
-- **Fixed `AppError.forbidden` and friends**, which accepted only a message and silently
-  dropped their `details` argument — so a student refused for eligibility was told "you
-  are not eligible" with no indication of why.
-- **Fixed `seed --fresh`,** which cleared only four of the eleven collections and left
-  résumés and applications pointing at students who no longer existed.
-
-### 2026-10-20 — Iron filings behind the auth screens
-Login and register now sit on a translucent card over the same field, via a shared
-`AuthLayout`. The magnet follows the cursor everywhere.
-
-The component originally bundled five behaviours into one `interactive` flag: following
-the pointer, a crosshair cursor, a tab stop on the wrapper, click-to-drop-a-magnet, and
-`touch-none`. Behind a form you want the first and none of the rest — a crosshair over a
-text box is wrong, a tab stop ahead of the email field is worse, and `touch-none` would
-have left the register form taller than a phone screen with no way to scroll it.
-
-So `followPointer` and `pointerSource` are now separate props. Pointer tracking on the
-auth screens listens on the **window**, because the field sits behind the card and pointer
-events over the form never reach it. The landing page tracks globally too, so the magnet
-keeps following over the buttons.
-
-### 2026-10-20 — Landing page (experimental)
-A signed-out front door at `/`, built around the `IronFilings` canvas component from
-21st.dev. Signed-in users still redirect straight to their dashboard, so nothing about the
-app itself changed.
-
-The component needed converting: it ships as TypeScript against shadcn conventions, and
-this project is plain JSX with its own tokens. It was rewritten as `.jsx` and the demo's
-`bg-background` / `text-muted-foreground` were mapped onto `bg-surface` / `text-muted`. It
-has no dependencies beyond React and draws to a canvas, so nothing was installed.
-
-It lives in `client/src/components/ui/`, which is the folder every 21st.dev component
-imports against — keeping that path means the next one needs less rewiring.
-
-**This is a self-contained experiment.** Reverting it is one commit: delete
-`client/src/pages/Landing.jsx` and `client/src/components/ui/`, and point `/` back at a
-redirect in `App.jsx`.
-
-### 2026-10-20 — Phase 3 complete
-- **Profiles.** Students and companies read and edit their own profile. A student's CGPA,
-  backlogs and branch drive eligibility, so saving the form re-checks which jobs they
-  qualify for.
-- **Jobs.** Create, list, read, update, approve, reject and close, each gated by role and
-  by ownership — a recruiter touching another company's posting gets `403`.
-- **The approval gate.** Nothing a recruiter posts reaches students until the placement
-  office approves it, and tightening eligibility after approval sends it back.
-- **Eligibility as one pure function**, with a matching database filter and a check that
-  the two agree.
-- **Screens.** The student job list with per-job eligibility reasons and an "eligible
-  only" toggle, the recruiter's postings with a post-a-job form, and the admin approval
-  queue with reject-and-explain.
-- `job.created` and `job.approved` are published on the event bus. Nothing consumes them
-  yet; Phase 6 will.
-- **Fixed `npm run seed -- --fresh`,** which the README documented but which silently
-  dropped its flag — npm does not forward arguments through a nested workspace script, so
-  the command always refused to run.
-
-### 2026-10-20 — Verification pass over phases 1 and 2
-Re-checked everything from a clean clone of the published repository, following the
-README's own setup steps against a separate database. 24 endpoint and security checks
-pass. Two real bugs were found and fixed:
-
-- **The login timing defence did not work.** The placeholder hash compared against for an
-  unknown email was 52 characters where bcrypt needs 53, so it was rejected as malformed
-  and returned in microseconds instead of doing the work. An unknown email answered about
-  84,000x faster than a real one, which is precisely the user-enumeration oracle the code
-  claimed to close. It now compares against a genuine hash computed once at start-up;
-  measured, the two cases are 225ms and 218ms.
-- **Ten typos locked you out of registering.** The hourly registration limit counted
-  rejected submissions, so a few mistakes on the form — a short password, a roll number
-  already taken — burned the whole budget. It now counts only accounts actually created,
-  and the limit is raised because a campus shares one public IP.
-
-- **A gateway error page crashed the error handler.** The client assumed every response
-  was JSON. Render and Vercel return an HTML page for a 502 or a cold-start timeout, so
-  the user would have seen `Unexpected token '<'` instead of a usable message. Unparseable
-  bodies now become a plain "the server is not responding properly".
-
-Also added the `docs/` and `server/test/fixtures/` directories to the repository. Git does
-not track empty directories, so the README was describing two folders a fresh clone did
-not have.
-
-### 2026-10-19 — Phase 2 complete
-- **Readable dev logs.** `pino-http` logs every request and response header by default,
-  which buried anything useful under a screen of noise per request. Requests are now one
-  line — `POST /api/auth/login 200` — with 4xx logged as a warning and only 5xx as an
-  error with a stack. The path comes from `originalUrl`, because Express rewrites
-  `req.url` to the router-relative path and the log would otherwise read `/login`.
-- **Shared validation.** A third workspace, `@naukri-suvidha/shared`, holds the Zod schemas and the
-  role constants. The register form and the register endpoint validate against the same
-  object, so the two cannot drift apart.
-- **Auth module.** Register, login, refresh, logout and me, with bcrypt at cost 12. Login
-  runs a bcrypt comparison even when the email is unknown, so response time does not
-  reveal which accounts exist, and every attempt — success or failure — is written to
-  `auditLogs`.
-- **RBAC.** `requireRole` gates an admin-only endpoint, so the middleware is exercised by
-  a real route rather than sitting unused until Phase 6.
-- **Rate limiting.** Login allows five attempts a minute per IP, and successful sign-ins
-  do not count against the budget, so nobody is locked out by their own activity.
-- **React shell.** Auth context, protected routes, a role-aware layout, login and register
-  screens, and the three dashboards. A student who types `/dashboard/admin` is sent back
-  to their own dashboard; the same request to the API returns `403`.
-
-### 2026-10-19 — Phase 1 complete
-- **Client scaffold.** Vite 6, React 19, Tailwind 4, React Router 7 and TanStack Query,
-  with `/api` proxied to the server so the client never learns the API's origin. One
-  `api()` helper does every fetch and turns a failure into an `ApiError` carrying the
-  server's code and request id, so a message on screen can be matched to a line in the
-  logs. The one page, `SystemStatus`, reports API and database health — it exists to prove
-  the stack is wired, and Phase 2 replaces it with the real shell.
-- **Fixed a port collision.** A `PORT` exported by a parent process silently overrode
-  `.env` and made the API bind to Vite's port. `.env` now takes precedence locally, while
-  the hosting platform's own `PORT` still applies in production, where no `.env` exists.
-- `npm run dev` starts both halves; verified in a browser with the API reporting `ok` and
-  the database `up`.
-
-### 2026-10-19 — Phase 1 begins
-- **Seed data.** `npm run seed` builds a demo placement cycle: 3 admins, 6 companies,
-  40 students across 6 branches, and 12 jobs (8 approved, 3 awaiting approval, 1 closed).
-  The generator is deterministic, so a demo script written today still works next week. It
-  refuses to run against a non-empty database unless given `--fresh`.
-- **The four infrastructure seams.** `StorageProvider`, `LLMProvider`, `EventBus` and
-  `Cache` now exist as interfaces with the development implementation behind each one.
-  Storage keys are random UUIDs and never derived from the uploaded filename, and any key
-  that resolves outside the upload root is refused. The event bus isolates subscribers, so
-  a handler that throws is logged without taking down the publisher or its siblings. The
-  Ollama and Claude providers are stubs that fail with the phase they land in.
-- **The data model.** All eleven collections written as Mongoose schemas, each owned by the
-  module that uses it, with every index from the plan verified against a live database:
-  `users` `students` `companies` `jobs` `applications` `resumes` `fitScores` `aiTasks`
-  `interviews` `notifications` `auditLogs`. The unique `(jobId, studentId)` index is what
-  makes duplicate applications impossible — deduplication is the database's job, not the
-  service's. Domain enums and event names live in one shared constants file.
-- **Server foundation.** Express 5 app with helmet, CORS, a 300/min API rate-limit floor,
-  pino request logging, and a `GET /api/health` that reports database state. Every request
-  carries an `x-request-id` that appears in both the logs and any error body.
-- **Config that fails loudly.** `server/src/config/env.js` validates the whole environment
-  with Zod at boot and exits with the list of what is missing. Paths resolve against the
-  server package, not the shell's cwd.
-- **Error handling.** One `AppError` type plus a handler that hides 500 details in
-  production and always returns `{ error: { code, message, requestId } }`.
-- Dropped `nodemon` in favour of Node 22's native `--watch`; the dependency tree is now at
-  zero known vulnerabilities.
-- Repository initialised, workspace layout created, README started.
+There is no gateway in this mode — Vite's dev proxy routes `/api/auth` to
+5002, `/socket.io` to 5004, and the rest of `/api` to 5001. To see the real
+nginx gateway, use the Docker or Kubernetes stacks below.
 
 ---
 
-*This README is maintained as the build progresses. The authoritative design document is
-the [project plan][plan].*
+## Running it as Docker containers
+
+Builds every image and starts the full stack behind the real nginx gateway.
+This is the mode that demonstrates load balancing, the gateway, and horizontal
+scaling.
+
+### Start it
+
+```bash
+npm run docker:up        # builds images and starts six containers
+npm run docker:seed      # seeds all four databases (one-shot container)
+```
+
+Portal is on **http://localhost:8080**.
+
+### What runs
+
+| Container | What it is | Reachable at |
+| --- | --- | --- |
+| `edge` | nginx: serves the client, routes `/api`, balances, authenticates | `localhost:8080` |
+| `api` ×2 | the API, two replicas | *(not published — go through edge)* |
+| `auth` | auth service | *(not published)* |
+| `notifications` | notifications service | *(not published)* |
+| `realtime` | realtime service (sockets) | *(not published)* |
+| `email` | email service | *(not published)* |
+| `mongo` | MongoDB 7, replica set `rs0` | `localhost:27018` (27017 kept free for your host mongo) |
+| `redis` | cache, rate limits, socket pub/sub | `localhost:6380` |
+| `kafka` | KRaft mode, no ZooKeeper | `localhost:9094` from the host, `kafka:9092` inside |
+
+### Scale the API live
+
+```bash
+npm run docker:scale     # takes API to 3 replicas without restarting the stack
+```
+
+### See the balancing
+
+The edge sets `X-Upstream-Addr` to the replica that answered:
+
+```bash
+for i in $(seq 1 10); do
+  curl -s -D - -o /dev/null http://localhost:8080/api/health | grep -i x-upstream-addr
+  sleep 2.5
+done
+```
+
+### Useful commands
+
+```bash
+npm run docker:ps        # what's running
+npm run docker:logs      # tail api + edge
+npm run docker:down      # stop everything (volumes are kept)
+docker compose down -v   # stop AND wipe volumes
+```
+
+### Email in Docker mode
+
+The compose stack reads SMTP from the project-root `.env` file (which is
+gitignored). To send real email through the container:
+
+```bash
+# Create a project-root .env with just the SMTP values
+cat > .env <<EOF
+SMTP_USER=you@gmail.com
+SMTP_PASS=your-16-char-gmail-app-password
+MAIL_FROM="Naukri Suvidha <you@gmail.com>"
+DEMO_EMAIL_OVERRIDE=you@gmail.com
+EOF
+
+npm run docker:up
+```
+
+`DEMO_EMAIL_OVERRIDE` rewrites every outbound recipient to one real inbox so
+you can watch the demo without emailing fake seeded students.
+
+---
+
+## Running it on Kubernetes
+
+Three-node kind cluster with the HPA, StatefulSets, and the Service doing
+per-connection load balancing. This is the mode that demonstrates everything
+Docker Compose does, *plus* orchestration and autoscaling.
+
+### Start it
+
+```bash
+npm run k8s:up           # creates the cluster, builds images, applies manifests
+npm run k8s:seed         # seeds the clustered databases (a Kubernetes Job)
+```
+
+Portal is on **http://localhost:8081** — port 8081 so Docker Compose can run
+side-by-side on 8080 if you want to compare.
+
+### What runs
+
+| Object | Replicas | Notes |
+| --- | --- | --- |
+| `edge` Deployment | 1 | NodePort 30080 → host 8081 |
+| `api` Deployment | 2–6 | **HPA-managed** on 60% CPU |
+| `auth` Deployment | 2 | fixed — login is bcrypt-bound, not throughput-bound |
+| `notifications` Deployment | 2 | fixed — one partition per topic |
+| `realtime` Deployment | 2 | fixed — scales on connections, not CPU |
+| `email` Deployment | 2 | fixed — one Kafka partition |
+| `mongo` StatefulSet | 1 | with its own PVC |
+| `redis` Deployment | 1 | |
+| `kafka` StatefulSet | 1 | KRaft, no ZooKeeper |
+
+### See the autoscaler work
+
+```bash
+npm run k8s:hpa          # watch replica count change
+npm run k8s:load         # drive load for 2 minutes (opens a second terminal first)
+```
+
+### Useful commands
+
+```bash
+npm run k8s:ps           # pods, services, and the HPA
+npm run k8s:logs         # tail every API pod at once
+npm run k8s:down         # delete the cluster (volumes and all)
+```
+
+### If pods crash on cold start
+
+Cold-start a bare cluster: `npm run k8s:down && npm run k8s:up`. All ten pods
+should reach `Ready` with zero restarts. If something is restarting, run
+`kubectl -n naukri-suvidha get events --sort-by=.lastTimestamp` and
+`kubectl -n naukri-suvidha logs <pod>` — most problems are the three dependency
+gates (mongo, redis, kafka) still coming up.
+
+---
+
+## Setting up Ollama (the LLM)
+
+Needed for résumé extraction, fit scoring, and semantic search. Without it,
+the portal still works — the AI layer degrades to deterministic fallbacks
+capped at a score of 70 and flagged in the UI.
+
+### Install
+
+```bash
+# macOS
+brew install ollama
+brew services start ollama
+
+# or download from https://ollama.com
+```
+
+Verify: `curl http://localhost:11434/api/tags` returns JSON.
+
+### Pull the models
+
+```bash
+ollama pull llama3.1:8b          # or qwen2.5-coder:7b — the generation model
+ollama pull nomic-embed-text     # 768-dimensional embeddings for semantic search (~274 MB)
+```
+
+### Configure the API to find it
+
+Local dev reads `OLLAMA_BASE_URL` from `server/.env` — default
+`http://127.0.0.1:11434` works out of the box.
+
+Docker containers reach it via `host.docker.internal`. Kubernetes pods reach
+it via the kind network gateway, which `infra/k8s/up.sh` detects per machine.
+
+### Seed résumés with embeddings
+
+```bash
+npm run seed:resumes             # 10 varied résumés + their embeddings
+```
+
+Then try semantic search:
+
+```bash
+curl 'http://localhost:5001/api/resumes/search?q=event-driven+backends'
+```
+
+### Switching to Claude in production
+
+```
+LLM_PROVIDER=claude
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-opus-5
+```
+
+One environment variable swap — no code change.
+
+---
+
+## Seeding the databases
+
+| Command | What it does |
+| --- | --- |
+| `npm run seed` | Writes seed data if databases are empty; refuses if not |
+| `npm run seed -- --fresh` | Clears everything first, then seeds |
+| `npm run seed:resumes` | Adds 10 résumés with Ollama-computed embeddings |
+| `npm run docker:seed` | Seeds the containerised databases |
+| `npm run k8s:seed` | Seeds the Kubernetes databases via a Job |
+
+Seed accounts:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| TPO (admin) | `tpo@naukrisuvidha.edu` | `Passw0rd!seed` |
+| Admins | `admin1@naukrisuvidha.edu` … `admin3@` | `Passw0rd!seed` |
+| Recruiters | `recruiter@<company>.naukrisuvidha.edu` | `Passw0rd!seed` |
+| Students | `<firstname>.<lastname><n>@naukrisuvidha.edu` | `Passw0rd!seed` |
+
+---
+
+## Running the tests
+
+```bash
+npm test                       # all 202 tests across five suites
+npm run test:api               # API's 142 alone
+npm run test:auth              # auth service's 34 alone
+npm run test:notifications    # notifications service's 13 alone
+npm run test:realtime          # realtime service's 7 alone
+npm run test:email             # email service's 6 alone
+npm run lint                   # eslint, must be clean
+npm run docs:check             # 95 claims the design doc makes about this repo
+```
+
+Tests need a local MongoDB. They **refuse to run unless the database name
+contains "test"** — the guard lives in `service-kit` so a service cannot
+accidentally bypass it.
+
+CI (`.github/workflows/ci.yml`) runs lint, tests, docs:check, and
+`npm audit --omit=dev --audit-level=high` on every push.
+
+---
+
+## Repository layout
+
+```
+naukri-suvidha/
+├── server/                    the API process
+│   ├── src/
+│   │   ├── modules/           seven domain modules + internal/
+│   │   ├── infra/             storage, llm, events, cache (interfaces + impls)
+│   │   ├── middleware/        requestId, error, auth, rbac
+│   │   └── config/            env loading via Zod
+│   ├── scripts/               seed.js, check-design-doc.js, etc.
+│   └── test/
+├── services/
+│   ├── auth/                  extracted auth service
+│   ├── notifications/         extracted notifications service
+│   ├── realtime/              extracted socket server
+│   └── email/                 extracted email service
+├── service-kit/               shared plumbing (tokens, errors, Redis, dotenv)
+├── shared/                    Zod schemas + constants (client AND server)
+├── client/                    React 19 SPA
+│   └── src/
+│       ├── pages/             auth, student, recruiter, admin
+│       ├── api/               TanStack Query hooks
+│       ├── context/           auth session
+│       └── components/
+├── infra/
+│   ├── nginx/                 the compose edge's gateway config
+│   └── k8s/                   Kubernetes manifests + edge config template
+├── docs/                      architecture.svg + other notes
+├── docker-compose.yml         the compose stack
+├── render.yaml                Render.com production config
+├── vercel.json                Vercel client config
+├── CLAUDE.md                  working notes (decisions, gotchas)
+├── DEPLOYMENT.md              production deployment guide
+└── DEMO.md                    eight-minute demo script
+```
+
+---
+
+## Environment variables
+
+### `server/.env` (the API)
+
+```
+NODE_ENV=development
+PORT=5001
+MONGODB_URI=mongodb://127.0.0.1:27017/naukri_suvidha
+JWT_ACCESS_SECRET=<32+ random bytes, must match auth service>
+JWT_REFRESH_SECRET=<32+ random bytes, must match auth service>
+IDENTITY_MODE=bearer                 # bearer (dev) or gateway (containers)
+AUTH_GATEWAY_SECRET=<shared secret>
+STORAGE_PROVIDER=local               # or s3
+LLM_PROVIDER=ollama                  # or claude
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.1:8b
+EMBEDDING_MODEL=nomic-embed-text
+REDIS_URL=                           # optional; leave blank for in-process
+KAFKA_BROKERS=                       # optional; leave blank for in-process bus
+```
+
+### `services/auth/.env`
+
+```
+PORT=5002
+MONGODB_URI=mongodb://127.0.0.1:27017/naukri_suvidha_auth
+JWT_ACCESS_SECRET=<same as API>
+JWT_REFRESH_SECRET=<same as API>
+AUTH_GATEWAY_SECRET=<same shared secret>
+API_SERVICE_URL=http://127.0.0.1:5001
+```
+
+### `services/notifications/.env`
+
+```
+PORT=5003
+MONGODB_URI=mongodb://127.0.0.1:27017/naukri_suvidha_notifications
+KAFKA_BROKERS=                       # localhost:9094 if you started compose
+REDIS_URL=                           # same
+```
+
+### `services/realtime/.env`
+
+```
+PORT=5004
+AUTH_SERVICE_URL=http://127.0.0.1:5002
+AUTH_GATEWAY_SECRET=<same shared secret>
+REDIS_URL=
+```
+
+### `services/email/.env`
+
+```
+PORT=5005
+MONGODB_URI=mongodb://127.0.0.1:27017/naukri_suvidha_email
+KAFKA_BROKERS=
+AUTH_SERVICE_URL=http://127.0.0.1:5002
+AUTH_GATEWAY_SECRET=<same shared secret>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=you@gmail.com
+SMTP_PASS=<16-char Gmail app password>
+MAIL_FROM="Naukri Suvidha <you@gmail.com>"
+DEMO_EMAIL_OVERRIDE=                 # if set, every email rewrites to this
+```
+
+**Generating secrets.** For any `*_SECRET` run:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+The JWT access/refresh secrets **must be identical** between `server/.env` and
+`services/auth/.env` or sign-in appears to work and then every request is
+refused.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| API won't start on port 5000 | macOS AirPlay holds 5000 and answers 403. Use 5001 (the default here). |
+| `MissingSchemaError: User` | A `populate()` is reaching across a service boundary. The id has moved to Auth; denormalise instead. |
+| Tests destroyed my dev database | Your `.env` leaked into test mode. The `service-kit` guard refuses any DB name without "test" — don't bypass it. |
+| Notifications never appear | Kafka or Redis isn't running. `docker compose up -d kafka redis`. |
+| Login works then every request 401s | JWT secrets don't match between API and auth service. |
+| Email send goes to spam | First Gmail-to-Gmail via app password usually does. Mark as "not spam" once. |
+| K8s pods stuck pending | kind workers out of CPU. Close other Docker apps or restart Docker Desktop. |
+| `kind load` fails on multi-arch image | Only side-load the project's own images; let the cluster pull public images (busybox, metrics-server). |
+| Ollama returns malformed JSON | The retry logic handles one failure. Second failure falls back to deterministic scoring capped at 70. |
+| Port 27017 in use | Your host mongo is on 27017; the Docker mongo is on 27018. Use that port, or stop one. |
+
+---
+
+## Deploying
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full guide. Short version:
+
+- **Vercel** for the client (built static files)
+- **Render** for all five services (API, auth, notifications, realtime, email)
+- **MongoDB Atlas** for the three databases
+- **S3-compatible bucket** for résumé files (Render disks are ephemeral)
+- **Upstash / Confluent** for Redis + Kafka
+
+**[DEMO.md](DEMO.md)** is the eight-minute demo script, including the run
+with the model switched off.
+
+Note on gateways: the production deploy does NOT use the nginx `auth_request`
+gateway (Vercel rewrites can't run subrequests). The API runs in `bearer`
+mode on Render, so the revocation window is one access-token TTL. The real
+gateway runs in both container stacks on `:8080` and `:8081`.
+
+---
+
+## How things work
+
+Short answers below. The authoritative decisions and the "why" live in
+**[CLAUDE.md](CLAUDE.md)**.
+
+### Authentication
+
+Two tokens: a 15-minute **access token** kept in memory only, and a 7-day
+**refresh token** in an `httpOnly` cookie scoped to `/api/auth`. Both carry a
+`tokenVersion` — bumping it on a user suspends every token already issued.
+
+In the container stacks, nginx runs an `auth_request` subrequest against the
+auth service's introspection endpoint on every API call. Identity comes back
+in response headers, the API trusts them (plus a shared bearer secret). In
+dev mode (`npm run dev`), the API verifies tokens itself — no revocation
+check until the token expires.
+
+### Eligibility
+
+One pure function in `shared/src/eligibility.js`. The server enforces it, the
+client calls the same function to explain greyed-out jobs. Four rules: CGPA,
+backlogs, branch, deadline. A matching MongoDB filter narrows per-student job
+lists in the query — a test asserts the two agree.
+
+### The AI layer
+
+**Never runs in a request.** Work writes to `aiTasks`, then an in-process
+`p-queue` worker at concurrency 2 handles it. Claims are atomic
+`findOneAndUpdate` so recovered tasks never run twice.
+
+Every model answer is validated against a Zod schema. On failure the model
+gets one repair attempt with its own output and the errors. A second failure
+falls back to deterministic logic capped at 70 and flagged in the UI.
+
+### Realtime
+
+Socket.IO lives in the realtime service. The API and notifications publish
+through the Redis adapter — neither holds a socket server. A notification
+is written first, pushed second: the row is what matters, the push is a
+nicety.
+
+Measured: a recruiter status change reaches an open student tab in 10ms.
+
+### Semantic résumé search
+
+`ollama pull nomic-embed-text` gives 768-dim vectors stored on each résumé.
+`GET /api/resumes/search?q=…` ranks by cosine similarity. The corpus is
+narrowed **before** ranking by whoever is asking — an admin searches all
+students, a recruiter only students who applied to one of their jobs. Search
+never widens who may read a résumé.
+
+### Transactional outbox
+
+The eight event publishers all go through `publish(event, payload, { session })`
+inside the MongoDB transaction that wrote the record. An `outboxWorker`
+publishes to Kafka after commit. Without a replica set (dev mode), there's no
+session and events publish immediately — the publish-side window is open but
+the API still works.
+
+### The four service-to-service crossings
+
+```
+auth → API    POST /api/internal/profiles       create a Student/Company on registration
+auth → API    POST /api/internal/audit          log sign-ins to the placement office trail
+realtime → auth   POST /internal/introspect     authenticate the socket handshake
+email → auth      GET /internal/users/:id/email look up the recipient
+```
+
+Each one exists because the data lives on the other side. CLAUDE.md explains
+the measured cost of each.
+
+---
+
+*Design document, project plan, and project report are in `CLAUDE.md`
+under "Documents". This README is maintained as the build progresses.*
