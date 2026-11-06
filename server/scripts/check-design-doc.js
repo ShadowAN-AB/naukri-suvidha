@@ -209,11 +209,11 @@ const claims = [
   // Eight across two services now. The API's AI worker subscribes on its own
   // bus; the notifications service registers handlers with its consumer-only
   // `on()`. Different call, same contract - the name becomes the group id.
-  ['§7', 'exactly eight named subscribers exist, across two services',
-    () => countOf(`${AI}/worker.js`, 'eventBus.subscribe') === 3
+  ['§7', 'exactly nine named subscribers exist, across two services',
+    () => countOf(`${AI}/worker.js`, 'eventBus.subscribe') === 4
        && countOf(`${NOT}/consumers.js`, '  on(') === 5],
   ['§7', 'the subscriber names are the ones that become consumer groups',
-    () => ["'ai:resume-uploaded'", "'ai:job-approved'", "'ai:resume-processed'"]
+    () => ["'ai:resume-uploaded'", "'ai:job-approved'", "'ai:resume-processed'", "'ai:application-submitted'"]
             .every((n) => has(`${AI}/worker.js`, n))
        && ["'notifications:job-approved'", "'notifications:application-submitted'",
            "'notifications:application-status-changed'", "'notifications:resume-processed'",
