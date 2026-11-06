@@ -59,6 +59,17 @@ class AiWorker {
       this.scoreStudentAgainstJobs(studentId);
     });
 
+    // Catches the one timing hole the two triggers above leave: a student
+    // who applies to a job that was already approved before their resume was
+    // processed. Neither `job.approved` nor `resume.processed` fires again on
+    // application, so without this handler the fit stays "Scoring…" forever
+    // and the recruiter has nothing to sort by. The enqueue is idempotent
+    // against (studentId, jobId) so this does not duplicate work when either
+    // of the other triggers already queued the same pair.
+    eventBus.subscribe(EVENTS.APPLICATION_SUBMITTED, 'ai:application-submitted', ({ studentId, jobId }) =>
+      this.enqueue(AI_TASK_TYPE.SCORE_FIT, studentId, { jobId: String(jobId) }),
+    );
+
     await this.recover();
     logger.info({ concurrency: env.AI_CONCURRENCY }, 'aiWorker started');
   }
