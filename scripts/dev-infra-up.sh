@@ -38,10 +38,23 @@ else
   step "Docker daemon is reachable"
 fi
 
-# 2. Start just the two containers npm run dev needs. The compose file knows
-#    many more (api, auth, edge, mongo, …) — we deliberately start only the
-#    infrastructure, because the application services are run by `npm run dev`
-#    itself as Node processes.
+# 2. Stop stale Docker application containers. A previous `npm run docker:up`
+#    leaves api, auth, notifications, realtime, email, edge containers running
+#    even after the shell exits — and if we leave them, they join the same
+#    Kafka consumer groups as the Node services we are about to start. Every
+#    event Kafka hands out then splits 50/50 between the container and the
+#    Node process, so the "no email arrived" path becomes: Docker won this
+#    message, called its own Docker auth (which has a different users
+#    collection), couldn't find the recipient, logged "no recipient; skipped".
+#    Hard to spot without the logs. Stop them so there is one consumer per
+#    group.
+step "Stopping any stale application containers (keeps kafka/redis/mongo)"
+docker compose stop api auth notifications realtime email edge 2>/dev/null \
+  | grep -v "no such service" || true
+
+# 3. Start just the two containers npm run dev needs. The compose file knows
+#    many more — we deliberately start only the infrastructure, because the
+#    application services are run by `npm run dev` itself as Node processes.
 step "Starting kafka + redis containers (idempotent)"
 docker compose up -d kafka redis
 
