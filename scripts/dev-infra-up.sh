@@ -73,4 +73,33 @@ for i in $(seq 1 30); do
 done
 nc -z localhost 6380 2>/dev/null || fail "redis did not open :6380 in 30 seconds. Try: docker compose logs redis"
 
+# 4. Make sure Ollama is reachable, so the AI worker is not stuck in its
+#    degraded fallback (pattern matching capped at 70). Ollama is optional in
+#    principle — the portal keeps working without it — but the demo is more
+#    impressive with real model-generated reasoning, so we start it here too.
+if curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+  step "Ollama is already running"
+else
+  if [[ -d /Applications/Ollama.app ]]; then
+    step "Launching Ollama.app"
+    open -a Ollama
+    printf "   waiting for Ollama"
+    for i in $(seq 1 30); do
+      if curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+        printf " ready\n"
+        break
+      fi
+      printf "."
+      sleep 1
+    done
+    curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1 \
+      || warn "Ollama did not open :11434 in 30s. The portal still works; AI falls back to deterministic scoring capped at 70."
+  elif command -v ollama >/dev/null 2>&1; then
+    warn "Ollama binary found but Ollama.app is not installed — start it manually with: ollama serve"
+  else
+    warn "Ollama is not installed. The AI layer will run in degraded mode (scores capped at 70)."
+    warn "Install with: brew install ollama && ollama pull qwen2.5-coder:7b"
+  fi
+fi
+
 step "Infrastructure up. Starting node services next…"
