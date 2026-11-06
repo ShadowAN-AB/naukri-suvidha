@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApplications, useChangeStatus } from '../../api/applications.js';
 import { useJobs } from '../../api/jobs.js';
+import { useInterviews, useCancelInterview } from '../../api/interviews.js';
 import { StatusPill } from '../../components/ApplicationStatus.jsx';
 import FitScore, { FitBadge } from '../../components/FitScore.jsx';
 import ProtectedFileLink from '../../components/ProtectedFileLink.jsx';
@@ -25,12 +26,24 @@ export default function Applicants() {
   // 50 is the schema's ceiling; 100 came back 400 and left the filter empty.
   const { data: jobsData } = useJobs({ limit: 50 });
   const { data, isPending } = useApplications({ jobId: jobId || undefined, limit: 100 });
+  const { data: interviewsData } = useInterviews();
   const changeStatus = useChangeStatus();
+  const cancelInterview = useCancelInterview();
   const toast = useToast();
   const [scheduling, setScheduling] = useState(null);
 
   const jobs = jobsData?.items ?? [];
   const items = data?.items ?? [];
+
+  // applicationId -> the active (non-cancelled) interview for it, if any.
+  // The list endpoint populates `applicationId` into a nested object, so we
+  // read from either shape without assuming which the backend returned.
+  const activeInterviewByApp = new Map();
+  for (const i of interviewsData?.items ?? []) {
+    if (i.status === 'cancelled') continue;
+    const appId = (i.applicationId?._id ?? i.applicationId)?.toString();
+    if (appId) activeInterviewByApp.set(appId, i);
+  }
 
   const move = (id, status) => {
     changeStatus.mutate(
@@ -78,6 +91,7 @@ export default function Applicants() {
         {items.map((a) => {
           const s = a.studentId ?? {};
           const next = APPLICATION_TRANSITIONS[a.status] ?? [];
+          const activeInterview = activeInterviewByApp.get(a._id);
           return (
             <article key={a._id} className="rounded-xl border border-line bg-card p-5">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
@@ -117,6 +131,20 @@ export default function Applicants() {
                       onClick={() => setScheduling(scheduling === a._id ? null : a._id)}>
                       Schedule
                     </Button>
+                  )}
+                  {activeInterview && (
+                    <button
+                      onClick={() =>
+                        cancelInterview.mutate(activeInterview._id, {
+                          onSuccess: () => toast.success('Interview cancelled.'),
+                          onError: (err) => toast.error(err.message),
+                        })
+                      }
+                      disabled={cancelInterview.isPending}
+                      className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium transition hover:bg-subtle disabled:opacity-50"
+                    >
+                      {cancelInterview.isPending ? 'Cancelling…' : 'Cancel interview'}
+                    </button>
                   )}
                   {next.length === 0 && <span className="text-sm text-muted">No further action</span>}
                   {next.map((status) => (
